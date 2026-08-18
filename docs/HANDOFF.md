@@ -82,7 +82,8 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       narrow column — kept as widescreen per explicit user feedback.
   25. `013c5fb` — a "Clear" option on the schedule picker to remove a
       task's schedule (previously only changeable, never removable).
-- Working tree is clean as of commit `013c5fb` unless the "Milestone 1
+  26. `0133d87` — completion collapse animation and a 10-second Undo toast.
+- Working tree is clean as of commit `0133d87` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - The `/loop` (self-paced autonomous mode) that was running earlier in this
@@ -395,14 +396,19 @@ landed which line.
       Active task drops back into Anytime rather than needing a bucket
       choice of its own.
 
+- [x] **Completion collapse animation + 10-second Undo toast** (`0133d87`)
+      — the checkbox fills immediately, the row fades and collapses over
+      the existing 180 ms `ROW_TRANSITION` (reusing the row's mount
+      fade-in mechanism for the reverse direction, keyed to a distinct
+      animation id so it gets a fresh timeline instead of jumping to the
+      fade-in's already-elapsed one), then a floating single-slot toast
+      offers Undo for 10 seconds (PRD §6.1's delete-undo window, reused
+      since completion's own spec doesn't name a different one). Reopening
+      (including via the toast, or from the Completed section) still
+      writes immediately — nothing to animate out.
+
 **Not done yet, in the order they're planned:**
 
-- [ ] A proper completion-collapse animation + Undo toast, per
-      `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
-      collapse... available via Undo" spec. Partially superseded: a
-      completed task is no longer lost (it moves into the "Completed"
-      section above), but there's still no collapse motion on the moment
-      of completing and no Undo affordance.
 - [ ] Upcoming currently renders as one flat list ordered by date, not
       PRD §6.3's grouped-by-day sections with weekday headers. Correct
       data, simplified presentation — a deliberate scope cut to land real
