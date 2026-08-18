@@ -165,6 +165,15 @@ enum Command {
         id: String,
         reply: mpsc::Sender<Result<()>>,
     },
+    CreateSubtask {
+        parent_id: String,
+        title: String,
+        reply: mpsc::Sender<Result<Task>>,
+    },
+    ListSubtasks {
+        parent_id: String,
+        reply: mpsc::Sender<Result<Vec<Task>>>,
+    },
 }
 
 /// A cheaply cloneable handle to the database thread.
@@ -313,6 +322,42 @@ impl Db {
             .context("database thread is gone")?;
         rx.recv().context("database thread dropped the reply")?
     }
+
+    /// Adds a subtask under `parent_id`. Rejects a parent that is itself a
+    /// subtask — `docs/PRODUCT_REQUIREMENTS.md` §6.2's one-level ceiling
+    /// ("a subtask cannot have children in v1"), enforced here rather than
+    /// only in the UI since the UI already hides the affordance but a
+    /// caller shouldn't be able to bypass it. Inherits the parent's bucket
+    /// (a subtask has no independent placement of its own) and no
+    /// schedule, per the same section: "a child inherits no schedule
+    /// automatically."
+    pub fn create_subtask(&self, parent_id: impl Into<String>, title: impl Into<String>) -> Result<Task> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::CreateSubtask {
+                parent_id: parent_id.into(),
+                title: title.into(),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    /// A parent's direct subtasks, in manual order. Unlike `list_view`, this
+    /// does not filter out completed ones — a subtask stays visible
+    /// (checked off) under its expanded parent rather than moving to a
+    /// separate collapsed section, since the parent's own progress count
+    /// needs the completed ones counted, not hidden.
+    pub fn list_subtasks(&self, parent_id: impl Into<String>) -> Result<Vec<Task>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::ListSubtasks {
+                parent_id: parent_id.into(),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
 }
 
 fn database_path() -> Result<PathBuf> {
@@ -390,6 +435,16 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             }
             Command::DeleteTask { id, reply } => {
                 let _ = reply.send(runtime.block_on(delete_task(&conn, id)));
+            }
+            Command::CreateSubtask {
+                parent_id,
+                title,
+                reply,
+            } => {
+                let _ = reply.send(runtime.block_on(create_subtask(&conn, parent_id, title)));
+            }
+            Command::ListSubtasks { parent_id, reply } => {
+                let _ = reply.send(runtime.block_on(list_subtasks(&conn, parent_id)));
             }
         }
     }
@@ -481,7 +536,8 @@ async fn create_task(conn: &turso::Connection, title: String) -> Result<Task> {
 async fn list_bucket(conn: &turso::Connection, bucket: Bucket) -> Result<Vec<Task>> {
     let sql = format!(
         "SELECT {TASK_COLUMNS} FROM tasks \
-         WHERE bucket = ?1 AND deleted_at IS NULL AND completed_at IS NULL \
+         WHERE bucket = ?1 AND parent_id IS NULL \
+         AND deleted_at IS NULL AND completed_at IS NULL \
          ORDER BY position ASC"
     );
     run_task_query(conn, &sql, (bucket.as_str(),)).await
@@ -500,7 +556,7 @@ async fn list_view(conn: &turso::Connection, view: View) -> Result<Vec<Task>> {
         View::Anytime => {
             let sql = format!(
                 "SELECT {TASK_COLUMNS} FROM tasks \
-                 WHERE bucket = 'active' AND scheduled_date IS NULL \
+                 WHERE bucket = 'active' AND scheduled_date IS NULL AND parent_id IS NULL \
                  AND deleted_at IS NULL AND completed_at IS NULL \
                  ORDER BY position ASC"
             );
@@ -511,7 +567,7 @@ async fn list_view(conn: &turso::Connection, view: View) -> Result<Vec<Task>> {
             let sql = format!(
                 "SELECT {TASK_COLUMNS} FROM tasks \
                  WHERE bucket = 'active' AND scheduled_date IS NOT NULL \
-                 AND scheduled_date <= ?1 \
+                 AND scheduled_date <= ?1 AND parent_id IS NULL \
                  AND deleted_at IS NULL AND completed_at IS NULL \
                  ORDER BY scheduled_date ASC, scheduled_time ASC"
             );
@@ -522,7 +578,7 @@ async fn list_view(conn: &turso::Connection, view: View) -> Result<Vec<Task>> {
             let sql = format!(
                 "SELECT {TASK_COLUMNS} FROM tasks \
                  WHERE bucket = 'active' AND scheduled_date IS NOT NULL \
-                 AND scheduled_date > ?1 \
+                 AND scheduled_date > ?1 AND parent_id IS NULL \
                  AND deleted_at IS NULL AND completed_at IS NULL \
                  ORDER BY scheduled_date ASC, scheduled_time ASC"
             );
@@ -544,24 +600,27 @@ async fn list_completed(conn: &turso::Connection, view: View) -> Result<Vec<Task
     let sql = match view {
         View::Inbox | View::Someday => format!(
             "SELECT {TASK_COLUMNS} FROM tasks \
-             WHERE bucket = ?1 AND deleted_at IS NULL AND completed_at IS NOT NULL \
+             WHERE bucket = ?1 AND parent_id IS NULL \
+             AND deleted_at IS NULL AND completed_at IS NOT NULL \
              ORDER BY updated_at DESC"
         ),
         View::Anytime => format!(
             "SELECT {TASK_COLUMNS} FROM tasks \
-             WHERE bucket = ?1 AND scheduled_date IS NULL \
+             WHERE bucket = ?1 AND scheduled_date IS NULL AND parent_id IS NULL \
              AND deleted_at IS NULL AND completed_at IS NOT NULL \
              ORDER BY updated_at DESC"
         ),
         View::Today => format!(
             "SELECT {TASK_COLUMNS} FROM tasks \
              WHERE bucket = ?1 AND scheduled_date IS NOT NULL AND scheduled_date <= ?2 \
+             AND parent_id IS NULL \
              AND deleted_at IS NULL AND completed_at IS NOT NULL \
              ORDER BY updated_at DESC"
         ),
         View::Upcoming => format!(
             "SELECT {TASK_COLUMNS} FROM tasks \
              WHERE bucket = ?1 AND scheduled_date IS NOT NULL AND scheduled_date > ?2 \
+             AND parent_id IS NULL \
              AND deleted_at IS NULL AND completed_at IS NOT NULL \
              ORDER BY updated_at DESC"
         ),
@@ -640,6 +699,73 @@ async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
     .await
     .context("deleting task")?;
     Ok(())
+}
+
+async fn create_subtask(conn: &turso::Connection, parent_id: String, title: String) -> Result<Task> {
+    let mut parent_rows = conn
+        .query(
+            "SELECT bucket, parent_id FROM tasks WHERE id = ?1 AND deleted_at IS NULL",
+            (parent_id.as_str(),),
+        )
+        .await
+        .context("looking up the parent task")?;
+    let parent_row = parent_rows
+        .next()
+        .await
+        .context("reading the parent task row")?
+        .ok_or_else(|| anyhow!("parent task not found"))?;
+    let parent_bucket = Bucket::parse(&parent_row.get::<String>(0)?)?;
+    if parent_row.get::<Option<String>>(1)?.is_some() {
+        return Err(anyhow!(
+            "cannot add a subtask to a subtask (one-level ceiling, PRD §6.2)"
+        ));
+    }
+    drop(parent_rows);
+
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let position = Utc::now().timestamp_millis() as f64;
+
+    conn.execute(
+        "INSERT INTO tasks (id, parent_id, title, bucket, position, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        (
+            id.as_str(),
+            parent_id.as_str(),
+            title.as_str(),
+            parent_bucket.as_str(),
+            position,
+            now.as_str(),
+        ),
+    )
+    .await
+    .context("inserting subtask")?;
+
+    Ok(Task {
+        id,
+        parent_id: Some(parent_id),
+        title,
+        note: None,
+        bucket: parent_bucket,
+        scheduled_date: None,
+        scheduled_time: None,
+        scheduled_timezone: None,
+        position,
+        completed_at: None,
+        created_at: now.clone(),
+        updated_at: now,
+    })
+}
+
+/// A parent's direct subtasks in manual order — completed ones included
+/// (see `Db::list_subtasks`'s doc comment for why).
+async fn list_subtasks(conn: &turso::Connection, parent_id: String) -> Result<Vec<Task>> {
+    let sql = format!(
+        "SELECT {TASK_COLUMNS} FROM tasks \
+         WHERE parent_id = ?1 AND deleted_at IS NULL \
+         ORDER BY position ASC"
+    );
+    run_task_query(conn, &sql, (parent_id,)).await
 }
 
 #[cfg(test)]
@@ -805,5 +931,64 @@ mod tests {
 
         db.delete_task(&task.id).expect("delete should succeed");
         assert_eq!(db.list_view(View::Inbox).expect("list").len(), 0);
+    }
+
+    #[test]
+    fn a_subtask_does_not_appear_as_its_own_top_level_task() {
+        let db = open_test_db();
+        let parent = db.create_task("Plan trip").expect("create");
+        db.create_subtask(&parent.id, "Book flights")
+            .expect("create_subtask should succeed");
+
+        // The subtask must not leak into the parent's own view as a
+        // second, independent Inbox row.
+        assert_eq!(db.list_view(View::Inbox).expect("list").len(), 1);
+
+        let subtasks = db.list_subtasks(&parent.id).expect("list_subtasks");
+        assert_eq!(subtasks.len(), 1);
+        assert_eq!(subtasks[0].title, "Book flights");
+        assert_eq!(subtasks[0].parent_id.as_deref(), Some(parent.id.as_str()));
+    }
+
+    #[test]
+    fn a_subtask_cannot_have_its_own_subtask() {
+        let db = open_test_db();
+        let parent = db.create_task("Plan trip").expect("create");
+        let child = db
+            .create_subtask(&parent.id, "Book flights")
+            .expect("create_subtask should succeed");
+
+        let grandchild = db.create_subtask(&child.id, "Pick a seat");
+        assert!(grandchild.is_err(), "one-level ceiling should reject this");
+    }
+
+    #[test]
+    fn a_subtask_inherits_the_parents_bucket_and_no_schedule() {
+        let db = open_test_db();
+        let parent = db.create_task("Plan trip").expect("create");
+        db.schedule(&parent.id, Bucket::Active, None::<String>, None::<String>)
+            .expect("schedule");
+
+        let child = db
+            .create_subtask(&parent.id, "Book flights")
+            .expect("create_subtask should succeed");
+        assert_eq!(child.bucket, Bucket::Active);
+        assert!(child.scheduled_date.is_none());
+    }
+
+    #[test]
+    fn list_subtasks_keeps_completed_children_visible() {
+        let db = open_test_db();
+        let parent = db.create_task("Plan trip").expect("create");
+        let child = db
+            .create_subtask(&parent.id, "Book flights")
+            .expect("create_subtask should succeed");
+
+        db.set_completed(&child.id, true)
+            .expect("complete should succeed");
+
+        let subtasks = db.list_subtasks(&parent.id).expect("list_subtasks");
+        assert_eq!(subtasks.len(), 1, "completed subtasks stay visible under the parent");
+        assert!(subtasks[0].completed_at.is_some());
     }
 }
