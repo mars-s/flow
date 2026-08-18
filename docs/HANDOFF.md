@@ -46,9 +46,12 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   10. `e407738` — "+ Capture" now creates real tasks.
   11. `6ecd6db` — handoff doc: capture-wiring checkpoint noted.
   12. `863d31d` — Today/Upcoming/Anytime/Someday wired to real
-      bucket-filtered data, plus `Db::schedule` (see "Milestone 1 progress"
-      below).
-- Working tree is clean as of commit `863d31d` unless the "Milestone 1
+      bucket-filtered data, plus `Db::schedule`.
+  13. `b5dca80` — handoff doc: five-views + `schedule()` checkpoint noted.
+  14. `c765ece` — the NLP date/time parser (`src/parse.rs`), wired into
+      capture; also records the user's global-hotkey quick-capture north
+      star in the PRD §13 (see "Milestone 1 progress" below).
+- Working tree is clean as of commit `c765ece` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 
@@ -219,31 +222,58 @@ landed which line.
       placements with an optional date/time, PRD §5's "Move to active" /
       "Schedule and activate" actions. Two tests move a real task through
       Anytime → Today → Upcoming by date (against real `chrono` dates, not
-      fixed strings) and confirm Someday stays isolated. **Nothing in the
-      UI calls this yet** — see the gap noted just below.
-- 147 tests passing as of commit `863d31d`; verified in the running debug
+      fixed strings) and confirm Someday stays isolated.
+- [x] **Deterministic NLP date/time parser** (`src/parse.rs`) — the full
+      PRD §6.4 supported-forms table: today/tomorrow, "in N days" (1-365),
+      weekday/"next weekday" (with the today-matches-next-week rule),
+      explicit dates (three input orders), 12h/24h times, both date-then-
+      time and time-then-date combinations. Ambiguous forms (bare "at 8",
+      "next week", a past month/day with no year, an impossible date) are
+      left unrecognized rather than guessed, per PRD principle 3. Pure and
+      deterministic — takes `today` as a parameter, never reads the clock
+      itself. 16 tests, including both of the PRD's exact acceptance-case
+      titles verbatim.
+- [x] **Capture now runs every title through the parser.** A recognized
+      suffix is stripped and stored as `scheduled_date`/`scheduled_time`
+      via `Db::schedule`; the task's bucket stays `Inbox` (PRD §14: a
+      parsed date does not auto-activate a task). A db.rs test locks this
+      in — a scheduled Inbox task stays out of Today. This is the one real
+      way, right now, that a task ends up with a schedule at all: typing
+      "take out laundry 8am tomorrow" into Capture works end to end. There
+      is still no way to schedule or reschedule a task **after** it's
+      captured (no "Process" action, no date picker) — see the gap below.
+- [x] Recorded the user's stated long-term direction for capture — a
+      global-hotkey, always-on-top, natural-language quick-capture popup
+      reachable from any app, likely paired with a menu bar mode — in
+      `docs/PRODUCT_REQUIREMENTS.md` §13 and this project's memory. Not
+      started; noted here so it isn't lost. The in-app composer
+      (`open_capture`/`capture_input` in `app.rs`) is deliberately built as
+      a self-contained, reusable unit specifically so this later surface
+      can host the same field and submit logic.
+- 164 tests passing as of commit `c765ece`; verified in the running debug
   app, not just `cargo check` (dev watcher rebuilt clean, process alive,
   matches this repo's `AGENTS.md` validation rule).
 
 **Not done yet, in the order they're planned:**
 
-- [ ] **No UI path to schedule a task.** `Db::schedule` exists and is
-      tested but nothing calls it — no "Process" action on an Inbox row
-      (PRD §6.3: "Today, Anytime, Someday, and schedule"), no date picker.
-      Until this or the NLP parser lands, Today/Upcoming/Anytime will
-      always be empty in real use — everything captured stays in Inbox
-      forever. This is probably the single highest-value next step: it's
-      what turns the four other task views from "correctly wired but
-      always empty" into something a real user can actually reach.
+- [ ] **No way to schedule or move a task after it's already captured.**
+      `Db::schedule` and the parser both exist and work, but the only path
+      to a scheduled task today is typing the date phrase into Capture at
+      creation time. There's no "Process" action on an existing Inbox row
+      (PRD §6.3: "Today, Anytime, Someday, and schedule"), no date picker,
+      no way to edit a task's title/note/schedule after the fact at all —
+      there is no task detail view yet. This is the natural next step now
+      that the parser exists to back it: even a minimal click-to-expand
+      row with a "when" control would make Today/Upcoming/Anytime reachable
+      from tasks already sitting in Inbox, not just newly captured ones.
 - [ ] A proper completion-collapse animation + Undo toast, per
       `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
       collapse... available via Undo" spec — currently the row just
       vanishes on refetch, no collapse motion, no undo.
 - [ ] Friendly schedule formatting ("Tomorrow · 8:00 AM" per PRD §6.4)
       instead of Today/Upcoming's current raw `scheduled_date`/
-      `scheduled_time` strings — naturally falls out of the NLP parser work
-      below, since that's the piece that owns date presentation throughout
-      the app; not worth a separate formatter before then.
+      `scheduled_time` strings. `parse.rs` computes real dates; nothing
+      formats them back into the friendly relative form for display yet.
 - [ ] Upcoming currently renders as one flat list ordered by date, not
       PRD §6.3's grouped-by-day sections with weekday headers. Correct
       data, simplified presentation — a deliberate scope cut to land real
@@ -251,15 +281,20 @@ landed which line.
 - [ ] One-level subtasks, task detail expansion, the task-row/date-picker/
       toast components the user showed reference screenshots for earlier in
       this session (explicitly deferred out of the sidebar-focused UI pass).
-- [ ] Deterministic local NLP date/time parser (PRD §6.4) — not started;
-      currently the biggest single unstarted piece of Milestone 1. Also the
-      dependency that unblocks the "no UI path to schedule" gap above most
-      completely (vs. a hand-built date picker as a stopgap).
-- [ ] Update `docs/PRODUCT_REQUIREMENTS.md` §9 (Convex → Turso) and §5 (IA
-      diagram → Tasks/Calendar mode switch) so the PRD stops contradicting
-      the actual code and this session's decisions. Low-risk, low-effort,
-      just hasn't been done yet — do this whenever convenient, doesn't need
-      to block on the rest of the checklist.
+      The composer's clickable date-phrase preview chip and Backspace-to-
+      restore interaction from PRD §6.4 are also not built — `parse.rs`
+      exposes `source_phrase` specifically so this can be added later
+      without changing the parser itself.
+- [ ] Update `docs/PRODUCT_REQUIREMENTS.md` §9 (Convex → Turso, still
+      describes the old self-hosted-Convex sync plan throughout — Milestone
+      2's description, the deployment target, the architecture diagram, the
+      reference links at the bottom) and §5's IA diagram (still shows the
+      flat 7-destination sidebar, not the Tasks/Calendar mode switch) so
+      the PRD stops contradicting the actual code and this session's
+      decisions. Low-risk, low-effort, just hasn't been done — do this
+      whenever convenient, doesn't block anything else. (One stray "Flow's
+      GPUI shell" → "Waku's GPUI shell" typo nearby *was* fixed while
+      editing §13 for the quick-capture note above.)
 
 ## Where to find things
 
