@@ -37,6 +37,21 @@ impl Flow {
     pub(super) fn render_drag_bar(&self, _cx: &mut Context<Self>) -> AnyElement {
         div()
             .id("drag-bar")
+            // `absolute()` here is load-bearing, not decoration: `render.rs`
+            // appends this as a plain sibling of the sidebar and main pane
+            // inside their horizontal flex row. Without `absolute()`, a
+            // `w_full()` + `flex_none()` child in that row demands the
+            // *entire* row's width on top of what the sidebar and main pane
+            // already claim, which starves the main pane down to zero width
+            // — it silently renders nothing, with no error, no panic, and
+            // even a hardcoded opaque marker div inside it stays invisible
+            // (see docs/main-pane-blank-regression.md, the incident this
+            // fixed). `absolute()` takes it out of the flex flow entirely so
+            // it only overlays the top strip instead of competing for width.
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
             .window_control_area(WindowControlArea::Drag)
             .flex_none()
             .w_full()
