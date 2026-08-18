@@ -28,7 +28,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   active work: `archive/waku-upstream` (the pre-detachment Waku-based
   history) and `milestone-0-strip` (the working branch used during the
   strip, before detachment). Neither should be merged into `main`.
-- Current commits on `main`:
+- Current commits on `main` (oldest first):
   1. `98d1b69` — initial detached snapshot (Milestone 0 strip + Waku→Flow
      rename, squashed into one commit).
   2. `789344a` — untracked local Claude Code plugin/index scaffolding that
@@ -36,12 +36,14 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   3. `1d61bca` — retokened `theme.rs` to match `docs/DESIGN_DIRECTION.md`,
      rebuilt the sidebar (Tasks/Calendar mode switch + task list + pinned
      Settings), added several missing icons.
-- **Uncommitted as of this handoff**: the Turso database wiring (`src/db.rs`,
-  `Cargo.toml`/`Cargo.lock` changes, `docs/turso.md`, an `AGENTS.md` doc-map
-  addition). `src/db.rs`'s smoke test (`db::tests::opens_a_database_and_answers_a_ping`)
-  has been confirmed passing (`cargo test --package flow --lib db::` → 1
-  passed) — the connection genuinely opens, applies the placeholder schema,
-  and answers a query end to end, not just "compiles."
+  4. `39dcab4` — wired up Turso (`src/db.rs`): dedicated tokio thread,
+     placeholder `schema_version` table, ping smoke test passing.
+  5. `6109057` — noted the new GitHub remote in this doc.
+  6. `2c098f8` — real task data model/schema/CRUD in `db.rs` (see "Milestone
+     1 progress" below).
+- Working tree is clean as of commit `2c098f8` unless the "Milestone 1
+  progress" section below says otherwise — check there for what's currently
+  in flight before assuming everything is committed.
 
 ## What's built (Milestone 0 — done)
 
@@ -56,8 +58,9 @@ real caller of `src/md/`'s syntax highlighting), and a slimmed
 `crates/flow-core` (just `i18n`/`identity`, recovered from the deleted
 `waku-protocol` crate's source).
 
-`cargo check --workspace` and `cargo test --workspace` are clean (148 tests
-passing as of the Milestone 0 commit; more added since for `db.rs`).
+`cargo check --workspace` is clean throughout. Test count: 148 as of the
+Milestone 0 commit, 151 as of `2c098f8` (3 added for `db.rs`'s task CRUD).
+Run `cargo test --package flow --lib` to check the current count/status.
 
 ## Current UI state
 
@@ -128,21 +131,57 @@ passing as of the Milestone 0 commit; more added since for `db.rs`).
    for its whole lifetime sidesteps that question entirely rather than
    assuming an answer.
 
-## What's NOT done yet (next steps, roughly in order)
+## Milestone 1 progress (local task vertical slice)
 
-1. **Update `docs/PRODUCT_REQUIREMENTS.md`** section 9 (Convex → Turso) and
-   section 5 (IA diagram → Tasks/Calendar mode switch), so the PRD stops
-   contradicting the actual code and this session's decisions.
-2. **Milestone 1** (per `docs/PRODUCT_REQUIREMENTS.md` section 12): the real
-   task data model, Turso schema/migrations (nothing exists yet beyond
-   `db.rs`'s placeholder `schema_version` table), Inbox + task row/detail +
-   one-level subtasks, the five placement rules, completion animation, and
-   the deterministic local NLP date/time parser. This is the bulk of
-   remaining work and hasn't started.
-3. **The task-row/date-picker/toast components** the user showed reference
-   screenshots for — explicitly deferred out of this session's UI pass, but
-   real work items for Milestone 1, once there's task data to render.
-4. ~~New GitHub repo + push~~ — done, see "Repo / git state" above.
+Started 2026-08-18. This section is the live checklist — updated after each
+verified, committed increment, not just at the end, per the user's explicit
+request to keep this document current as work happens rather than write it
+once at a session's close. Check the git log above for exactly which commit
+landed which line.
+
+**Done:**
+
+- [x] Task data model + `Bucket` enum, matching
+      `docs/PRODUCT_REQUIREMENTS.md` §8 minus the `users` table (see commit
+      `2c098f8`'s message for why that's an intentional simplification, not
+      an oversight).
+- [x] Real migration runner in `db.rs` (`MIGRATIONS` const, versioned via
+      `schema_version`), replacing the earlier placeholder.
+- [x] `Db::create_task` / `Db::list_bucket` / `Db::set_completed`, each with
+      a passing test against a real temp-file database (not mocked).
+
+**Not done yet, in the order they're planned:**
+
+- [ ] Wire a `Db` handle into `Flow` (opened once at startup — decide where:
+      probably `Flow::new` in `src/app.rs`, stored as a field, opened via
+      `cx.background_executor().spawn` so a slow first-open can't block
+      window creation).
+- [ ] A reactive task-list store on the GPUI side: load a bucket's tasks in
+      the background, cache on an entity field, `cx.notify()` on arrival —
+      same pattern this repo's `CLAUDE.md`/`AGENTS.md` performance section
+      already mandates for anything reached from `render`.
+- [ ] Real Inbox view: render actual task rows (title + completion control)
+      in place of `components.rs`'s placeholder pane, reading from that
+      store.
+- [ ] Wire the sidebar's "+ Capture" button and Inbox badge count to real
+      data — capture creates a task via `Db::create_task`, badge reflects
+      the live Inbox count instead of the hardcoded `0`.
+- [ ] Completion control interaction (toggle via `Db::set_completed`,
+      the 180-220ms opacity/collapse animation `docs/DESIGN_DIRECTION.md`
+      specifies, Undo).
+- [ ] Today/Upcoming/Anytime/Someday views — bucket-filtering logic exists
+      in `db.rs` (`Bucket::Active` + date comparison, per PRD §5's table)
+      but no view renders them yet.
+- [ ] One-level subtasks, task detail expansion, the task-row/date-picker/
+      toast components the user showed reference screenshots for earlier in
+      this session (explicitly deferred out of the sidebar-focused UI pass).
+- [ ] Deterministic local NLP date/time parser (PRD §6.4) — not started;
+      currently the biggest single unstarted piece of Milestone 1.
+- [ ] Update `docs/PRODUCT_REQUIREMENTS.md` §9 (Convex → Turso) and §5 (IA
+      diagram → Tasks/Calendar mode switch) so the PRD stops contradicting
+      the actual code and this session's decisions. Low-risk, low-effort,
+      just hasn't been done yet — do this whenever convenient, doesn't need
+      to block on the rest of the checklist.
 
 ## Where to find things
 
