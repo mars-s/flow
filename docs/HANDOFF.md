@@ -41,9 +41,11 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   5. `6109057` — noted the new GitHub remote in this doc.
   6. `2c098f8` — real task data model/schema/CRUD in `db.rs`.
   7. `9908636` — handoff doc: Milestone 1 checklist added.
-  8. `c215709` — Inbox view + sidebar badge wired to the real database (see
-     "Milestone 1 progress" below).
-- Working tree is clean as of commit `c215709` unless the "Milestone 1
+  8. `c215709` — Inbox view + sidebar badge wired to the real database.
+  9. `e28af28` — handoff doc: Inbox+badge checkpoint noted.
+  10. `e407738` — "+ Capture" now creates real tasks (see "Milestone 1
+      progress" below).
+- Working tree is clean as of commit `e407738` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 
@@ -179,19 +181,23 @@ landed which line.
       is not implemented.
 - [x] Sidebar Inbox badge reads the same cache instead of a hardcoded `0`
       (`Flow::inbox_count` in `sidebar.rs`).
-- 145 tests passing as of commit `c215709`; verified in the running debug
+- [x] **Capture works.** "+ Capture" (click/enter/space) or `⌘N` from
+      anywhere opens the sidebar's Capture row as a real `ComposerInput`
+      field (reused, not a new widget — it already emitted
+      `ComposerEvent::Submit` on Enter and self-cleared). Submitting calls
+      `Db::create_task` and invalidates the Inbox cache. Escape closes it —
+      this repurposes two actions that were already bound but unhandled
+      dead code left over from the Waku strip (`NewTask` on `secondary-n`/
+      the app menu, `CancelTurn` on `escape` at the "Flow" key context) —
+      see commit `e407738`'s message. **Known gap**: no confirmation before
+      Escape discards unsaved text, since a bare title field has nothing to
+      confirm yet; revisit once the composer grows a note field.
+- 145 tests passing as of commit `e407738`; verified in the running debug
   app, not just `cargo check` (dev watcher rebuilt clean, process alive,
   matches this repo's `AGENTS.md` validation rule).
 
 **Not done yet, in the order they're planned:**
 
-- [ ] **Capture is still inert.** The "+ Capture" button has no `on_click`
-      at all — it needs a real composer (text input, at minimum a title;
-      `input.rs`'s `ComposerInput` already exists generically and is a
-      candidate to reuse) wired to `Db::create_task`. This is the most
-      visible remaining gap: there's currently no way to add a task from
-      the UI, only to complete/reopen ones that already exist (e.g. via a
-      direct `Db::create_task` call from a test or a temporary debug path).
 - [ ] A proper completion-collapse animation + Undo toast, per
       `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
       collapse... available via Undo" spec — currently the row just
