@@ -10,7 +10,7 @@ use std::array;
 
 use gpui::{AnyElement, App, Context, Entity, FocusHandle, Window, div, prelude::*};
 
-use crate::db::{Bucket, Db, Task};
+use crate::db::{Db, Task, View};
 use crate::input::{ComposerEvent, ComposerInput};
 use crate::query::QueryCache;
 use crate::theme::Theme;
@@ -48,7 +48,7 @@ pub struct Flow {
     /// Loaded lazily per bucket from `render`, per this repo's
     /// `cx.background_executor().spawn` + `cx.notify()` convention
     /// (`query.rs`'s own doc comment is this exact pattern).
-    tasks: QueryCache<Bucket, Vec<Task>>,
+    tasks: QueryCache<View, Vec<Task>>,
     /// Whether the sidebar's Capture row currently shows the text field
     /// instead of the "+ Capture" button. Stays open across submissions so
     /// rapid successive captures don't need to reopen it each time.
@@ -139,7 +139,7 @@ impl Flow {
                 return;
             };
             let _ = flow.update(cx, |flow, cx| {
-                flow.tasks.invalidate(&Bucket::Inbox);
+                flow.tasks.invalidate(&View::Inbox);
                 cx.notify();
             });
         })

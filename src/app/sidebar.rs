@@ -99,6 +99,19 @@ impl Destination {
         }
     }
 
+    /// The database view this destination reads, or `None` for the two
+    /// destinations with no task list of their own (Calendar, Settings).
+    pub(super) fn view(self) -> Option<crate::db::View> {
+        match self {
+            Destination::Inbox => Some(crate::db::View::Inbox),
+            Destination::Today => Some(crate::db::View::Today),
+            Destination::Upcoming => Some(crate::db::View::Upcoming),
+            Destination::Anytime => Some(crate::db::View::Anytime),
+            Destination::Someday => Some(crate::db::View::Someday),
+            Destination::Calendar | Destination::Settings => None,
+        }
+    }
+
     fn icon_path(self) -> &'static str {
         match self {
             Destination::Inbox => "icons/inbox.svg",
@@ -351,7 +364,7 @@ impl Flow {
     /// flight or the database is unavailable — an undercount is a better
     /// default than blocking the row on a fetch.
     fn inbox_count(&mut self, cx: &mut Context<Self>) -> usize {
-        match self.read_bucket(crate::db::Bucket::Inbox, cx) {
+        match self.read_view(crate::db::View::Inbox, cx) {
             crate::query::Query::Ready(tasks) => tasks.len(),
             crate::query::Query::Pending | crate::query::Query::Missing(_) => 0,
         }

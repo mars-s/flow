@@ -51,6 +51,20 @@ impl Bucket {
     }
 }
 
+/// The five task surfaces from `docs/PRODUCT_REQUIREMENTS.md` §5/§6.3 — the
+/// UI-facing address for "what should this view show," distinct from
+/// `Bucket`, the storage placement underneath. Inbox and Someday map to one
+/// bucket each; Today/Upcoming/Anytime all read `Bucket::Active`, sliced by
+/// `scheduled_date`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum View {
+    Inbox,
+    Today,
+    Upcoming,
+    Anytime,
+    Someday,
+}
+
 /// Mirrors the `tasks` table from `docs/PRODUCT_REQUIREMENTS.md` §8. No
 /// `user_id`: Flow's local phase is single-user, so a `users` table would be
 /// speculative multi-tenancy nothing here needs yet.
@@ -122,13 +136,20 @@ enum Command {
         title: String,
         reply: mpsc::Sender<Result<Task>>,
     },
-    ListBucket {
-        bucket: Bucket,
+    ListView {
+        view: View,
         reply: mpsc::Sender<Result<Vec<Task>>>,
     },
     SetCompleted {
         id: String,
         completed: bool,
+        reply: mpsc::Sender<Result<()>>,
+    },
+    Schedule {
+        id: String,
+        bucket: Bucket,
+        scheduled_date: Option<String>,
+        scheduled_time: Option<String>,
         reply: mpsc::Sender<Result<()>>,
     },
 }
@@ -193,11 +214,11 @@ impl Db {
         rx.recv().context("database thread dropped the reply")?
     }
 
-    /// Open, undeleted tasks in one bucket, ordered by position.
-    pub fn list_bucket(&self, bucket: Bucket) -> Result<Vec<Task>> {
+    /// Open, undeleted, uncompleted tasks for one of the five task views.
+    pub fn list_view(&self, view: View) -> Result<Vec<Task>> {
         let (reply, rx) = mpsc::channel();
         self.commands
-            .send(Command::ListBucket { bucket, reply })
+            .send(Command::ListView { view, reply })
             .context("database thread is gone")?;
         rx.recv().context("database thread dropped the reply")?
     }
@@ -209,6 +230,31 @@ impl Db {
             .send(Command::SetCompleted {
                 id: id.into(),
                 completed,
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    /// Moves a task into `bucket` with an optional schedule — the "Move to
+    /// active" / "Schedule and activate" actions from
+    /// `docs/PRODUCT_REQUIREMENTS.md` §5. `scheduled_time` without
+    /// `scheduled_date` is nonsensical per §8's constraints; callers must
+    /// clear both together when clearing a schedule.
+    pub fn schedule(
+        &self,
+        id: impl Into<String>,
+        bucket: Bucket,
+        scheduled_date: Option<impl Into<String>>,
+        scheduled_time: Option<impl Into<String>>,
+    ) -> Result<()> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::Schedule {
+                id: id.into(),
+                bucket,
+                scheduled_date: scheduled_date.map(Into::into),
+                scheduled_time: scheduled_time.map(Into::into),
                 reply,
             })
             .context("database thread is gone")?;
@@ -258,8 +304,8 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             Command::CreateTask { title, reply } => {
                 let _ = reply.send(runtime.block_on(create_task(&conn, title)));
             }
-            Command::ListBucket { bucket, reply } => {
-                let _ = reply.send(runtime.block_on(list_bucket(&conn, bucket)));
+            Command::ListView { view, reply } => {
+                let _ = reply.send(runtime.block_on(list_view(&conn, view)));
             }
             Command::SetCompleted {
                 id,
@@ -267,6 +313,21 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
                 reply,
             } => {
                 let _ = reply.send(runtime.block_on(set_completed(&conn, id, completed)));
+            }
+            Command::Schedule {
+                id,
+                bucket,
+                scheduled_date,
+                scheduled_time,
+                reply,
+            } => {
+                let _ = reply.send(runtime.block_on(schedule(
+                    &conn,
+                    id,
+                    bucket,
+                    scheduled_date,
+                    scheduled_time,
+                )));
             }
         }
     }
@@ -351,8 +412,8 @@ async fn create_task(conn: &turso::Connection, title: String) -> Result<Task> {
     })
 }
 
-/// Open, undeleted, uncompleted tasks in one bucket. Completed items are
-/// hidden from primary views by default per
+/// Open, undeleted, uncompleted tasks in one bucket, ordered by position.
+/// Completed items are hidden from primary views by default per
 /// `docs/PRODUCT_REQUIREMENTS.md` §5 — the future Logbook view will query
 /// completed tasks separately rather than this function gaining a flag.
 async fn list_bucket(conn: &turso::Connection, bucket: Bucket) -> Result<Vec<Task>> {
@@ -361,10 +422,59 @@ async fn list_bucket(conn: &turso::Connection, bucket: Bucket) -> Result<Vec<Tas
          WHERE bucket = ?1 AND deleted_at IS NULL AND completed_at IS NULL \
          ORDER BY position ASC"
     );
-    let mut rows = conn
-        .query(&sql, (bucket.as_str(),))
-        .await
-        .context("listing bucket")?;
+    run_task_query(conn, &sql, (bucket.as_str(),)).await
+}
+
+/// Dispatches to the SQL for each of the five task views, per
+/// `docs/PRODUCT_REQUIREMENTS.md` §5's placement table. Today/Upcoming/
+/// Anytime all read `Bucket::Active`, sliced by `scheduled_date` against
+/// the caller's local "today" — computed here rather than accepted as a
+/// parameter, since every caller wants "right now" and a stale date would
+/// be a bug, not a feature, for a single-window desktop app.
+async fn list_view(conn: &turso::Connection, view: View) -> Result<Vec<Task>> {
+    match view {
+        View::Inbox => list_bucket(conn, Bucket::Inbox).await,
+        View::Someday => list_bucket(conn, Bucket::Someday).await,
+        View::Anytime => {
+            let sql = format!(
+                "SELECT {TASK_COLUMNS} FROM tasks \
+                 WHERE bucket = 'active' AND scheduled_date IS NULL \
+                 AND deleted_at IS NULL AND completed_at IS NULL \
+                 ORDER BY position ASC"
+            );
+            run_task_query(conn, &sql, ()).await
+        }
+        View::Today => {
+            let today = chrono::Local::now().date_naive().to_string();
+            let sql = format!(
+                "SELECT {TASK_COLUMNS} FROM tasks \
+                 WHERE bucket = 'active' AND scheduled_date IS NOT NULL \
+                 AND scheduled_date <= ?1 \
+                 AND deleted_at IS NULL AND completed_at IS NULL \
+                 ORDER BY scheduled_date ASC, scheduled_time ASC"
+            );
+            run_task_query(conn, &sql, (today,)).await
+        }
+        View::Upcoming => {
+            let today = chrono::Local::now().date_naive().to_string();
+            let sql = format!(
+                "SELECT {TASK_COLUMNS} FROM tasks \
+                 WHERE bucket = 'active' AND scheduled_date IS NOT NULL \
+                 AND scheduled_date > ?1 \
+                 AND deleted_at IS NULL AND completed_at IS NULL \
+                 ORDER BY scheduled_date ASC, scheduled_time ASC"
+            );
+            run_task_query(conn, &sql, (today,)).await
+        }
+    }
+}
+
+async fn run_task_query(
+    conn: &turso::Connection,
+    sql: &str,
+    params: impl turso::IntoParams,
+) -> Result<Vec<Task>> {
+    let mut rows = conn.query(sql, params).await.context("listing tasks")?;
     let mut tasks = Vec::new();
     while let Some(row) = rows.next().await.context("reading a task row")? {
         tasks.push(Task::from_row(&row)?);
@@ -381,6 +491,24 @@ async fn set_completed(conn: &turso::Connection, id: String, completed: bool) ->
     )
     .await
     .context("updating completion")?;
+    Ok(())
+}
+
+async fn schedule(
+    conn: &turso::Connection,
+    id: String,
+    bucket: Bucket,
+    scheduled_date: Option<String>,
+    scheduled_time: Option<String>,
+) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE tasks SET bucket = ?1, scheduled_date = ?2, scheduled_time = ?3, \
+         updated_at = ?4 WHERE id = ?5",
+        (bucket.as_str(), scheduled_date, scheduled_time, now, id),
+    )
+    .await
+    .context("scheduling task")?;
     Ok(())
 }
 
@@ -408,7 +536,7 @@ mod tests {
         assert_eq!(created.bucket, Bucket::Inbox);
         assert!(created.completed_at.is_none());
 
-        let inbox = db.list_bucket(Bucket::Inbox).expect("list should succeed");
+        let inbox = db.list_view(View::Inbox).expect("list should succeed");
         assert_eq!(inbox.len(), 1);
         assert_eq!(inbox[0].id, created.id);
         assert_eq!(inbox[0].title, "Take out laundry");
@@ -421,7 +549,7 @@ mod tests {
 
         db.set_completed(&created.id, true)
             .expect("complete should succeed");
-        let inbox = db.list_bucket(Bucket::Inbox).expect("list should succeed");
+        let inbox = db.list_view(View::Inbox).expect("list should succeed");
         assert!(
             inbox.is_empty(),
             "completed tasks should be hidden from primary views by default"
@@ -429,8 +557,49 @@ mod tests {
 
         db.set_completed(&created.id, false)
             .expect("reopen should succeed");
-        let inbox = db.list_bucket(Bucket::Inbox).expect("list should succeed");
+        let inbox = db.list_view(View::Inbox).expect("list should succeed");
         assert_eq!(inbox.len(), 1);
         assert!(inbox[0].completed_at.is_none());
+    }
+
+    #[test]
+    fn scheduling_moves_a_task_between_views() {
+        let db = open_test_db();
+        let task = db.create_task("Bring Mya cake").expect("create");
+
+        // Active + no date → Anytime only.
+        db.schedule(&task.id, Bucket::Active, None::<String>, None::<String>)
+            .expect("schedule");
+        assert_eq!(db.list_view(View::Inbox).expect("list").len(), 0);
+        assert_eq!(db.list_view(View::Anytime).expect("list").len(), 1);
+        assert_eq!(db.list_view(View::Today).expect("list").len(), 0);
+        assert_eq!(db.list_view(View::Upcoming).expect("list").len(), 0);
+
+        // Active + today's date → Today, not Anytime or Upcoming.
+        let today = chrono::Local::now().date_naive().to_string();
+        db.schedule(&task.id, Bucket::Active, Some(today), None::<String>)
+            .expect("schedule");
+        assert_eq!(db.list_view(View::Today).expect("list").len(), 1);
+        assert_eq!(db.list_view(View::Anytime).expect("list").len(), 0);
+        assert_eq!(db.list_view(View::Upcoming).expect("list").len(), 0);
+
+        // Active + a future date → Upcoming, not Today.
+        let next_year = (chrono::Local::now().date_naive() + chrono::Days::new(365)).to_string();
+        db.schedule(&task.id, Bucket::Active, Some(next_year), None::<String>)
+            .expect("schedule");
+        assert_eq!(db.list_view(View::Upcoming).expect("list").len(), 1);
+        assert_eq!(db.list_view(View::Today).expect("list").len(), 0);
+    }
+
+    #[test]
+    fn someday_tasks_are_isolated_from_other_views() {
+        let db = open_test_db();
+        let task = db.create_task("Learn pottery").expect("create");
+        db.schedule(&task.id, Bucket::Someday, None::<String>, None::<String>)
+            .expect("schedule");
+
+        assert_eq!(db.list_view(View::Someday).expect("list").len(), 1);
+        assert_eq!(db.list_view(View::Inbox).expect("list").len(), 0);
+        assert_eq!(db.list_view(View::Anytime).expect("list").len(), 0);
     }
 }

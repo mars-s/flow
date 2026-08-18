@@ -42,9 +42,9 @@ impl Render for Flow {
 impl Flow {
     fn render_main_pane(&mut self, theme: Theme, cx: &mut Context<Self>) -> AnyElement {
         let destination = self.destination;
-        let body = match destination {
-            Destination::Inbox => self.render_inbox(theme, cx),
-            _ => placeholder_pane(theme, destination).into_any_element(),
+        let body = match destination.view() {
+            Some(_) => self.render_task_view(destination, theme, cx),
+            None => placeholder_pane(theme, destination).into_any_element(),
         };
         div()
             .id("main-pane")
