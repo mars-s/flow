@@ -25,6 +25,7 @@ impl Render for Flow {
         let content = div()
             .id("flow-shell")
             .key_context("Flow")
+            .relative()
             .size_full()
             .flex()
             .bg(theme.canvas)
@@ -34,6 +35,10 @@ impl Render for Flow {
             .on_action(cx.listener(Self::handle_cancel_turn_action))
             .child(self.render_sidebar(cx))
             .child(self.render_main_pane(theme, cx))
+            // Layered on top rather than reserving its own row, so the
+            // sidebar's border keeps running the full window height instead
+            // of stopping at a row boundary above it.
+            .child(self.render_drag_bar(cx))
             .into_any_element();
 
         self.render_window_frame(content, window, cx)

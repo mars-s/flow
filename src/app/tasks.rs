@@ -21,6 +21,10 @@ use crate::theme::Theme;
 /// too since nothing in the direction doc distinguishes them.
 const ROW_TRANSITION: Duration = Duration::from_millis(180);
 
+/// How far the expanded "Completed" section grows upward before it scrolls
+/// internally instead of pushing the open-task list any further.
+const COMPLETED_MAX_HEIGHT: f32 = 280.0;
+
 /// The three quick fixed destinations PRD §6.3 names for the task detail
 /// card's schedule picker. The fourth, "Schedule" (an arbitrary date), is a
 /// free-text field parsed by `parse.rs` rather than one of these — see
@@ -405,48 +409,65 @@ fn task_list(
     }
 
     let selected_count = selected.len();
+    let has_completed = !completed.is_empty();
 
     div()
         .id("task-list")
         .size_full()
-        .overflow_y_scroll()
         .flex()
         .flex_col()
-        .px(px(24.0))
-        .py(px(20.0))
-        .gap(px(1.0))
-        .when(selected_count >= 2, |list| {
-            list.child(bulk_action_bar(selected_count, theme, cx))
-        })
-        .children(tasks.iter().cloned().map(|task| {
-            let is_expanded = expanded.as_deref() == Some(task.id.as_str());
-            let is_selected = selected.contains(&task.id);
-            render_task_row(
-                task,
-                view,
-                is_expanded,
-                is_selected,
-                schedule_picker_open,
-                scheduling,
-                note_input.clone(),
-                schedule_input.clone(),
-                theme,
-                cx,
+        .child(
+            div()
+                .id("task-list-open")
+                .flex_1()
+                .min_h(px(0.0))
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .px(px(24.0))
+                .pt(px(40.0))
+                .pb(px(20.0))
+                .gap(px(1.0))
+                .when(selected_count >= 2, |list| {
+                    list.child(bulk_action_bar(selected_count, theme, cx))
+                })
+                .children(tasks.iter().cloned().map(|task| {
+                    let is_expanded = expanded.as_deref() == Some(task.id.as_str());
+                    let is_selected = selected.contains(&task.id);
+                    render_task_row(
+                        task,
+                        view,
+                        is_expanded,
+                        is_selected,
+                        schedule_picker_open,
+                        scheduling,
+                        note_input.clone(),
+                        schedule_input.clone(),
+                        theme,
+                        cx,
+                    )
+                })),
+        )
+        .when(has_completed, |list| {
+            list.child(
+                div()
+                    .id("task-list-completed-dock")
+                    .flex_none()
+                    .px(px(24.0))
+                    .pb(px(20.0))
+                    .child(completed_section(
+                        view,
+                        completed,
+                        completed_expanded,
+                        expanded,
+                        schedule_picker_open,
+                        scheduling,
+                        note_input,
+                        schedule_input,
+                        theme,
+                        cx,
+                    )),
             )
-        }))
-        .when(!completed.is_empty(), |list| {
-            list.child(completed_section(
-                view,
-                completed,
-                completed_expanded,
-                expanded,
-                schedule_picker_open,
-                scheduling,
-                note_input,
-                schedule_input,
-                theme,
-                cx,
-            ))
         })
         .into_any_element()
 }
@@ -471,6 +492,36 @@ fn completed_section(
         .flex()
         .flex_col()
         .mt(px(4.0))
+        // The scrollable rows come before the toggle in document order so
+        // the toggle stays pinned at the bottom of the dock and the section
+        // reads as growing upward out of it, capped at `COMPLETED_MAX_HEIGHT`
+        // before it scrolls internally instead of pushing the open list
+        // further up.
+        .when(expanded, |section| {
+            section.child(
+                div()
+                    .id(SharedString::from(format!("completed-rows-{view:?}")))
+                    .max_h(px(COMPLETED_MAX_HEIGHT))
+                    .overflow_y_scroll()
+                    .flex()
+                    .flex_col()
+                    .children(completed.iter().cloned().map(|task| {
+                        let is_expanded = task_expanded.as_deref() == Some(task.id.as_str());
+                        render_task_row(
+                            task,
+                            view,
+                            is_expanded,
+                            false,
+                            schedule_picker_open,
+                            scheduling,
+                            note_input.clone(),
+                            schedule_input.clone(),
+                            theme,
+                            cx,
+                        )
+                    })),
+            )
+        })
         .child(
             div()
                 .id(SharedString::from(format!("completed-toggle-{view:?}")))
@@ -495,23 +546,6 @@ fn completed_section(
                         .child(format!("Completed ({})", completed.len())),
                 ),
         )
-        .when(expanded, |section| {
-            section.children(completed.iter().cloned().map(|task| {
-                let is_expanded = task_expanded.as_deref() == Some(task.id.as_str());
-                render_task_row(
-                    task,
-                    view,
-                    is_expanded,
-                    false,
-                    schedule_picker_open,
-                    scheduling,
-                    note_input.clone(),
-                    schedule_input.clone(),
-                    theme,
-                    cx,
-                )
-            }))
-        })
         .into_any_element()
 }
 

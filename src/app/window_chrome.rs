@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, BoxShadow, Context, Decorations, Div, Hsla, IntoElement, MouseButton, ResizeEdge,
-    Tiling, Window, div, prelude::*, px, transparent_black,
+    Tiling, Window, WindowControlArea, div, prelude::*, px, transparent_black,
 };
 #[cfg(target_os = "linux")]
 use gpui::{KeyDownEvent, WindowButton, WindowButtonLayout};
@@ -13,6 +13,13 @@ use crate::ui::{icon, tooltip::Tooltip};
 const CLIENT_FRAME_INSET: f32 = 10.0;
 const CLIENT_FRAME_ROUNDING: f32 = 10.0;
 
+/// Tall enough to clear macOS's traffic-light cluster (`traffic_light_position`
+/// in `lib.rs` sits it at y=17 with the buttons themselves ~12px across).
+/// `sidebar.rs` reuses this to keep the "Flow" wordmark clear of the same
+/// cluster, since the drag bar is layered on top of the sidebar rather than
+/// reserving its own row.
+pub(super) const DRAG_BAR_HEIGHT: f32 = 34.0;
+
 #[derive(Clone, Copy)]
 pub(super) enum WindowControlSide {
     Left,
@@ -20,6 +27,38 @@ pub(super) enum WindowControlSide {
 }
 
 impl Flow {
+    /// An invisible full-width strip at the very top of the window so it can
+    /// be dragged by clicking anywhere near the top. `lib.rs` sets
+    /// `app_owns_titlebar_drag` on macOS, which hands drag handling to GPUI
+    /// instead of the OS doing it for free — without a region like this the
+    /// space beside the traffic lights is otherwise dead. Native traffic
+    /// lights are drawn and hit-tested by AppKit above our content, so they
+    /// keep working even though this strip sits directly under them.
+    pub(super) fn render_drag_bar(&self, _cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .id("drag-bar")
+            .window_control_area(WindowControlArea::Drag)
+            .flex_none()
+            .w_full()
+            .h(px(DRAG_BAR_HEIGHT))
+            // `window_control_area` alone only feeds platforms that hit-test
+            // window chrome themselves (Windows' non-client area). On macOS,
+            // `app_owns_titlebar_drag` means nothing drags the window unless
+            // we call `start_window_move` ourselves — the gpui fork's own
+            // `window_shadow` example does exactly this on plain mouse-down.
+            .on_mouse_down(MouseButton::Left, |_event, window, _cx| {
+                window.start_window_move();
+            })
+            .when(cfg!(target_os = "macos"), |bar| {
+                bar.on_click(|event, window, _cx| {
+                    if event.click_count() == 2 {
+                        window.titlebar_double_click();
+                    }
+                })
+            })
+            .into_any_element()
+    }
+
     /// Draw the frame a Wayland compositor delegates back to the client.
     /// Server-decorated windows pass through untouched, so X11 and Wayland
     /// compositors that provide native chrome keep doing so.
