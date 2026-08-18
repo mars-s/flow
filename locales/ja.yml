@@ -1,0 +1,139 @@
+_version: 1
+
+menu.about: "%{app} について"
+menu.check_for_updates: アップデートを確認…
+menu.settings: 設定…
+menu.quit: "%{app} を終了"
+menu.file: ファイル
+menu.new_task: 新規タスク
+menu.edit: 編集
+menu.undo: 取り消す
+menu.redo: やり直す
+menu.cut: カット
+menu.copy: コピー
+menu.paste: ペースト
+menu.select_all: すべてを選択
+menu.view: 表示
+menu.command_palette: コマンドパレット…
+menu.toggle_sidebar: サイドバーの表示を切り替える
+menu.window: ウインドウ
+menu.toggle_fps_counter: FPS カウンターの表示を切り替える
+menu.close_window: ウインドウを閉じる
+window.minimize: 最小化
+window.maximize: 最大化
+window.restore: 元に戻す
+
+updater.update: アップデート
+updater.checking: アップデートを確認中…
+updater.updating: アップデート中…
+updater.up_to_date: Flow は最新です
+updater.failed: "アップデートに失敗しました：%{error}"
+
+command_palette.placeholder: タスクを検索、またはコマンドを実行…
+command_palette.suggested: おすすめ
+command_palette.tasks: タスク
+command_palette.commands: コマンド
+command_palette.settings: 設定
+command_palette.new_task: 新規タスク
+command_palette.show_sidebar: サイドバーを表示
+command_palette.hide_sidebar: サイドバーを隠す
+command_palette.current: 現在
+command_palette.you: あなた
+command_palette.no_results: 一致するタスクやコマンドはありません
+command_palette.no_results_hint: タスク名、設定、コマンドで検索してください
+
+language.title: 言語
+language.system: システム
+language.description: Flow 全体で使用する言語を選択します
+
+settings.general: 一般
+settings.appearance: 外観
+settings.general_keywords: 一般 ローカル タスク プライバシー 分析 テレメトリ 匿名 共有 アップデート 自動 バージョン
+settings.appearance_keywords: 外観 テーマ システム ライト ダーク 言語 英語 中国語 簡体字 日本語
+settings.back: 戻る
+settings.search: 設定を検索
+settings.theme: テーマ
+settings.theme_description: システム、ライト、ダークのいずれかのテーマを選択します
+settings.theme_system: システム
+settings.theme_light: ライト
+settings.theme_dark: ダーク
+
+input.do_anything: 何でも依頼できます…
+input.detected_automatically: 自動検出
+input.find: 検索
+input.replace: 置換
+
+common.checking: 確認中…
+common.refresh: 更新
+common.recheck: 再確認
+common.reset: リセット
+common.revoke: 許可を解除
+common.retry: 再試行
+common.creating: 作成中…
+
+settings.local_by_default: デフォルトでローカルに保存
+settings.local_by_default_description: タスクと設定はこの Mac に保存されます
+settings.automatic_updates: 自動アップデート
+settings.automatic_updates_description: バックグラウンドで新しいバージョンを確認し、インストールを案内します
+settings.share_anonymous_usage_data: 匿名の使用状況データを共有
+settings.share_anonymous_usage_data_description: 機能の利用状況と信頼性に関するデータを共有して、Flow の改善にご協力ください。個人データは一切含まれません
+
+common.settings: 設定
+common.copy: コピー
+common.remove: 削除
+common.rename: 名前を変更
+
+sidebar.today: 今日
+sidebar.search: 検索
+sidebar.yesterday: 昨日
+sidebar.this_week: 今週
+sidebar.this_month: 今月
+sidebar.this_year: 今年
+sidebar.more: さらに前
+sidebar.close: サイドバーを閉じる
+sidebar.hide: サイドバーを隠す
+sidebar.open: サイドバーを開く
+sidebar.tasks: タスク
+sidebar.resize: サイドバーの幅を変更
+
+common.copied: コピーしました
+common.copy_message: メッセージをコピー
+common.copy_message_title: メッセージをコピー
+common.copy_selection: 選択範囲をコピー
+common.copy_code: コードをコピー
+common.cancel: キャンセル
+common.send: 送信
+
+time.yesterday_at: 昨日 %{time}
+time.weekday_at: "%{weekday} %{time}"
+time.date_at: "%{month}月%{day}日 %{time}"
+time.full_date_at: "%{year}年%{month}月%{day}日 %{time}"
+time.monday: 月曜日
+time.tuesday: 火曜日
+time.wednesday: 水曜日
+time.thursday: 木曜日
+time.friday: 金曜日
+time.saturday: 土曜日
+time.sunday: 日曜日
+
+common.deny: 拒否
+
+common.close: 閉じる
+common.default: デフォルト
+
+common.dismiss_notification: 通知を閉じる
+common.reveal_in_finder: ファイルマネージャーで表示
+
+common.copy_named: "%{name} をコピー"
+
+duration.second: "%{count} 秒"
+duration.seconds: "%{count} 秒"
+duration.minute: "%{count} 分"
+duration.minutes: "%{count} 分"
+duration.hour: "%{count} 時間"
+duration.hours: "%{count} 時間"
+duration.seconds_short: "%{count}秒"
+duration.minutes_short: "%{count}分"
+duration.hours_short: "%{count}時間"
+duration.two_units: "%{first} %{second}"
+

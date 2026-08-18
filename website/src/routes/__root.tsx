@@ -1,0 +1,71 @@
+/// <reference types="vite/client" />
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+} from '@tanstack/react-router'
+import type { QueryClient } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import appCss from '@/styles.css?url'
+
+const TITLE = 'Flow'
+const DESCRIPTION =
+  'Flow is a calm, keyboard-first personal task manager with a read-only calendar glance.'
+
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient
+}>()({
+  head: () => ({
+    meta: [
+      { charSet: 'utf-8' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      { title: TITLE },
+      { name: 'description', content: DESCRIPTION },
+      {
+        name: 'theme-color',
+        media: '(prefers-color-scheme: light)',
+        content: '#ffffff',
+      },
+      {
+        name: 'theme-color',
+        media: '(prefers-color-scheme: dark)',
+        content: '#1e1e1e',
+      },
+    ],
+    links: [
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon.png' },
+      { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
+    ],
+    scripts: [
+      {
+        // Mirror the system color scheme onto <html> before first paint.
+        children: `try{var m=matchMedia('(prefers-color-scheme: dark)'),d=document.documentElement,s=function(){d.classList.toggle('dark',m.matches)};s();m.addEventListener('change',s)}catch(e){}`,
+      },
+    ],
+  }),
+  component: RootComponent,
+})
+
+function RootComponent() {
+  return (
+    <RootDocument>
+      <Outlet />
+    </RootDocument>
+  )
+}
+
+function RootDocument({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
+    </html>
+  )
+}

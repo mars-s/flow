@@ -1,0 +1,72 @@
+//! Flow's shell: native window lifecycle plus the fixed navigation rail and
+//! main-pane frame from `docs/PRODUCT_REQUIREMENTS.md` §5.
+//!
+//! Milestone 0 strips every Flow coding-agent concept — daemon, sessions,
+//! transcript, composer, provider tooling — down to this: seven fixed
+//! destinations and a placeholder main pane. See the milestone-0 wayfinder
+//! ticket for what was removed and why.
+
+use std::array;
+
+use gpui::{AnyElement, App, Context, Entity, FocusHandle, Window, div, prelude::*};
+
+use crate::ToggleCommandPalette;
+use crate::input::ComposerInput;
+use crate::theme::Theme;
+
+mod command_palette;
+mod components;
+mod render;
+mod settings;
+mod sidebar;
+#[cfg(test)]
+mod tests;
+mod window_chrome;
+
+pub use command_palette::init as init_command_palette;
+pub use settings::init as init_settings_keys;
+pub use sidebar::init as init_sidebar_keys;
+use sidebar::Destination;
+
+pub struct Flow {
+    destination: Destination,
+    new_task_focus: FocusHandle,
+    /// One stable handle per destination, indexed by `Destination::index`.
+    nav_focuses: [FocusHandle; Destination::COUNT],
+}
+
+impl Flow {
+    pub fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        let flow = cx.new(|cx| Self {
+            destination: Destination::Inbox,
+            new_task_focus: cx.focus_handle(),
+            nav_focuses: array::from_fn(|_| cx.focus_handle()),
+        });
+        window.set_window_title(&window_title(Destination::Inbox));
+        flow
+    }
+
+    /// Where the window should land keyboard focus on open, so arrow keys
+    /// work in the sidebar immediately without an extra tab press.
+    pub(crate) fn initial_focus(&self, _cx: &App) -> FocusHandle {
+        self.nav_focuses[self.destination.index()].clone()
+    }
+
+    pub(super) fn set_destination(
+        &mut self,
+        destination: Destination,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.destination == destination {
+            return;
+        }
+        self.destination = destination;
+        window.set_window_title(&window_title(destination));
+        cx.notify();
+    }
+}
+
+fn window_title(destination: Destination) -> String {
+    format!("{} — Flow", destination.label())
+}

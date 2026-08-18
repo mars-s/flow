@@ -1,0 +1,11 @@
+{
+    "schema_version": 1,
+    "commit": "14433e5cf64d616df9f8360a9789d1b2e6b7d9b8",
+    "indexed_at": "2026-08-18T04:36:11Z",
+    "project": "Users-avi-Developer-vibe-flow",
+    "nodes": 8262,
+    "edges": 25079,
+    "original_size": 27590656,
+    "compressed_size": 5679797,
+    "compression_level": 3
+}
