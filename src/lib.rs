@@ -55,6 +55,7 @@ actions!(
         About,
         CloseWindow,
         NewTask,
+        SpaceCapture,
         NewProject,
         OpenSettings,
         CheckForUpdates,
@@ -184,6 +185,12 @@ pub fn run() {
                 KeyBinding::new("secondary-u", ToggleUsagePanel, None),
                 KeyBinding::new("secondary-s", SaveFile, None),
                 KeyBinding::new("escape", CancelTurn, Some("Flow")),
+                // Bare space opens Capture from a task view, but never while
+                // a composer has focus — `!ComposerInput` excludes Capture,
+                // Schedule…, and the note field, all of which set that key
+                // context (`input.rs`), so a literal typed space keeps
+                // reaching the text field instead of being swallowed here.
+                KeyBinding::new("space", SpaceCapture, Some("Flow && !ComposerInput")),
                 KeyBinding::new("secondary-c", CopySelection, Some("Flow")),
                 // Find and replace in the right panel's file editor, on the
                 // conventional VS Code bindings. The primary shortcut + G cycles matches from

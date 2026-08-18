@@ -28,6 +28,11 @@ pub struct ParsedTitle {
     /// kept so a future composer preview/undo can show and restore it
     /// (PRD: "Backspace restores the original text").
     pub source_phrase: Option<String>,
+    /// Byte range `source_phrase` occupied in the *input* title (not
+    /// `cleaned_title`, which has it removed) — lets a caller highlight the
+    /// recognized phrase in place while the user types, e.g. the composer's
+    /// live date/time preview.
+    pub source_range: Option<std::ops::Range<usize>>,
     pub date: Option<NaiveDate>,
     pub time: Option<NaiveTime>,
 }
@@ -100,6 +105,7 @@ pub fn parse(title: &str, today: NaiveDate) -> ParsedTitle {
         return ParsedTitle {
             cleaned_title: trimmed[..whole.start()].trim_end().to_string(),
             source_phrase: Some(whole.as_str().to_string()),
+            source_range: Some(whole.start()..whole.end()),
             date,
             time,
         };
@@ -276,11 +282,29 @@ mod tests {
     /// function — `parse` only ever sees an already-local `today`).
     #[test]
     fn prd_acceptance_case_time_then_date() {
-        let result = parse("take out laundry 8 am tomorrow", date(2026, 8, 18));
+        let title = "take out laundry 8 am tomorrow";
+        let result = parse(title, date(2026, 8, 18));
         assert_eq!(result.cleaned_title, "take out laundry");
         assert_eq!(result.date, Some(date(2026, 8, 19)));
         assert_eq!(result.time, Some(time(8, 0)));
         assert_eq!(result.source_phrase.as_deref(), Some("8 am tomorrow"));
+        let range = result.source_range.expect("a match should carry a range");
+        assert_eq!(&title[range], "8 am tomorrow");
+    }
+
+    #[test]
+    fn source_range_points_at_the_phrase_in_the_original_title() {
+        let title = "call mom tomorrow 5pm";
+        let result = parse(title, date(2026, 8, 18));
+        let range = result.source_range.expect("a match should carry a range");
+        assert_eq!(&title[range.clone()], result.source_phrase.as_deref().unwrap());
+        assert_eq!(&title[range], "tomorrow 5pm");
+    }
+
+    #[test]
+    fn no_match_leaves_source_range_empty() {
+        let result = parse("Just a plain title", date(2026, 8, 18));
+        assert_eq!(result.source_range, None);
     }
 
     #[test]

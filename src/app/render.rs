@@ -30,6 +30,7 @@ impl Render for Flow {
             .bg(theme.canvas)
             .text_color(theme.text)
             .on_action(cx.listener(Self::handle_new_task_action))
+            .on_action(cx.listener(Self::handle_space_capture_action))
             .on_action(cx.listener(Self::handle_cancel_turn_action))
             .child(self.render_sidebar(cx))
             .child(self.render_main_pane(theme, cx))

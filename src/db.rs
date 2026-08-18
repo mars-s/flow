@@ -140,6 +140,10 @@ enum Command {
         view: View,
         reply: mpsc::Sender<Result<Vec<Task>>>,
     },
+    ListCompleted {
+        view: View,
+        reply: mpsc::Sender<Result<Vec<Task>>>,
+    },
     SetCompleted {
         id: String,
         completed: bool,
@@ -228,6 +232,18 @@ impl Db {
         let (reply, rx) = mpsc::channel();
         self.commands
             .send(Command::ListView { view, reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    /// Completed tasks for one of the five task views — the same
+    /// bucket/date-range slice `list_view` uses, but `completed_at IS NOT
+    /// NULL` and newest-completed-first, for the collapsed "Completed"
+    /// section at the bottom of each view rather than a shared logbook.
+    pub fn list_completed(&self, view: View) -> Result<Vec<Task>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::ListCompleted { view, reply })
             .context("database thread is gone")?;
         rx.recv().context("database thread dropped the reply")?
     }
@@ -343,6 +359,9 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             }
             Command::ListView { view, reply } => {
                 let _ = reply.send(runtime.block_on(list_view(&conn, view)));
+            }
+            Command::ListCompleted { view, reply } => {
+                let _ = reply.send(runtime.block_on(list_completed(&conn, view)));
             }
             Command::SetCompleted {
                 id,
@@ -508,6 +527,52 @@ async fn list_view(conn: &turso::Connection, view: View) -> Result<Vec<Task>> {
                  ORDER BY scheduled_date ASC, scheduled_time ASC"
             );
             run_task_query(conn, &sql, (today,)).await
+        }
+    }
+}
+
+/// Mirrors `list_view`'s per-view bucket/date-range slice, but for completed
+/// tasks (`completed_at IS NOT NULL`) ordered most-recently-completed-first —
+/// `position` is meaningless once a task is done and out of the active
+/// ordering it was set for.
+async fn list_completed(conn: &turso::Connection, view: View) -> Result<Vec<Task>> {
+    let bucket = match view {
+        View::Inbox => Bucket::Inbox,
+        View::Someday => Bucket::Someday,
+        View::Today | View::Upcoming | View::Anytime => Bucket::Active,
+    };
+    let sql = match view {
+        View::Inbox | View::Someday => format!(
+            "SELECT {TASK_COLUMNS} FROM tasks \
+             WHERE bucket = ?1 AND deleted_at IS NULL AND completed_at IS NOT NULL \
+             ORDER BY updated_at DESC"
+        ),
+        View::Anytime => format!(
+            "SELECT {TASK_COLUMNS} FROM tasks \
+             WHERE bucket = ?1 AND scheduled_date IS NULL \
+             AND deleted_at IS NULL AND completed_at IS NOT NULL \
+             ORDER BY updated_at DESC"
+        ),
+        View::Today => format!(
+            "SELECT {TASK_COLUMNS} FROM tasks \
+             WHERE bucket = ?1 AND scheduled_date IS NOT NULL AND scheduled_date <= ?2 \
+             AND deleted_at IS NULL AND completed_at IS NOT NULL \
+             ORDER BY updated_at DESC"
+        ),
+        View::Upcoming => format!(
+            "SELECT {TASK_COLUMNS} FROM tasks \
+             WHERE bucket = ?1 AND scheduled_date IS NOT NULL AND scheduled_date > ?2 \
+             AND deleted_at IS NULL AND completed_at IS NOT NULL \
+             ORDER BY updated_at DESC"
+        ),
+    };
+    match view {
+        View::Inbox | View::Someday | View::Anytime => {
+            run_task_query(conn, &sql, (bucket.as_str(),)).await
+        }
+        View::Today | View::Upcoming => {
+            let today = chrono::Local::now().date_naive().to_string();
+            run_task_query(conn, &sql, (bucket.as_str(), today)).await
         }
     }
 }
@@ -704,6 +769,24 @@ mod tests {
             .expect("clearing the note should succeed");
         let inbox = db.list_view(View::Inbox).expect("list");
         assert!(inbox[0].note.is_none());
+    }
+
+    #[test]
+    fn completing_a_task_moves_it_from_list_view_to_list_completed() {
+        let db = open_test_db();
+        let task = db.create_task("Ship it").expect("create should succeed");
+
+        assert_eq!(db.list_view(View::Inbox).expect("list").len(), 1);
+        assert!(db.list_completed(View::Inbox).expect("list").is_empty());
+
+        db.set_completed(&task.id, true)
+            .expect("complete should succeed");
+
+        assert!(db.list_view(View::Inbox).expect("list").is_empty());
+        let completed = db.list_completed(View::Inbox).expect("list");
+        assert_eq!(completed.len(), 1);
+        assert_eq!(completed[0].id, task.id);
+        assert!(completed[0].completed_at.is_some());
     }
 
     #[test]

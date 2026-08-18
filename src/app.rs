@@ -15,7 +15,7 @@ use crate::db::{Bucket, Db, Task, View};
 use crate::input::{ComposerEvent, ComposerInput};
 use crate::query::QueryCache;
 use crate::theme::Theme;
-use crate::{CancelTurn, NewTask, ToggleCommandPalette};
+use crate::{CancelTurn, NewTask, SpaceCapture, ToggleCommandPalette};
 
 mod command_palette;
 mod components;
@@ -87,6 +87,16 @@ pub struct Flow {
     /// detail card. A plain click clears this and falls back to opening/
     /// closing the card as usual.
     selected_task_ids: HashSet<String>,
+    /// A second `QueryCache`, keyed the same as `tasks`, for each view's
+    /// completed tasks — kept separate rather than widening `tasks`'s value
+    /// since the two listings have different SQL, ordering, and visibility
+    /// (collapsed by default), and a shared cache entry couldn't answer
+    /// "how many completed" without always fetching both anyway.
+    completed_tasks: QueryCache<View, Vec<Task>>,
+    /// Which views currently show their collapsed "Completed" section
+    /// expanded. A set rather than one bool per view, matching this
+    /// codebase's `HashSet<View>` idiom for per-view UI flags.
+    completed_expanded: HashSet<View>,
 }
 
 impl Flow {
@@ -142,6 +152,8 @@ impl Flow {
                 scheduling: false,
                 schedule_input,
                 selected_task_ids: HashSet::new(),
+                completed_tasks: QueryCache::new(8),
+                completed_expanded: HashSet::new(),
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
@@ -178,6 +190,10 @@ impl Flow {
         event: &ComposerEvent,
         cx: &mut Context<Self>,
     ) {
+        if matches!(event, ComposerEvent::Edited) {
+            self.highlight_capture_date_phrase(cx);
+            return;
+        }
         let ComposerEvent::Submit(title) = event else {
             return;
         };
@@ -228,6 +244,24 @@ impl Flow {
         // cleared itself (ComposerInput::enter's Composer-mode branch).
     }
 
+    /// Live preview for Capture: re-parses on every keystroke (pure and
+    /// cheap, same reasoning `on_capture_event`'s submit-time parse already
+    /// documents) and paints whatever date/time phrase it recognizes using
+    /// the composer's existing find-match highlight
+    /// (`ComposerInput::set_search_matches`, built for search but just as
+    /// suited to washing a live-parsed range) instead of a second highlight
+    /// mechanism.
+    fn highlight_capture_date_phrase(&mut self, cx: &mut Context<Self>) {
+        let content = self.capture_input.read(cx).content().to_string();
+        let parsed = crate::parse::parse(&content, chrono::Local::now().date_naive());
+        let (matches, active) = match parsed.source_range {
+            Some(range) => (vec![range], Some(0)),
+            None => (Vec::new(), None),
+        };
+        self.capture_input
+            .update(cx, |input, cx| input.set_search_matches(matches, active, cx));
+    }
+
     /// The detail card's schedule-pill picker's "Schedule…" button: swaps
     /// the three quick buttons for a free-text field, focused, for the row
     /// already in `expanded_task_id`.
@@ -244,6 +278,10 @@ impl Flow {
         event: &ComposerEvent,
         cx: &mut Context<Self>,
     ) {
+        if matches!(event, ComposerEvent::Edited) {
+            self.highlight_schedule_date_phrase(cx);
+            return;
+        }
         let ComposerEvent::Submit(text) = event else {
             return;
         };
@@ -289,7 +327,43 @@ impl Flow {
         .detach();
     }
 
+    /// Live preview for the "Schedule…" field, same reasoning as
+    /// `highlight_capture_date_phrase` — cheap enough that establishing the
+    /// pattern once made this second field free.
+    fn highlight_schedule_date_phrase(&mut self, cx: &mut Context<Self>) {
+        let content = self.schedule_input.read(cx).content().to_string();
+        let parsed = crate::parse::parse(&content, chrono::Local::now().date_naive());
+        let (matches, active) = match parsed.source_range {
+            Some(range) => (vec![range], Some(0)),
+            None => (Vec::new(), None),
+        };
+        self.schedule_input
+            .update(cx, |input, cx| input.set_search_matches(matches, active, cx));
+    }
+
     fn handle_new_task_action(&mut self, _: &NewTask, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_capture(window, cx);
+    }
+
+    /// Bare `space`, scoped to task views only (`Destination::view()` is
+    /// `None` for Calendar/Settings) so it doesn't hijack space's native
+    /// meaning there. The keymap context (`lib.rs`'s `!ComposerInput`
+    /// predicate) already keeps this from firing while a composer has
+    /// focus; the `capturing`/`scheduling`/`expanded_task_id` check here is
+    /// a defensive second layer in case a future field reuses `ComposerInput`
+    /// without leaning on the same key context.
+    fn handle_space_capture_action(
+        &mut self,
+        _: &SpaceCapture,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.capturing || self.scheduling || self.expanded_task_id.is_some() {
+            return;
+        }
+        if self.destination.view().is_none() {
+            return;
+        }
         self.open_capture(window, cx);
     }
 

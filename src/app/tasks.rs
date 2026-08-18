@@ -49,6 +49,18 @@ impl ProcessTarget {
             ProcessTarget::Someday => Bucket::Someday,
         }
     }
+
+    /// Reuses the sidebar's icon for the same concept (`sidebar.rs`'s
+    /// `Destination::icon_path`) so Today/Anytime/Someday read as the same
+    /// idea in both places — no new icon assets, no per-item color per
+    /// `docs/DESIGN_DIRECTION.md`'s single-accent rule.
+    fn icon_path(self) -> &'static str {
+        match self {
+            ProcessTarget::Today => "icons/star.svg",
+            ProcessTarget::Anytime => "icons/layers.svg",
+            ProcessTarget::Someday => "icons/archive.svg",
+        }
+    }
 }
 
 impl Flow {
@@ -97,8 +109,50 @@ impl Flow {
         }
     }
 
+    /// Invalidates both an open view and its collapsed "Completed" section —
+    /// every write that moves a task in or out of one can also move it in or
+    /// out of the other, so the two caches always travel together.
     fn invalidate_view(&mut self, view: View) {
         self.tasks.invalidate(&view);
+        self.completed_tasks.invalidate(&view);
+    }
+
+    /// Reads a view's completed tasks, kicking off a background fetch on a
+    /// miss — same `QueryCache` read-through pattern as `read_view`, against
+    /// the parallel `completed_tasks` cache.
+    pub(super) fn read_completed(&mut self, view: View, cx: &mut Context<Self>) -> Query<View, Vec<Task>> {
+        let query = self.completed_tasks.read(&view);
+        if let Query::Missing(token) = &query {
+            let Some(db) = self.db.clone() else {
+                return query;
+            };
+            let token = token.clone();
+            cx.spawn(async move |flow, cx| {
+                let Ok(tasks) = cx
+                    .background_executor()
+                    .spawn(async move { db.list_completed(view) })
+                    .await
+                else {
+                    return;
+                };
+                let _ = flow.update(cx, |flow, cx| {
+                    if flow.completed_tasks.fulfill(token, tasks) {
+                        cx.notify();
+                    }
+                });
+            })
+            .detach();
+        }
+        query
+    }
+
+    /// The "Completed (N)" row's click: expands or collapses that view's
+    /// section. Collapsed by default (`Flow::new`'s empty `completed_expanded`).
+    fn toggle_completed_expanded(&mut self, view: View, cx: &mut Context<Self>) {
+        if !self.completed_expanded.remove(&view) {
+            self.completed_expanded.insert(view);
+        }
+        cx.notify();
     }
 
     /// Toggles a task's completion and refreshes whatever view is currently
@@ -301,10 +355,21 @@ impl Flow {
         let schedule_input = self.schedule_input.clone();
         let note_input = self.note_input.clone();
         let selected = self.selected_task_ids.clone();
+        let completed_expanded = self.completed_expanded.contains(&view);
+        // Always fetched, not only once expanded — the collapsed row still
+        // needs a count, and this is the same "resolve the whole collection
+        // up front, render degrades on a miss" pattern `read_view` already
+        // follows rather than a second, gated fetch.
+        let completed = match self.read_completed(view, cx) {
+            Query::Ready(tasks) => tasks,
+            Query::Pending | Query::Missing(_) => Arc::new(Vec::new()),
+        };
         match self.read_view(view, cx) {
             Query::Ready(tasks) => task_list(
                 view,
                 tasks,
+                completed,
+                completed_expanded,
                 expanded,
                 schedule_picker_open,
                 scheduling,
@@ -324,6 +389,8 @@ impl Flow {
 fn task_list(
     view: View,
     tasks: Arc<Vec<Task>>,
+    completed: Arc<Vec<Task>>,
+    completed_expanded: bool,
     expanded: Option<String>,
     schedule_picker_open: bool,
     scheduling: bool,
@@ -333,7 +400,7 @@ fn task_list(
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
-    if tasks.is_empty() {
+    if tasks.is_empty() && completed.is_empty() {
         return empty_state(view, theme).into_any_element();
     }
 
@@ -367,6 +434,84 @@ fn task_list(
                 cx,
             )
         }))
+        .when(!completed.is_empty(), |list| {
+            list.child(completed_section(
+                view,
+                completed,
+                completed_expanded,
+                expanded,
+                schedule_picker_open,
+                scheduling,
+                note_input,
+                schedule_input,
+                theme,
+                cx,
+            ))
+        })
+        .into_any_element()
+}
+
+/// The collapsed-by-default "Completed" section at the bottom of a task
+/// list — its own row per view rather than one shared logbook, since a
+/// completed task stays associated with wherever it was completed from.
+#[allow(clippy::too_many_arguments)]
+fn completed_section(
+    view: View,
+    completed: Arc<Vec<Task>>,
+    expanded: bool,
+    task_expanded: Option<String>,
+    schedule_picker_open: bool,
+    scheduling: bool,
+    note_input: Entity<ComposerInput>,
+    schedule_input: Entity<ComposerInput>,
+    theme: Theme,
+    cx: &mut Context<Flow>,
+) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .mt(px(4.0))
+        .child(
+            div()
+                .id(SharedString::from(format!("completed-toggle-{view:?}")))
+                .h(px(28.0))
+                .flex()
+                .items_center()
+                .gap(px(6.0))
+                .px(px(8.0))
+                .rounded(px(6.0))
+                .cursor_pointer()
+                .hover(|el| el.bg(theme.overlay))
+                .on_click(cx.listener(move |flow, _, _, cx| flow.toggle_completed_expanded(view, cx)))
+                .child(crate::ui::icon(
+                    if expanded { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" },
+                    12.0,
+                    theme.text_tertiary,
+                ))
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .text_color(theme.text_secondary)
+                        .child(format!("Completed ({})", completed.len())),
+                ),
+        )
+        .when(expanded, |section| {
+            section.children(completed.iter().cloned().map(|task| {
+                let is_expanded = task_expanded.as_deref() == Some(task.id.as_str());
+                render_task_row(
+                    task,
+                    view,
+                    is_expanded,
+                    false,
+                    schedule_picker_open,
+                    scheduling,
+                    note_input.clone(),
+                    schedule_input.clone(),
+                    theme,
+                    cx,
+                )
+            }))
+        })
         .into_any_element()
 }
 
@@ -663,6 +808,9 @@ fn render_process_row(
             let id = task_id.clone();
             div()
                 .id(gpui::SharedString::from(format!("process-{task_id}-{}", target.label())))
+                .flex()
+                .items_center()
+                .gap(px(4.0))
                 .px(px(8.0))
                 .py(px(3.0))
                 .rounded(px(5.0))
@@ -675,11 +823,15 @@ fn render_process_row(
                     flow.process_task(id.clone(), target, cx);
                     cx.stop_propagation();
                 }))
+                .child(crate::ui::icon(target.icon_path(), 12.0, theme.text_secondary))
                 .child(target.label())
         }))
         .child(
             div()
                 .id(gpui::SharedString::from(format!("process-{task_id}-schedule")))
+                .flex()
+                .items_center()
+                .gap(px(4.0))
                 .px(px(8.0))
                 .py(px(3.0))
                 .rounded(px(5.0))
@@ -692,33 +844,53 @@ fn render_process_row(
                     flow.open_schedule_field(window, cx);
                     cx.stop_propagation();
                 }))
+                .child(crate::ui::icon("icons/calendar.svg", 12.0, theme.text_secondary))
                 .child("Schedule…"),
         )
         .into_any_element()
 }
 
-/// `scheduled_date`/`scheduled_time` are stored as plain `YYYY-MM-DD`/
-/// `HH:mm` strings (`docs/PRODUCT_REQUIREMENTS.md` §6.4) — shown as-is for
-/// now. A friendlier "Tomorrow · 8:00 AM" rendering belongs to the NLP
-/// parser work, which owns date formatting throughout the app.
-fn schedule_label(task: &Task) -> Option<String> {
-    let date = task.scheduled_date.as_deref()?;
-    Some(match &task.scheduled_time {
-        Some(time) => format!("{date} · {time}"),
-        None => date.to_string(),
-    })
+/// Human-friendly rendering of a stored `YYYY-MM-DD`/`HH:mm` schedule pair:
+/// "Today"/"Tomorrow" for the two nearest days, a bare weekday name for the
+/// rest of the week, else a short date (`"Aug 23"`) — with the time appended
+/// in 12-hour form when present (`"Tomorrow 6:00 PM"`). Shared by
+/// `schedule_label` (the row's trailing label) and `placement_label` (the
+/// detail card's status pill) so both read the same.
+fn format_schedule(date: &str, time: Option<&str>, today: chrono::NaiveDate) -> String {
+    let day_part = match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
+        Ok(parsed) => match (parsed - today).num_days() {
+            0 => "Today".to_string(),
+            1 => "Tomorrow".to_string(),
+            2..=6 => parsed.format("%A").to_string(),
+            _ => parsed.format("%b %-d").to_string(),
+        },
+        // An unparseable stored date is not expected, but showing the raw
+        // string beats panicking or hiding the schedule entirely.
+        Err(_) => date.to_string(),
+    };
+    let Some(time) = time else {
+        return day_part;
+    };
+    match chrono::NaiveTime::parse_from_str(time, "%H:%M") {
+        Ok(parsed) => format!("{day_part} {}", parsed.format("%-I:%M %p")),
+        Err(_) => day_part,
+    }
 }
 
-/// The detail card's schedule-pill label: "Today" for today's date,
-/// "Anytime"/"Someday"/"Inbox" for an unscheduled task's bucket, or the raw
-/// scheduled date beyond today (reusing `schedule_label`'s formatting).
+/// `scheduled_date`/`scheduled_time` are stored as plain `YYYY-MM-DD`/
+/// `HH:mm` strings (`docs/PRODUCT_REQUIREMENTS.md` §6.4); `format_schedule`
+/// renders them for display.
+fn schedule_label(task: &Task) -> Option<String> {
+    let date = task.scheduled_date.as_deref()?;
+    let today = chrono::Local::now().date_naive();
+    Some(format_schedule(date, task.scheduled_time.as_deref(), today))
+}
+
+/// The detail card's schedule-pill label: the task's formatted schedule if
+/// it has one, else "Anytime"/"Someday"/"Inbox" for its unscheduled bucket.
 fn placement_label(task: &Task) -> String {
-    if let Some(date) = task.scheduled_date.as_deref() {
-        let today = chrono::Local::now().date_naive().to_string();
-        if date == today {
-            return "Today".to_string();
-        }
-        return schedule_label(task).unwrap_or_else(|| date.to_string());
+    if let Some(label) = schedule_label(task) {
+        return label;
     }
     match task.bucket {
         Bucket::Someday => "Someday".to_string(),
