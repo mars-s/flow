@@ -598,24 +598,50 @@ fn task_list(
                 .when(selected_count >= 2, |list| {
                     list.child(bulk_action_bar(selected_count, theme, cx))
                 })
-                .children(tasks.iter().cloned().map(|task| {
-                    let is_expanded = expanded.as_deref() == Some(task.id.as_str());
-                    let is_selected = selected.contains(&task.id);
-                    let is_completing = completing_ids.contains(&task.id);
-                    render_task_row(
-                        task,
-                        view,
-                        is_expanded,
-                        is_selected,
-                        is_completing,
-                        schedule_picker_open,
-                        scheduling,
-                        note_input.clone(),
-                        schedule_input.clone(),
-                        theme,
-                        cx,
-                    )
-                })),
+                .map(|list| {
+                    // PRD §6.3: "Upcoming groups active tasks by local date
+                    // from tomorrow onward" — every other view stays the
+                    // flat list it's always been.
+                    if view == View::Upcoming {
+                        list.children(group_by_scheduled_date(&tasks).into_iter().map(
+                            |(date, group)| {
+                                render_upcoming_section(
+                                    date,
+                                    group,
+                                    view,
+                                    &expanded,
+                                    &selected,
+                                    &completing_ids,
+                                    schedule_picker_open,
+                                    scheduling,
+                                    note_input.clone(),
+                                    schedule_input.clone(),
+                                    theme,
+                                    cx,
+                                )
+                            },
+                        ))
+                    } else {
+                        list.children(tasks.iter().cloned().map(|task| {
+                            let is_expanded = expanded.as_deref() == Some(task.id.as_str());
+                            let is_selected = selected.contains(&task.id);
+                            let is_completing = completing_ids.contains(&task.id);
+                            render_task_row(
+                                task,
+                                view,
+                                is_expanded,
+                                is_selected,
+                                is_completing,
+                                schedule_picker_open,
+                                scheduling,
+                                note_input.clone(),
+                                schedule_input.clone(),
+                                theme,
+                                cx,
+                            )
+                        }))
+                    }
+                }),
         )
         .when(has_completed, |list| {
             list.child(
@@ -638,6 +664,85 @@ fn task_list(
                     )),
             )
         })
+        .into_any_element()
+}
+
+/// Groups Upcoming's tasks by `scheduled_date`, preserving arrival order —
+/// `list_view`'s own SQL already sorts by `scheduled_date ASC, scheduled_time
+/// ASC` (see `db.rs`), so this only needs to watch for the date changing,
+/// never re-sort. Every task here is guaranteed a `scheduled_date` by the
+/// view's own definition (`bucket = active AND scheduled_date > today`).
+fn group_by_scheduled_date(tasks: &[Task]) -> Vec<(String, Vec<Task>)> {
+    let mut groups: Vec<(String, Vec<Task>)> = Vec::new();
+    for task in tasks {
+        let date = task.scheduled_date.clone().unwrap_or_default();
+        match groups.last_mut() {
+            Some((last_date, group)) if *last_date == date => group.push(task.clone()),
+            _ => groups.push((date, vec![task.clone()])),
+        }
+    }
+    groups
+}
+
+/// One of Upcoming's date sections (PRD §6.3: "groups active tasks by local
+/// date from tomorrow onward"). No calendar events yet — Flow's read-only
+/// Google Calendar glance is a later milestone — so this only ever shows
+/// task-bearing days, not the PRD's "empty days with events still show"
+/// case, which has nothing to populate it with yet.
+#[allow(clippy::too_many_arguments)]
+fn render_upcoming_section(
+    date: String,
+    tasks: Vec<Task>,
+    view: View,
+    expanded: &Option<String>,
+    selected: &HashSet<String>,
+    completing_ids: &HashSet<String>,
+    schedule_picker_open: bool,
+    scheduling: bool,
+    note_input: Entity<ComposerInput>,
+    schedule_input: Entity<ComposerInput>,
+    theme: Theme,
+    cx: &mut Context<Flow>,
+) -> AnyElement {
+    let today = chrono::Local::now().date_naive();
+    let label = day_label(&date, today);
+
+    div()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .id(SharedString::from(format!("upcoming-section-{date}")))
+                .h(px(28.0))
+                .flex()
+                .items_end()
+                .pb(px(4.0))
+                .mt(px(4.0))
+                .border_b_1()
+                .border_color(theme.sidebar_border)
+                .text_size(px(12.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.text_secondary)
+                .child(label),
+        )
+        .children(tasks.into_iter().map(|task| {
+            let is_expanded = expanded.as_deref() == Some(task.id.as_str());
+            let is_selected = selected.contains(&task.id);
+            let is_completing = completing_ids.contains(&task.id);
+            render_task_row(
+                task,
+                view,
+                is_expanded,
+                is_selected,
+                is_completing,
+                schedule_picker_open,
+                scheduling,
+                note_input.clone(),
+                schedule_input.clone(),
+                theme,
+                cx,
+            )
+        }))
         .into_any_element()
 }
 
@@ -1136,8 +1241,11 @@ fn render_process_row(
 /// in 12-hour form when present (`"Tomorrow 6:00 PM"`). Shared by
 /// `schedule_label` (the row's trailing label) and `placement_label` (the
 /// detail card's status pill) so both read the same.
-fn format_schedule(date: &str, time: Option<&str>, today: chrono::NaiveDate) -> String {
-    let day_part = match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
+/// The "Today"/"Tomorrow"/weekday/short-date half of `format_schedule`, kept
+/// separate so Upcoming's date-section headers (which have no time to
+/// append) can call it directly instead of duplicating the day-name logic.
+fn day_label(date: &str, today: chrono::NaiveDate) -> String {
+    match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
         Ok(parsed) => match (parsed - today).num_days() {
             0 => "Today".to_string(),
             1 => "Tomorrow".to_string(),
@@ -1147,7 +1255,11 @@ fn format_schedule(date: &str, time: Option<&str>, today: chrono::NaiveDate) -> 
         // An unparseable stored date is not expected, but showing the raw
         // string beats panicking or hiding the schedule entirely.
         Err(_) => date.to_string(),
-    };
+    }
+}
+
+fn format_schedule(date: &str, time: Option<&str>, today: chrono::NaiveDate) -> String {
+    let day_part = day_label(date, today);
     let Some(time) = time else {
         return day_part;
     };
@@ -1235,4 +1347,68 @@ fn database_unavailable(theme: Theme) -> impl IntoElement {
                 .text_color(theme.danger)
                 .child("Local database unavailable."),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `group_by_scheduled_date` and `day_label` are the two pure pieces of
+    /// Upcoming's PRD §6.3 date grouping — everything else in this file is
+    /// GPUI element construction, which this codebase doesn't unit-test
+    /// (see `db.rs`/`parse.rs` for where the real test coverage lives).
+    fn task(id: &str, scheduled_date: &str) -> Task {
+        Task {
+            id: id.to_string(),
+            parent_id: None,
+            title: "Task".to_string(),
+            note: None,
+            bucket: Bucket::Active,
+            scheduled_date: Some(scheduled_date.to_string()),
+            scheduled_time: None,
+            scheduled_timezone: None,
+            position: 0.0,
+            completed_at: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn consecutive_same_date_tasks_land_in_one_group() {
+        let tasks = vec![
+            task("a", "2026-08-20"),
+            task("b", "2026-08-20"),
+            task("c", "2026-08-21"),
+        ];
+        let groups = group_by_scheduled_date(&tasks);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].0, "2026-08-20");
+        assert_eq!(groups[0].1.len(), 2);
+        assert_eq!(groups[1].0, "2026-08-21");
+        assert_eq!(groups[1].1.len(), 1);
+    }
+
+    #[test]
+    fn a_repeated_date_after_a_gap_starts_a_new_group_not_merges_back() {
+        // `list_view`'s ORDER BY guarantees this never happens in practice
+        // (dates only ever increase), but the grouping itself only compares
+        // against the immediately preceding group, not the whole history —
+        // worth locking in that it doesn't silently merge non-adjacent runs.
+        let tasks = vec![
+            task("a", "2026-08-20"),
+            task("b", "2026-08-21"),
+            task("c", "2026-08-20"),
+        ];
+        let groups = group_by_scheduled_date(&tasks);
+        assert_eq!(groups.len(), 3);
+    }
+
+    #[test]
+    fn day_label_matches_format_schedules_day_half() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 8, 18).unwrap();
+        assert_eq!(day_label("2026-08-19", today), "Tomorrow");
+        assert_eq!(day_label("2026-08-21", today), "Friday");
+        assert_eq!(day_label("2026-09-01", today), "Sep 1");
+    }
 }
