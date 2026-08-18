@@ -109,7 +109,9 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   32. `e05cd14` — subtasks fully wired into the detail card: indented
       list, add, complete, and the inline "complete parent and all
       subtasks?" confirm.
-- Working tree is clean as of commit `e05cd14` unless the "Milestone 1
+  33. `07c66d2` — fixed notes being silently dropped when the card closed
+      without a GPUI blur (user-reported).
+- Working tree is clean as of commit `07c66d2` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - **A `/loop` (self-paced, 5-minute interval, cron job `57c760d9`) is
@@ -499,14 +501,22 @@ landed which line.
       an N+1 fetch on every visible row (`CLAUDE.md`'s render-path I/O
       rule).
 
+- [x] **Fixed: notes silently dropped when the card closed without a
+      blur** (`07c66d2`, user-reported: "notes don't work"). Root cause:
+      the note field's only save trigger was GPUI blur, which needs
+      keyboard focus to explicitly move to another *focusable* element —
+      none of the detail card's other controls (checkbox, title, schedule
+      pill, delete) take focus on click, so collapsing the card, completing
+      a task, or switching straight to a different task's card all changed
+      `expanded_task_id` without ever blurring the note field, silently
+      dropping whatever was typed. Fix: every direct write to
+      `expanded_task_id` now goes through `Flow::set_expanded_task`, which
+      flushes the note proactively (`Flow::flush_note`, the same write
+      `on_note_blur` already did, just no longer the *only* trigger for
+      it) — six call sites fixed at once rather than patched individually.
+
 **Not done yet, in the order they're planned:**
 
-- [ ] **Notes don't actually persist/work right now** — user-reported,
-      not yet diagnosed. `Db::set_note` exists and is tested at the DB
-      layer, and the note field saves on blur (`Flow::on_note_blur`), but
-      the user reports "a lot of things don't work" around notes in the
-      live app. Explicitly deferred by the user pending a dedicated look;
-      next session should reproduce and diagnose before assuming the fix.
 - [ ] Update `docs/PRODUCT_REQUIREMENTS.md` §9 (Convex → Turso, still
       describes the old self-hosted-Convex sync plan throughout — Milestone
       2's description, the deployment target, the architecture diagram, the
