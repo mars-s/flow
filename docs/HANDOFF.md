@@ -80,7 +80,9 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       fixed the sidebar divider not running the full window height, and
       reverted an over-correction that had centered the task list into a
       narrow column — kept as widescreen per explicit user feedback.
-- Working tree is clean as of commit `c8f2922` unless the "Milestone 1
+  25. `013c5fb` — a "Clear" option on the schedule picker to remove a
+      task's schedule (previously only changeable, never removable).
+- Working tree is clean as of commit `013c5fb` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - The `/loop` (self-paced autonomous mode) that was running earlier in this
@@ -386,11 +388,15 @@ landed which line.
   added no new tests (pure layout/interaction, no new logic to unit-test).
   Both increments verified in the running debug app, not just `cargo check`.
 
+- [x] **A "Clear" option to remove a task's schedule** (`013c5fb`) — a
+      fifth pill in the schedule picker, shown only when the task actually
+      has a schedule. `Flow::clear_schedule` writes `date=None, time=None`
+      via `Db::schedule` while keeping the task's current bucket, so an
+      Active task drops back into Anytime rather than needing a bucket
+      choice of its own.
+
 **Not done yet, in the order they're planned:**
 
-- [ ] No way to *remove* a schedule once set (only change it to a
-      different Today/Anytime/Someday/date). A "Clear schedule" option on
-      the picker or pill would close this.
 - [ ] A proper completion-collapse animation + Undo toast, per
       `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
       collapse... available via Undo" spec. Partially superseded: a
