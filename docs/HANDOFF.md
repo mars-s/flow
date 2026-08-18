@@ -1,6 +1,6 @@
 # Flow — handoff
 
-Status as of 2026-08-18. Written for another agent (or a future session)
+Status as of 2026-08-19. Written for another agent (or a future session)
 picking up this repo cold. Read [AGENTS.md](../AGENTS.md) first for the
 standing development rules (dev watcher, performance, accessibility) — this
 document is project state and decisions, not those rules.
@@ -111,7 +111,9 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       subtasks?" confirm.
   33. `07c66d2` — fixed notes being silently dropped when the card closed
       without a GPUI blur (user-reported).
-- Working tree is clean as of commit `07c66d2` unless the "Milestone 1
+  34. `d365f52` — closed out the PRD doc-drift (Convex → Turso, IA
+      diagram, §14's activation decision). Documentation only.
+- Working tree is clean as of commit `d365f52` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - **A `/loop` (self-paced, 5-minute interval, cron job `57c760d9`) is
@@ -515,20 +517,23 @@ landed which line.
       `on_note_blur` already did, just no longer the *only* trigger for
       it) — six call sites fixed at once rather than patched individually.
 
-**Not done yet, in the order they're planned:**
+- [x] **PRD doc-drift closed out** (`d365f52`) — §9 (Convex → Turso
+      throughout: the "Backend" subsection, the repository-target tree,
+      the executable-path diagram, Milestones 2/4, §15's reference links),
+      §5's IA diagram (now shows the actual Tasks/Calendar mode switch,
+      not the flat 7-destination list, plus the scheduling-activates
+      paragraph corrected), and §14 (the auto-activate-on-parsed-date
+      decision marked resolved, dated, with the actual answer). PRD no
+      longer contradicts the shipped code or this session's decisions.
+      Documentation only, no code changes.
 
-- [ ] Update `docs/PRODUCT_REQUIREMENTS.md` §9 (Convex → Turso, still
-      describes the old self-hosted-Convex sync plan throughout — Milestone
-      2's description, the deployment target, the architecture diagram, the
-      reference links at the bottom), §5's IA diagram (still shows the
-      flat 7-destination sidebar, not the Tasks/Calendar mode switch), and
-      **§14** (still says "a parsed date does not activate the task" —
-      `55e5e0a` made the opposite true by explicit user instruction) so
-      the PRD stops contradicting the actual code and this session's
-      decisions. Low-risk, low-effort, just hasn't been done — do this
-      whenever convenient, doesn't block anything else. (One stray "Flow's
-      GPUI shell" → "Waku's GPUI shell" typo nearby *was* fixed while
-      editing §13 for the quick-capture note above.)
+**Not done yet:**
+
+*(empty — every item from this session's backlog is done; check `git log`
+against this document for what's landed since, and pick the next real gap
+from "Current UI state" or the PRD's acceptance criteria rather than
+stalling here. The `/loop` job `57c760d9` is still running per the note
+near the top of this document and will keep finding/fixing real issues.)*
 
 ## Where to find things
 
