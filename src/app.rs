@@ -358,7 +358,7 @@ impl Flow {
 
         self.scheduling = false;
         self.schedule_picker_open = false;
-        self.expanded_task_id = None;
+        self.set_expanded_task(None, cx);
         self.schedule_input.update(cx, |input, cx| input.clear(cx));
 
         cx.spawn(async move |flow, cx| {
@@ -474,9 +474,9 @@ impl Flow {
         if self.scheduling || self.expanded_task_id.is_some() {
             self.scheduling = false;
             self.schedule_picker_open = false;
-            self.expanded_task_id = None;
             self.adding_subtask = false;
             self.pending_complete_confirm = None;
+            self.set_expanded_task(None, cx);
             self.schedule_input.update(cx, |input, cx| input.clear(cx));
             self.subtask_input.update(cx, |input, cx| input.clear(cx));
             cx.notify();
@@ -490,6 +490,15 @@ impl Flow {
     /// Writing the same content twice is harmless, so this fires
     /// unconditionally rather than tracking a dirty flag.
     fn on_note_blur(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.flush_note(cx);
+    }
+
+    /// The actual note-saving write, factored out of `on_note_blur` so
+    /// `set_expanded_task` can call it proactively too — see that method's
+    /// doc comment for why relying on blur alone silently dropped notes.
+    /// Writing the same content twice is harmless, so this fires
+    /// unconditionally rather than tracking a dirty flag.
+    fn flush_note(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.note_task_id.clone() else {
             return;
         };
@@ -504,6 +513,23 @@ impl Flow {
                 .await;
         })
         .detach();
+    }
+
+    /// Every direct write to `expanded_task_id` goes through here so a note
+    /// typed into the shared `note_input` is never lost. GPUI's blur
+    /// signal (the note field's only other save trigger) fires only when
+    /// keyboard focus explicitly moves to another focusable element —
+    /// clicking a plain button or checkbox that doesn't take focus, or
+    /// switching straight from one task's card to another's, never blurs
+    /// the field, so relying on blur alone silently dropped whatever was
+    /// typed (user-reported: "notes don't work"). This flushes proactively
+    /// instead, whenever the card is about to close or switch to a
+    /// different task.
+    pub(super) fn set_expanded_task(&mut self, id: Option<String>, cx: &mut Context<Self>) {
+        if self.expanded_task_id.is_some() && self.expanded_task_id != id {
+            self.flush_note(cx);
+        }
+        self.expanded_task_id = id;
     }
 
     /// Where the window should land keyboard focus on open, so arrow keys

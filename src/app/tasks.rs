@@ -393,20 +393,22 @@ impl Flow {
     /// only Inbox. Loads the task's current note into `note_input`.
     fn toggle_expanded(&mut self, id: String, note: Option<String>, cx: &mut Context<Self>) {
         if self.expanded_task_id.as_deref() == Some(id.as_str()) {
-            self.expanded_task_id = None;
             self.schedule_picker_open = false;
             self.scheduling = false;
             self.adding_subtask = false;
             self.pending_complete_confirm = None;
+            self.set_expanded_task(None, cx);
             cx.notify();
             return;
         }
-        self.expanded_task_id = Some(id.clone());
-        self.note_task_id = Some(id);
         self.schedule_picker_open = false;
         self.scheduling = false;
         self.adding_subtask = false;
         self.pending_complete_confirm = None;
+        // Flushes the previous task's note (if any was expanded) before
+        // switching `note_task_id` out from under it.
+        self.set_expanded_task(Some(id.clone()), cx);
+        self.note_task_id = Some(id);
         self.note_input
             .update(cx, |input, cx| input.set_content(note.unwrap_or_default(), cx));
         cx.notify();
@@ -441,7 +443,7 @@ impl Flow {
     /// `docs/HANDOFF.md` gap could only change a schedule, never remove one.
     fn clear_schedule(&mut self, id: String, bucket: Bucket, cx: &mut Context<Self>) {
         let Some(db) = self.db.clone() else { return };
-        self.expanded_task_id = None;
+        self.set_expanded_task(None, cx);
         self.schedule_picker_open = false;
         cx.spawn(async move |flow, cx| {
             let result = cx
@@ -465,7 +467,7 @@ impl Flow {
     /// destination.
     fn process_task(&mut self, id: String, target: ProcessTarget, cx: &mut Context<Self>) {
         let Some(db) = self.db.clone() else { return };
-        self.expanded_task_id = None;
+        self.set_expanded_task(None, cx);
         self.schedule_picker_open = false;
         let today = (target == ProcessTarget::Today)
             .then(|| chrono::Local::now().date_naive().to_string());
@@ -491,7 +493,7 @@ impl Flow {
     /// `list_view` query already filters out.
     fn delete_task(&mut self, id: String, cx: &mut Context<Self>) {
         let Some(db) = self.db.clone() else { return };
-        self.expanded_task_id = None;
+        self.set_expanded_task(None, cx);
         self.schedule_picker_open = false;
         cx.spawn(async move |flow, cx| {
             let result = cx
