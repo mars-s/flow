@@ -113,7 +113,10 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       without a GPUI blur (user-reported).
   34. `d365f52` — closed out the PRD doc-drift (Convex → Turso, IA
       diagram, §14's activation decision). Documentation only.
-- Working tree is clean as of commit `d365f52` unless the "Milestone 1
+  35. `687ec81` — a 10-second Undo toast for deletion (PRD §6.1), reusing
+      the existing completion toast's UI/timer via a new `UndoKind`
+      instead of building a second toast system. New `Db::restore_task`.
+- Working tree is clean as of commit `687ec81` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - **A `/loop` (self-paced, 5-minute interval, cron job `57c760d9`) is
@@ -526,6 +529,16 @@ landed which line.
       decision marked resolved, dated, with the actual answer). PRD no
       longer contradicts the shipped code or this session's decisions.
       Documentation only, no code changes.
+- [x] **10-second Undo toast for deletion** (`687ec81`) — PRD §6.1's
+      "Deletion shows an undo toast for 10 seconds" was the one acceptance
+      criterion still unmet after the backlog above emptied out (found by
+      re-checking §11's acceptance criteria against the shipped app, not
+      requested — a real gap, not busywork). New `Db::restore_task` clears
+      `deleted_at`; the existing completion toast now carries an
+      `UndoKind` (`Complete`/`Delete`) so both actions share one toast UI
+      and dismiss timer. Only the detail card's single-task delete shows
+      it — bulk-delete and "Clear completed" don't, matching how bulk
+      actions already skip per-item completion toasts too.
 
 **Not done yet:**
 
