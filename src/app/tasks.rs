@@ -226,6 +226,31 @@ impl Flow {
         cx.notify();
     }
 
+    /// Removes a task's scheduled date/time while leaving its bucket
+    /// unchanged, e.g. an Active-bucket task drops back into Anytime (which
+    /// is exactly "Active with no `scheduled_date`" — see `list_view`), an
+    /// Inbox task just loses its date. Closes the picker
+    /// `docs/HANDOFF.md` gap could only change a schedule, never remove one.
+    fn clear_schedule(&mut self, id: String, bucket: Bucket, cx: &mut Context<Self>) {
+        let Some(db) = self.db.clone() else { return };
+        self.expanded_task_id = None;
+        self.schedule_picker_open = false;
+        cx.spawn(async move |flow, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { db.schedule(id, bucket, None::<String>, None::<String>) })
+                .await;
+            if result.is_err() {
+                return;
+            }
+            let _ = flow.update(cx, |flow, cx| {
+                flow.invalidate_all_views();
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     /// Moves a task to `target` via `Db::schedule` and refreshes every task
     /// view — the quick-picker is now reachable from any of the five, so
     /// the exact set of affected views is no longer just Inbox + one
@@ -791,7 +816,15 @@ fn render_detail_card(
                 ),
         )
         .when(schedule_picker_open, |card| {
-            card.child(render_process_row(task.id.clone(), scheduling, schedule_input, theme, cx))
+            card.child(render_process_row(
+                task.id.clone(),
+                task.bucket,
+                task.scheduled_date.is_some(),
+                scheduling,
+                schedule_input,
+                theme,
+                cx,
+            ))
         })
         .into_any_element()
 }
@@ -822,9 +855,13 @@ fn render_schedule_pill(id: String, label: String, theme: Theme, cx: &mut Contex
 /// "Schedule…", which swaps in a free-text field parsed the same way
 /// Capture parses a title (see `Flow::on_schedule_event`, `app.rs`) rather
 /// than a calendar widget. Lives inside the task detail card's schedule
-/// picker now, relocated from the old bare-pill row.
+/// picker now, relocated from the old bare-pill row. A fifth "Clear" option
+/// appears only when the task actually has a schedule to remove.
+#[allow(clippy::too_many_arguments)]
 fn render_process_row(
     task_id: String,
+    bucket: Bucket,
+    has_schedule: bool,
     scheduling: bool,
     schedule_input: Entity<ComposerInput>,
     theme: Theme,
@@ -881,6 +918,30 @@ fn render_process_row(
                 .child(crate::ui::icon("icons/calendar.svg", 12.0, theme.text_secondary))
                 .child("Schedule…"),
         )
+        .when(has_schedule, |row| {
+            let id = task_id.clone();
+            row.child(
+                div()
+                    .id(gpui::SharedString::from(format!("process-{task_id}-clear")))
+                    .flex()
+                    .items_center()
+                    .gap(px(4.0))
+                    .px(px(8.0))
+                    .py(px(3.0))
+                    .rounded(px(5.0))
+                    .cursor_pointer()
+                    .text_size(px(11.5))
+                    .text_color(theme.text_secondary)
+                    .bg(theme.overlay)
+                    .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
+                    .on_click(cx.listener(move |flow, _, _, cx| {
+                        flow.clear_schedule(id.clone(), bucket, cx);
+                        cx.stop_propagation();
+                    }))
+                    .child(crate::ui::icon("icons/x.svg", 12.0, theme.text_secondary))
+                    .child("Clear"),
+            )
+        })
         .into_any_element()
 }
 

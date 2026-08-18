@@ -719,6 +719,14 @@ mod tests {
             .expect("schedule");
         assert_eq!(db.list_view(View::Upcoming).expect("list").len(), 1);
         assert_eq!(db.list_view(View::Today).expect("list").len(), 0);
+
+        // Clearing the date (same bucket, date/time both None) drops it
+        // back to Anytime — the "clear schedule" action's underlying write.
+        db.schedule(&task.id, Bucket::Active, None::<String>, None::<String>)
+            .expect("schedule");
+        assert_eq!(db.list_view(View::Anytime).expect("list").len(), 1);
+        assert_eq!(db.list_view(View::Upcoming).expect("list").len(), 0);
+        assert!(db.list_view(View::Anytime).expect("list")[0].scheduled_date.is_none());
     }
 
     #[test]
