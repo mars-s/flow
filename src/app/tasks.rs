@@ -430,90 +430,91 @@ fn render_task_row(
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
-    let completed = task.completed_at.is_some();
-    let id_for_click = task.id.clone();
     let id_for_row_click = task.id.clone();
     let note_for_click = task.note.clone();
+
+    // A row is either its compact one-line form or its expanded detail
+    // card — never both. Stacking a plain row on top of a card that
+    // repeats the same checkbox and title (the previous shape) duplicated
+    // the task's name on screen; the card now *is* the row when expanded.
+    if is_expanded {
+        return render_detail_card(
+            &task,
+            origin_view,
+            schedule_picker_open,
+            scheduling,
+            note_input,
+            schedule_input,
+            theme,
+            cx,
+        );
+    }
+
+    let completed = task.completed_at.is_some();
+    let id_for_click = task.id.clone();
     // The schedule metadata is a fact about the task, not the view it's
     // being read from — a scheduled Inbox task (PRD §14) shows its date the
     // same as a scheduled Today/Upcoming one.
     let schedule = schedule_label(&task);
 
     div()
+        .id(gpui::SharedString::from(format!("task-{}", task.id)))
+        .h(px(40.0))
         .flex()
-        .flex_col()
+        .items_center()
+        .gap(px(10.0))
+        .px(px(8.0))
+        .rounded(px(6.0))
+        .cursor_pointer()
+        .hover(|el| el.bg(theme.overlay))
+        .when(is_selected, |row| row.bg(theme.sidebar_item_background))
+        .on_click(cx.listener(move |flow, event: &ClickEvent, _, cx| {
+            if event.modifiers().secondary() {
+                flow.toggle_selected(id_for_row_click.clone(), cx);
+            } else {
+                flow.selected_task_ids.clear();
+                flow.toggle_expanded(id_for_row_click.clone(), note_for_click.clone(), cx);
+            }
+        }))
         .child(
             div()
-                .id(gpui::SharedString::from(format!("task-{}", task.id)))
-                .h(px(40.0))
-                .flex()
-                .items_center()
-                .gap(px(10.0))
-                .px(px(8.0))
-                .rounded(px(6.0))
-                .cursor_pointer()
-                .hover(|el| el.bg(theme.overlay))
-                .when(is_selected, |row| row.bg(theme.sidebar_item_background))
-                .on_click(cx.listener(move |flow, event: &ClickEvent, _, cx| {
-                    if event.modifiers().secondary() {
-                        flow.toggle_selected(id_for_row_click.clone(), cx);
-                    } else {
-                        flow.selected_task_ids.clear();
-                        flow.toggle_expanded(id_for_row_click.clone(), note_for_click.clone(), cx);
-                    }
-                }))
-                .child(
-                    div()
-                        .id(gpui::SharedString::from(format!("task-{}-complete", task.id)))
-                        .w(px(17.0))
-                        .h(px(17.0))
-                        .flex_none()
-                        .rounded_full()
-                        .border_1()
-                        .border_color(theme.border_strong)
-                        .cursor_default()
-                        .hover(|el| el.border_color(theme.accent))
-                        .on_click(cx.listener(move |flow, _, _, cx| {
-                            flow.toggle_completed(id_for_click.clone(), !completed, origin_view, cx);
-                            cx.stop_propagation();
-                        })),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .text_size(px(13.0))
-                        .text_color(theme.text)
-                        .child(task.title.clone()),
-                )
-                .when_some(schedule, |row, label| {
-                    row.child(
-                        div()
-                            .flex_none()
-                            .text_size(px(11.5))
-                            .text_color(theme.text_tertiary)
-                            .child(label),
-                    )
-                })
-                .with_animation(
-                    gpui::SharedString::from(format!("task-fade-{}", task.id)),
-                    Animation::new(ROW_TRANSITION).with_easing(ease_out_quint()),
-                    |element, delta| element.opacity(delta),
-                ),
+                .id(gpui::SharedString::from(format!("task-{}-complete", task.id)))
+                .w(px(17.0))
+                .h(px(17.0))
+                .flex_none()
+                .rounded_full()
+                .border_1()
+                .border_color(theme.border_strong)
+                .cursor_default()
+                .hover(|el| el.border_color(theme.accent))
+                .on_click(cx.listener(move |flow, _, _, cx| {
+                    flow.toggle_completed(id_for_click.clone(), !completed, origin_view, cx);
+                    cx.stop_propagation();
+                })),
         )
-        .when(is_expanded, |column| {
-            column.child(render_detail_card(
-                &task,
-                origin_view,
-                schedule_picker_open,
-                scheduling,
-                note_input,
-                schedule_input,
-                theme,
-                cx,
-            ))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_size(px(13.0))
+                .text_color(theme.text)
+                .child(task.title.clone()),
+        )
+        .when_some(schedule, |row, label| {
+            row.child(
+                div()
+                    .flex_none()
+                    .text_size(px(11.5))
+                    .text_color(theme.text_tertiary)
+                    .child(label),
+            )
         })
+        .with_animation(
+            gpui::SharedString::from(format!("task-fade-{}", task.id)),
+            Animation::new(ROW_TRANSITION).with_easing(ease_out_quint()),
+            |element, delta| element.opacity(delta),
+        )
         .into_any_element()
 }
 
@@ -534,13 +535,12 @@ fn render_detail_card(
     let completed = task.completed_at.is_some();
     let id_for_complete = task.id.clone();
     let id_for_delete = task.id.clone();
+    let id_for_collapse = task.id.clone();
+    let note_for_collapse = task.note.clone();
     let placement = placement_label(task);
 
     div()
-        .ml(px(35.0))
-        .mr(px(8.0))
-        .mt(px(4.0))
-        .mb(px(6.0))
+        .my(px(1.0))
         .p(px(12.0))
         .rounded(px(10.0))
         .bg(theme.raised)
@@ -570,10 +570,15 @@ fn render_detail_card(
                 )
                 .child(
                     div()
+                        .id(gpui::SharedString::from(format!("task-{}-detail-title", task.id)))
                         .flex_1()
                         .min_w_0()
+                        .cursor_pointer()
                         .text_size(px(15.0))
                         .text_color(theme.text)
+                        .on_click(cx.listener(move |flow, _, _, cx| {
+                            flow.toggle_expanded(id_for_collapse.clone(), note_for_collapse.clone(), cx);
+                        }))
                         .child(task.title.clone()),
                 ),
         )
