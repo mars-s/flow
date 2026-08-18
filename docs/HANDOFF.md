@@ -116,7 +116,13 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   35. `687ec81` — a 10-second Undo toast for deletion (PRD §6.1), reusing
       the existing completion toast's UI/timer via a new `UndoKind`
       instead of building a second toast system. New `Db::restore_task`.
-- Working tree is clean as of commit `687ec81` unless the "Milestone 1
+  36. `42ae253` — handoff doc: flagged (not fixed) a real
+      keyboard-accessibility gap in `tasks.rs` — see "Not done yet" below
+      for the full evidence and why it wasn't attempted blind.
+  37. `2aec602` — removed two pre-existing unused imports
+      (`render.rs`/`ui/mod.rs`), caught during the same audit. No behavior
+      change.
+- Working tree is clean as of commit `2aec602` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - **A `/loop` (self-paced, 5-minute interval, cron job `57c760d9`) is
