@@ -50,10 +50,17 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   13. `b5dca80` — handoff doc: five-views + `schedule()` checkpoint noted.
   14. `c765ece` — the NLP date/time parser (`src/parse.rs`), wired into
       capture; also records the user's global-hotkey quick-capture north
-      star in the PRD §13 (see "Milestone 1 progress" below).
-- Working tree is clean as of commit `c765ece` unless the "Milestone 1
+      star in the PRD §13.
+  15. `fe8df26` — handoff doc: NLP parser + capture-wiring checkpoint noted.
+  16. `05ef517` — Inbox's inline "Process" action (Today/Anytime/Someday)
+      (see "Milestone 1 progress" below).
+- Working tree is clean as of commit `05ef517` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
+- This session is now running as a `/loop` (self-paced): work continues
+  autonomously in small, tested, committed increments, with this doc
+  updated after each one, until the loop is stopped or nothing more can
+  usefully be done unattended.
 
 ## What's built (Milestone 0 — done)
 
@@ -250,22 +257,35 @@ landed which line.
       (`open_capture`/`capture_input` in `app.rs`) is deliberately built as
       a self-contained, reusable unit specifically so this later surface
       can host the same field and submit logic.
-- 164 tests passing as of commit `c765ece`; verified in the running debug
+- [x] **Inbox's inline "Process" action** (PRD §6.3: "an inline 'Process'
+      action that offers Today, Anytime, Someday, and schedule"). Clicking
+      an Inbox row (not its completion circle) opens a row of three quick
+      buttons underneath it; picking one calls `Db::schedule` and
+      invalidates both Inbox and the destination view
+      (`Flow::process_task`/`toggle_processing` in `app/tasks.rs`). Only
+      one row processes at a time (`Flow.processing_task_id`). This is the
+      first way, besides typing a date phrase into Capture, to move a task
+      out of Inbox. The fourth PRD-named option, "schedule" (an arbitrary
+      date, not just today), still needs a real date picker — not built,
+      see the gap below.
+- 164 tests passing as of commit `05ef517`; verified in the running debug
   app, not just `cargo check` (dev watcher rebuilt clean, process alive,
-  matches this repo's `AGENTS.md` validation rule).
+  matches this repo's `AGENTS.md` validation rule). No new automated tests
+  landed with the Process action itself — it's GPUI click-handler wiring
+  with no dedicated test-support harness in this repo yet, same as
+  `toggle_completed`/`on_capture_event` before it; the `Db::schedule` calls
+  it drives are already covered at the database layer.
 
 **Not done yet, in the order they're planned:**
 
-- [ ] **No way to schedule or move a task after it's already captured.**
-      `Db::schedule` and the parser both exist and work, but the only path
-      to a scheduled task today is typing the date phrase into Capture at
-      creation time. There's no "Process" action on an existing Inbox row
-      (PRD §6.3: "Today, Anytime, Someday, and schedule"), no date picker,
-      no way to edit a task's title/note/schedule after the fact at all —
-      there is no task detail view yet. This is the natural next step now
-      that the parser exists to back it: even a minimal click-to-expand
-      row with a "when" control would make Today/Upcoming/Anytime reachable
-      from tasks already sitting in Inbox, not just newly captured ones.
+- [ ] **No arbitrary-date scheduling — only the three quick Process
+      buttons and typing a date phrase into Capture.** There's still no
+      date picker (PRD §6.3's fourth Process option, "schedule"), and no
+      task detail view to edit a title/note/schedule after capture at all.
+      A minimal click-to-expand detail view with a "when" field is the
+      natural next step — it would also be the natural home for
+      `parse.rs`'s `source_phrase`/preview-chip interaction mentioned
+      further down this list.
 - [ ] A proper completion-collapse animation + Undo toast, per
       `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
       collapse... available via Undo" spec — currently the row just
