@@ -113,6 +113,8 @@ settings.theme_dark:
 
 input.do_anything:
   en: Do anything…
+input.capture_a_task:
+  en: Capture a task…
 input.detected_automatically:
   en: Detected automatically
 input.find:

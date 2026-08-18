@@ -15,7 +15,10 @@
 //! move focus and select within the task list (a conventional listbox), and
 //! `enter`/`space` select whatever row currently has focus.
 
-use gpui::{App, Context, Div, KeyDownEvent, SharedString, Stateful, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, App, Context, Div, IntoElement, KeyDownEvent, SharedString, Stateful, Window,
+    div, prelude::*, px,
+};
 
 use super::Flow;
 use crate::theme::Theme;
@@ -190,7 +193,7 @@ impl Flow {
                     .text_color(theme.text)
                     .child("Flow"),
             )
-            .child(self.render_capture_button(theme))
+            .child(self.render_capture_row(theme, cx))
             .child(self.render_mode_switch(mode, theme, cx))
             .child(
                 div()
@@ -221,10 +224,20 @@ impl Flow {
             .child(self.render_nav_row(Destination::Settings, theme, cx))
     }
 
-    fn render_capture_button(&self, theme: Theme) -> Stateful<Div> {
-        // ponytail: capture has no composer yet (Milestone 1). The row is
-        // fully keyboard/mouse operable so the affordance is real, it just
-        // has nothing to do until the task store exists.
+    /// The button when idle, or the real composer field once `capturing` is
+    /// true (opened via a click/enter/space on the button, or `⌘N` from
+    /// anywhere — see `Flow::open_capture` in `app.rs`).
+    fn render_capture_row(&mut self, theme: Theme, cx: &mut Context<Self>) -> AnyElement {
+        if self.capturing {
+            return div()
+                .h(px(ROW_HEIGHT))
+                .px(px(4.0))
+                .flex()
+                .items_center()
+                .child(self.capture_input.clone())
+                .into_any_element();
+        }
+
         div()
             .id("capture")
             .track_focus(&self.new_task_focus)
@@ -242,8 +255,19 @@ impl Flow {
             .hover(|el| el.bg(theme.overlay))
             .active(|el| el.bg(theme.overlay_strong))
             .focus_visible(|style| style.border_1().border_color(theme.accent))
+            .on_click(cx.listener(|flow, _, window, cx| flow.open_capture(window, cx)))
+            .on_key_down(cx.listener(|flow, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.modifiers.modified() {
+                    return;
+                }
+                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                    flow.open_capture(window, cx);
+                    cx.stop_propagation();
+                }
+            }))
             .child(icon("icons/plus.svg", 14.0, theme.text_secondary))
             .child("Capture")
+            .into_any_element()
     }
 
     /// The Tasks/Calendar pill: Flow's two whole-app modes. Each segment
