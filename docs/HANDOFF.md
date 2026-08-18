@@ -106,7 +106,10 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       gated behind a button), and a "Clear" button on the expanded
       "Completed" section. Also carries in-progress, not-yet-wired subtask
       UI scaffolding (composer + event handler, no render changes).
-- Working tree is clean as of commit `55e5e0a` unless the "Milestone 1
+  32. `e05cd14` — subtasks fully wired into the detail card: indented
+      list, add, complete, and the inline "complete parent and all
+      subtasks?" confirm.
+- Working tree is clean as of commit `e05cd14` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - **A `/loop` (self-paced, 5-minute interval, cron job `57c760d9`) is
@@ -172,10 +175,9 @@ the current count/status rather than trusting this number as it ages.
   paragraph originally described). Completed tasks live in a collapsed
   "Completed" section per view rather than vanishing. Calendar and Settings
   still render `components.rs`'s "Coming soon" placeholder.
-  **No subtasks or toast/notification component exist yet** — the user
-  showed reference screenshots for these (Things-3-style task row with
-  note + subtask, a toast banner) but explicitly deferred them out of the
-  sidebar-focused UI pass; still future work. Scheduling a task now has
+  Subtasks and an Undo toast now both exist (see "Milestone 1 progress"
+  below) — this paragraph originally described them as absent, from
+  before either landed. Scheduling a task now has
   three real paths: typing a date phrase into Capture, the detail card's
   Today/Anytime/Someday/"Schedule…" picker, and the same picker's bulk
   variant for multi-select — the original "no UI path to schedule" gap
@@ -365,7 +367,8 @@ landed which line.
       (new `Db::delete_task`, soft delete via `deleted_at`, which every
       `list_view` query already filters on for free). Available from every
       task view now, not just Inbox, per the design doc's general spec.
-      Subtasks are skipped — no `parent_id` UI or queries exist yet.
+      Subtasks landed later in the session — see "One-level subtasks,
+      fully wired" below; this line originally noted their absence.
 - [x] **Cmd+click multi-select**, with a bulk-action bar (same
       Today/Anytime/Someday/Delete actions, applied to the whole selection)
       appearing at 2+ selected rows. Uses `gpui::Modifiers::secondary()` —
@@ -477,21 +480,24 @@ landed which line.
 - [x] **"Clear" button on the expanded "Completed" section** (`55e5e0a`,
       user-requested) — soft-deletes every completed task currently shown
       there.
-- **Subtasks are in progress, not done** — backend landed and is tested
-      (`acf3e55`: `Db::create_subtask`/`list_subtasks`, one-level ceiling
-      enforced server-side, every view query filters `parent_id IS NULL`
-      so a subtask never leaks in as an independent top-level row).
-      `55e5e0a` added the composer/event plumbing (`subtask_input`,
-      `Flow::open_add_subtask`/`on_subtask_event`, `pending_complete_confirm`
-      state for PRD §6.2's "complete parent with open children" confirm)
-      but **no render changes yet** — none of this is reachable from the
-      UI. Next increment: the actual "Subtasks" section in
-      `render_detail_card` (indented rows with a slender left guide per
-      `docs/DESIGN_DIRECTION.md`, the add-subtask row, a progress count,
-      and the inline complete-with-children confirm). Scope cut already
-      decided: the compact list row will *not* show subtask progress —
-      only fetched/shown once a task is expanded, to avoid an N+1 fetch
-      on every visible row (`CLAUDE.md`'s render-path I/O rule).
+- [x] **One-level subtasks, fully wired** (`acf3e55` backend + `e05cd14`
+      UI). Backend: `Db::create_subtask`/`list_subtasks`, one-level
+      ceiling enforced server-side (a subtask cannot itself take a
+      subtask), every view query filters `parent_id IS NULL` so a subtask
+      never leaks in as an independent top-level row. UI: a real
+      "Subtasks" section in the detail card (note → subtasks → schedule →
+      delete, per `docs/DESIGN_DIRECTION.md`'s stated order) — indented
+      rows with a slender left guide (`border_l_1()`), a "(done/total)"
+      count instead of a literal ring (no ring/chart primitive exists
+      here to justify building one for a single spot), an inline
+      "+ Add subtask" row, and PRD §6.2's "complete parent and all
+      subtasks?" confirm — an inline banner, not a modal, matching this
+      design system's existing swap-in-place idiom. A subtask itself
+      shows no Subtasks section of its own, enforcing the ceiling in the
+      UI too. **Scope cut, deliberate:** the compact list row shows no
+      subtask progress — only fetched once a task is expanded, to avoid
+      an N+1 fetch on every visible row (`CLAUDE.md`'s render-path I/O
+      rule).
 
 **Not done yet, in the order they're planned:**
 
