@@ -83,7 +83,17 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   25. `013c5fb` — a "Clear" option on the schedule picker to remove a
       task's schedule (previously only changeable, never removable).
   26. `0133d87` — completion collapse animation and a 10-second Undo toast.
-- Working tree is clean as of commit `0133d87` unless the "Milestone 1
+  27. `326837b` — renamed the debug app from "Flow Debug" to "Flow Dev"
+      (display name and data directory; bundle identifier unchanged),
+      done mid-incident to rule out stale per-app WindowServer/
+      LaunchServices state as the cause of the regression `53a744b` fixed.
+  28. `53a744b` — fixed a blank-main-pane regression: `render_drag_bar`
+      needed `absolute()` (it was starving the main pane to zero width as
+      a plain flex sibling demanding the full row's width). See
+      `docs/main-pane-blank-regression.md` for the full incident writeup —
+      worth reading before touching `flow-shell`'s layout or adding any
+      new overlay to it.
+- Working tree is clean as of commit `53a744b` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - The `/loop` (self-paced autonomous mode) that was running earlier in this
