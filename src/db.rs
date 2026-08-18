@@ -152,6 +152,15 @@ enum Command {
         scheduled_time: Option<String>,
         reply: mpsc::Sender<Result<()>>,
     },
+    SetNote {
+        id: String,
+        note: Option<String>,
+        reply: mpsc::Sender<Result<()>>,
+    },
+    DeleteTask {
+        id: String,
+        reply: mpsc::Sender<Result<()>>,
+    },
 }
 
 /// A cheaply cloneable handle to the database thread.
@@ -260,6 +269,34 @@ impl Db {
             .context("database thread is gone")?;
         rx.recv().context("database thread dropped the reply")?
     }
+
+    /// Sets or clears a task's note. `None` clears it.
+    pub fn set_note(&self, id: impl Into<String>, note: Option<impl Into<String>>) -> Result<()> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::SetNote {
+                id: id.into(),
+                note: note.map(Into::into),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    /// Soft-deletes a task by stamping `deleted_at`. Every `list_view`/
+    /// `list_bucket` query already filters `deleted_at IS NULL`, so a
+    /// deleted task disappears from every view without a separate query
+    /// change.
+    pub fn delete_task(&self, id: impl Into<String>) -> Result<()> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::DeleteTask {
+                id: id.into(),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
 }
 
 fn database_path() -> Result<PathBuf> {
@@ -328,6 +365,12 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
                     scheduled_date,
                     scheduled_time,
                 )));
+            }
+            Command::SetNote { id, note, reply } => {
+                let _ = reply.send(runtime.block_on(set_note(&conn, id, note)));
+            }
+            Command::DeleteTask { id, reply } => {
+                let _ = reply.send(runtime.block_on(delete_task(&conn, id)));
             }
         }
     }
@@ -512,6 +555,28 @@ async fn schedule(
     Ok(())
 }
 
+async fn set_note(conn: &turso::Connection, id: String, note: Option<String>) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE tasks SET note = ?1, updated_at = ?2 WHERE id = ?3",
+        (note, now, id),
+    )
+    .await
+    .context("updating note")?;
+    Ok(())
+}
+
+async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
+        (now.clone(), now, id),
+    )
+    .await
+    .context("deleting task")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -622,5 +687,32 @@ mod tests {
         assert_eq!(inbox.len(), 1);
         assert!(inbox[0].scheduled_date.is_some());
         assert_eq!(db.list_view(View::Today).expect("list").len(), 0);
+    }
+
+    #[test]
+    fn set_note_updates_and_clears_a_tasks_note() {
+        let db = open_test_db();
+        let task = db.create_task("Write notes").expect("create");
+        assert!(task.note.is_none());
+
+        db.set_note(&task.id, Some("Buy oat milk"))
+            .expect("set_note should succeed");
+        let inbox = db.list_view(View::Inbox).expect("list");
+        assert_eq!(inbox[0].note.as_deref(), Some("Buy oat milk"));
+
+        db.set_note(&task.id, None::<String>)
+            .expect("clearing the note should succeed");
+        let inbox = db.list_view(View::Inbox).expect("list");
+        assert!(inbox[0].note.is_none());
+    }
+
+    #[test]
+    fn delete_task_removes_it_from_its_view() {
+        let db = open_test_db();
+        let task = db.create_task("Throwaway").expect("create");
+        assert_eq!(db.list_view(View::Inbox).expect("list").len(), 1);
+
+        db.delete_task(&task.id).expect("delete should succeed");
+        assert_eq!(db.list_view(View::Inbox).expect("list").len(), 0);
     }
 }

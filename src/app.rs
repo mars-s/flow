@@ -7,6 +7,7 @@
 //! ticket for what was removed and why.
 
 use std::array;
+use std::collections::HashSet;
 
 use gpui::{AnyElement, App, Context, Entity, FocusHandle, Window, div, prelude::*};
 
@@ -58,20 +59,34 @@ pub struct Flow {
     /// state stable. PRD §6.1's title-only capture; note/schedule/parent
     /// fields are a later Milestone 1 step (see docs/HANDOFF.md).
     capture_input: Entity<ComposerInput>,
-    /// The Inbox row currently showing its inline "Process" actions
-    /// (Today/Anytime/Someday), if any — PRD §6.3's "inline Process action"
-    /// on Inbox. Only one row processes at a time, matching how
-    /// `capturing` gates the sidebar to one open field.
-    processing_task_id: Option<String>,
-    /// Whether `processing_task_id`'s row is showing the free-text
-    /// "Schedule…" field instead of the three quick buttons. PRD §6.3
-    /// names "schedule" (an arbitrary date) as the fourth Process option;
-    /// rather than building a calendar widget, this reuses `parse.rs` on
-    /// whatever the user types, the same way Capture does.
+    /// The task row currently showing its detail card (note, schedule
+    /// status, delete), if any — `docs/DESIGN_DIRECTION.md`'s "Task detail"
+    /// component, available from every task view. Only one row expands at a
+    /// time, matching how `capturing` gates the sidebar to one open field.
+    expanded_task_id: Option<String>,
+    /// Which task's note `note_input`'s content belongs to. Kept separate
+    /// from `expanded_task_id` so a blur that lands after the card has
+    /// already closed still saves against the right task.
+    note_task_id: Option<String>,
+    /// A single long-lived composer for the detail card's note field, same
+    /// reuse-not-recreate reasoning as `capture_input`.
+    note_input: Entity<ComposerInput>,
+    /// Whether the expanded card's schedule pill has opened the
+    /// Today/Anytime/Someday/"Schedule…" quick-picker.
+    schedule_picker_open: bool,
+    /// Whether the picker is showing the free-text "Schedule…" field
+    /// instead of the three quick buttons. PRD §6.3 names "schedule" (an
+    /// arbitrary date) as the fourth Process option; rather than building a
+    /// calendar widget, this reuses `parse.rs` on whatever the user types,
+    /// the same way Capture does.
     scheduling: bool,
     /// A single long-lived composer for the "Schedule…" field, same
     /// reuse-not-recreate reasoning as `capture_input`.
     schedule_input: Entity<ComposerInput>,
+    /// Cmd+click multi-select: task ids toggled in without opening their
+    /// detail card. A plain click clears this and falls back to opening/
+    /// closing the card as usual.
+    selected_task_ids: HashSet<String>,
 }
 
 impl Flow {
@@ -99,6 +114,18 @@ impl Flow {
             });
             cx.subscribe(&schedule_input, Self::on_schedule_event).detach();
 
+            let note_input = cx.new(|cx| {
+                ComposerInput::new(window, cx)
+                    .code_editor(None)
+                    .placeholder(tr!("input.notes"))
+            });
+            // The note field has no Submit event (code-mode Enter inserts a
+            // newline, per notes wanting multiple lines) — blur is the only
+            // save trigger, so it's wired directly rather than through
+            // `cx.subscribe`.
+            let note_focus = note_input.read(cx).focus();
+            cx.on_blur(&note_focus, window, Self::on_note_blur).detach();
+
             Self {
                 destination: Destination::Inbox,
                 new_task_focus: cx.focus_handle(),
@@ -108,9 +135,13 @@ impl Flow {
                 tasks: QueryCache::new(8),
                 capturing: false,
                 capture_input,
-                processing_task_id: None,
+                expanded_task_id: None,
+                note_task_id: None,
+                note_input,
+                schedule_picker_open: false,
                 scheduling: false,
                 schedule_input,
+                selected_task_ids: HashSet::new(),
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
@@ -197,9 +228,9 @@ impl Flow {
         // cleared itself (ComposerInput::enter's Composer-mode branch).
     }
 
-    /// The Process row's "Schedule…" button: swaps the three quick buttons
-    /// for a free-text field, focused, for the row already in
-    /// `processing_task_id`.
+    /// The detail card's schedule-pill picker's "Schedule…" button: swaps
+    /// the three quick buttons for a free-text field, focused, for the row
+    /// already in `expanded_task_id`.
     pub(super) fn open_schedule_field(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.scheduling = true;
         let focus = self.schedule_input.read(cx).focus();
@@ -216,7 +247,7 @@ impl Flow {
         let ComposerEvent::Submit(text) = event else {
             return;
         };
-        let Some(id) = self.processing_task_id.clone() else {
+        let Some(id) = self.expanded_task_id.clone() else {
             return;
         };
         let Some(db) = self.db.clone() else { return };
@@ -229,7 +260,8 @@ impl Flow {
         let time = parsed.time;
 
         self.scheduling = false;
-        self.processing_task_id = None;
+        self.schedule_picker_open = false;
+        self.expanded_task_id = None;
         self.schedule_input.update(cx, |input, cx| input.clear(cx));
 
         cx.spawn(async move |flow, cx| {
@@ -262,14 +294,36 @@ impl Flow {
     }
 
     fn handle_cancel_turn_action(&mut self, _: &CancelTurn, window: &mut Window, cx: &mut Context<Self>) {
-        if self.scheduling || self.processing_task_id.is_some() {
+        if self.scheduling || self.expanded_task_id.is_some() {
             self.scheduling = false;
-            self.processing_task_id = None;
+            self.schedule_picker_open = false;
+            self.expanded_task_id = None;
             self.schedule_input.update(cx, |input, cx| input.clear(cx));
             cx.notify();
             return;
         }
         self.close_capture(window, cx);
+    }
+
+    /// The detail card's note field lost focus: the only save trigger for
+    /// notes (code-mode Enter inserts a newline instead of submitting).
+    /// Writing the same content twice is harmless, so this fires
+    /// unconditionally rather than tracking a dirty flag.
+    fn on_note_blur(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.note_task_id.clone() else {
+            return;
+        };
+        let Some(db) = self.db.clone() else { return };
+        let content = self.note_input.read(cx).content().to_string();
+        let note = (!content.trim().is_empty()).then_some(content);
+
+        cx.spawn(async move |_flow, cx| {
+            let _ = cx
+                .background_executor()
+                .spawn(async move { db.set_note(id, note) })
+                .await;
+        })
+        .detach();
     }
 
     /// Where the window should land keyboard focus on open, so arrow keys
