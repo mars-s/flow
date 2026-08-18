@@ -2,7 +2,7 @@
 name = "flow"
 version = "0.1.4"
 edition = "2024"
-description = "A fast, native control plane for local coding agents"
+description = "A calm, keyboard-first personal task manager"
 license = "GPL-3.0-only"
 
 [workspace]
@@ -46,6 +46,7 @@ futures-lite = "2"
 futures = "0.3"
 nucleo-matcher = "0.3.1"
 tokio = { version = "1", features = ["rt"] }
+turso = "0.7.2"
 
 # `test-support` has to stay test-only. It compiles a loop into gpui's
 # `flush_effects` that draws every dirty window right there, so with the

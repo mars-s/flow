@@ -2,15 +2,37 @@
 
 Flow is a calm, keyboard-first personal task manager (Inbox, Today, Upcoming,
 Anytime, Someday, and a read-only Google Calendar glance), built on a fork of
-Flow's native Rust/GPUI desktop shell. It is not a coding-agent tool; the
+Waku's native Rust/GPUI desktop shell, since detached into its own git
+history (see `wayfinder/flow-map.md`). It is not a coding-agent tool; the
 guidance below is about developing the app itself and still applies.
+
+## Product, design, and planning docs
+
+Read these before assuming or re-deriving a product/design decision — they
+are the durable source of truth for the project, and drift between them and
+the code should be fixed, not treated as ambiguity to guess through:
+
+- [PRODUCT.md](PRODUCT.md) — north star: purpose, positioning, principles.
+- [docs/PRODUCT_REQUIREMENTS.md](docs/PRODUCT_REQUIREMENTS.md) — the full
+  PRD: functional requirements, data model, delivery milestones.
+- [docs/DESIGN_DIRECTION.md](docs/DESIGN_DIRECTION.md) — the approved visual
+  system (tokens, spacing, component anatomy, motion). `src/theme.rs` must
+  match it token-for-token.
+- [docs/turso.md](docs/turso.md) — Turso/SQLite persistence reference (crate
+  names, API, sync setup), once the local task store is being built.
+- [CONTEXT.md](CONTEXT.md) — domain glossary.
+- `wayfinder/flow-map.md` and `wayfinder/tickets/*.md` — planning history
+  and closed decision tickets.
+
+Load the `impeccable` skill before UI/visual changes, not only when asked to
+design something — its craft-floor checklist catches banned patterns (e.g. a
+colored left border on a list row) before they ship instead of after.
 
 ## Development runtime
 
 - Assume `bun ./scripts/dev.ts` is already running and owns the current
-  `Flow Debug.app` process (the debug build product name has not been
-  rebranded yet). Source changes are rebuilt, signed, and relaunched
-  automatically. Only run it yourself if not already launched.
+  `Flow Debug.app` process. Source changes are rebuilt, signed, and
+  relaunched automatically. Only run it yourself if not already launched.
 - During normal development and UI validation, do not run
   `scripts/bundle.sh debug`, start a second watcher, or manually quit/relaunch
   `Flow Debug.app`. Quitting the app also stops the watcher.

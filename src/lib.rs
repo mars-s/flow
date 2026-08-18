@@ -24,6 +24,7 @@ mod analytics;
 mod app;
 mod assets;
 mod browser;
+mod db;
 mod input;
 mod md;
 mod platform;
