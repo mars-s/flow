@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 /// The three persisted placements from `docs/PRODUCT_REQUIREMENTS.md` §5.
 /// Today/Upcoming/Anytime are computed views over `Active`, not stored.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Bucket {
     Inbox,
     Active,

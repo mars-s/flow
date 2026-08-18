@@ -11,7 +11,9 @@ use std::array;
 use gpui::{AnyElement, App, Context, Entity, FocusHandle, Window, div, prelude::*};
 
 use crate::ToggleCommandPalette;
+use crate::db::{Bucket, Db, Task};
 use crate::input::ComposerInput;
+use crate::query::QueryCache;
 use crate::theme::Theme;
 
 mod command_palette;
@@ -19,6 +21,7 @@ mod components;
 mod render;
 mod settings;
 mod sidebar;
+mod tasks;
 #[cfg(test)]
 mod tests;
 mod window_chrome;
@@ -38,15 +41,37 @@ pub struct Flow {
     /// Calendar destination are the same thing; Tasks has no destination of
     /// its own, so it needs a handle that isn't one of the seven above.
     mode_tasks_focus: FocusHandle,
+    /// `None` when opening the local database failed at startup (e.g. an
+    /// unwritable data directory) — task views degrade to an error state
+    /// rather than panicking. See `tasks.rs`.
+    db: Option<Db>,
+    /// Loaded lazily per bucket from `render`, per this repo's
+    /// `cx.background_executor().spawn` + `cx.notify()` convention
+    /// (`query.rs`'s own doc comment is this exact pattern).
+    tasks: QueryCache<Bucket, Vec<Task>>,
 }
 
 impl Flow {
     pub fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        // Opening a local file is a one-time, sub-millisecond startup cost,
+        // not a per-frame one — unlike render-path I/O, this is exactly the
+        // "one-shot user action" CLAUDE.md carves out as fine to do
+        // synchronously. A failure degrades task views instead of crashing.
+        let db = match Db::open() {
+            Ok(db) => Some(db),
+            Err(error) => {
+                eprintln!("Flow: failed to open the local database: {error:#}");
+                None
+            }
+        };
+
         let flow = cx.new(|cx| Self {
             destination: Destination::Inbox,
             new_task_focus: cx.focus_handle(),
             nav_focuses: array::from_fn(|_| cx.focus_handle()),
             mode_tasks_focus: cx.focus_handle(),
+            db,
+            tasks: QueryCache::new(8),
         });
         window.set_window_title(&window_title(Destination::Inbox));
         flow

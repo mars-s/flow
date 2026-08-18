@@ -8,8 +8,9 @@ use gpui::{
     SharedString, Styled, Window, div, ease_out_quint, prelude::*,
 };
 
-use super::components::placeholder_pane;
 use super::Flow;
+use super::components::placeholder_pane;
+use super::sidebar::Destination;
 use crate::theme::Theme;
 
 /// PRD §7: "Navigation cross-fades or slides only the main pane (120–160
@@ -29,7 +30,7 @@ impl Render for Flow {
             .bg(theme.canvas)
             .text_color(theme.text)
             .child(self.render_sidebar(cx))
-            .child(self.render_main_pane(theme))
+            .child(self.render_main_pane(theme, cx))
             .into_any_element();
 
         self.render_window_frame(content, window, cx)
@@ -37,8 +38,12 @@ impl Render for Flow {
 }
 
 impl Flow {
-    fn render_main_pane(&self, theme: Theme) -> AnyElement {
+    fn render_main_pane(&mut self, theme: Theme, cx: &mut Context<Self>) -> AnyElement {
         let destination = self.destination;
+        let body = match destination {
+            Destination::Inbox => self.render_inbox(theme, cx),
+            _ => placeholder_pane(theme, destination).into_any_element(),
+        };
         div()
             .id("main-pane")
             .flex_1()
@@ -46,8 +51,10 @@ impl Flow {
             .h_full()
             .overflow_hidden()
             .child(
-                placeholder_pane(theme, destination)
+                div()
                     .id(SharedString::from(format!("pane-{}", destination.index())))
+                    .size_full()
+                    .child(body)
                     .with_animation(
                         SharedString::from(format!("pane-fade-{}", destination.index())),
                         Animation::new(MAIN_PANE_TRANSITION).with_easing(ease_out_quint()),

@@ -323,6 +323,16 @@ impl Flow {
             .child(segment.label())
     }
 
+    /// Live Inbox count for the badge. `0` while the first load is still in
+    /// flight or the database is unavailable — an undercount is a better
+    /// default than blocking the row on a fetch.
+    fn inbox_count(&mut self, cx: &mut Context<Self>) -> usize {
+        match self.read_bucket(crate::db::Bucket::Inbox, cx) {
+            crate::query::Query::Ready(tasks) => tasks.len(),
+            crate::query::Query::Pending | crate::query::Query::Missing(_) => 0,
+        }
+    }
+
     fn select_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
         let destination = match mode {
             Mode::Calendar => Destination::Calendar,
@@ -335,7 +345,7 @@ impl Flow {
     }
 
     fn render_nav_row(
-        &self,
+        &mut self,
         destination: Destination,
         theme: Theme,
         cx: &mut Context<Self>,
@@ -343,7 +353,7 @@ impl Flow {
         let index = destination.index();
         let focus = self.nav_focuses[index].clone();
         let selected = self.destination == destination;
-        let badge = (destination == Destination::Inbox).then_some(0u32);
+        let badge = (destination == Destination::Inbox).then(|| self.inbox_count(cx));
         let row_icon_color = if selected {
             theme.text
         } else {
