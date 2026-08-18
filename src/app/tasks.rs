@@ -11,6 +11,7 @@ use gpui::{
 };
 
 use super::Flow;
+use super::UndoToast;
 use super::sidebar::Destination;
 use crate::db::{Bucket, Task, View};
 use crate::input::ComposerInput;
@@ -24,6 +25,10 @@ const ROW_TRANSITION: Duration = Duration::from_millis(180);
 /// How far the expanded "Completed" section grows upward before it scrolls
 /// internally instead of pushing the open-task list any further.
 const COMPLETED_MAX_HEIGHT: f32 = 280.0;
+
+/// PRD §6.1 names this window for delete's undo toast; completion's own
+/// spec doesn't state a duration, so it reuses the same one for consistency.
+const UNDO_TOAST_DURATION: Duration = Duration::from_secs(10);
 
 /// The three quick fixed destinations PRD §6.3 names for the task detail
 /// card's schedule picker. The fourth, "Schedule" (an arbitrary date), is a
@@ -159,13 +164,14 @@ impl Flow {
         cx.notify();
     }
 
-    /// Toggles a task's completion and refreshes whatever view is currently
-    /// showing it. Fire-and-forget from the caller's point of view — the
-    /// row updates when `cx.notify()` lands, same as a fetch. Which cache
-    /// entries to invalidate is decided by `origin_view` rather than
-    /// guessed from the task's bucket, since Today and Upcoming both read
-    /// `Bucket::Active` and either could be the row the click came from.
-    fn toggle_completed(&mut self, id: String, completed: bool, origin_view: View, cx: &mut Context<Self>) {
+    /// Reopening (unchecking) writes immediately — nothing to animate out,
+    /// the row is already visible and just needs to update. Completing
+    /// instead waits for `ROW_TRANSITION`'s fade/collapse (`toggle_completed`)
+    /// so the row has something to animate before it actually disappears.
+    /// Which cache entries to invalidate is decided by `origin_view` rather
+    /// than guessed from the task's bucket, since Today and Upcoming both
+    /// read `Bucket::Active` and either could be the row the click came from.
+    fn write_completed(&mut self, id: String, completed: bool, origin_view: View, cx: &mut Context<Self>) {
         let Some(db) = self.db.clone() else { return };
         cx.spawn(async move |flow, cx| {
             let Ok(()) = cx
@@ -188,6 +194,69 @@ impl Flow {
             });
         })
         .detach();
+    }
+
+    /// The completion checkbox. Reopening reverses immediately
+    /// (`docs/PRODUCT_REQUIREMENTS.md` §7: "Reopening reverses it").
+    /// Completing checks the control immediately (the caller's optimistic
+    /// styling) but delays the actual write until `render_task_row`'s
+    /// 180 ms fade/collapse animation finishes, then shows a 10-second Undo
+    /// toast — matching the deletion undo window PRD §6.1 already names,
+    /// since completion's own spec doesn't state a different one.
+    fn toggle_completed(
+        &mut self,
+        id: String,
+        title: String,
+        completed: bool,
+        origin_view: View,
+        cx: &mut Context<Self>,
+    ) {
+        if !completed {
+            self.write_completed(id, false, origin_view, cx);
+            return;
+        }
+        if !self.completing_ids.insert(id.clone()) {
+            return; // Already animating out from an earlier click.
+        }
+        cx.notify();
+        cx.spawn(async move |flow, cx| {
+            cx.background_executor().timer(ROW_TRANSITION).await;
+            let _ = flow.update(cx, |flow, cx| {
+                flow.completing_ids.remove(&id);
+                flow.write_completed(id.clone(), true, origin_view, cx);
+                flow.show_undo_toast(id, title, origin_view, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Shows (or replaces) the single-slot "Completed" toast and schedules
+    /// its own dismissal. `token` distinguishes this toast's timer from an
+    /// earlier one still in flight — without it, completing a second task
+    /// inside the first one's 10-second window would let the first timer
+    /// clear the second toast early.
+    fn show_undo_toast(&mut self, task_id: String, title: String, origin_view: View, cx: &mut Context<Self>) {
+        self.undo_token += 1;
+        let token = self.undo_token;
+        self.undo_toast = Some(UndoToast { task_id, title: title.into(), origin_view, token });
+        cx.notify();
+        cx.spawn(async move |flow, cx| {
+            cx.background_executor().timer(UNDO_TOAST_DURATION).await;
+            let _ = flow.update(cx, |flow, cx| {
+                if flow.undo_toast.as_ref().is_some_and(|toast| toast.token == token) {
+                    flow.undo_toast = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// The toast's "Undo" button: reopens the task and dismisses the toast.
+    fn undo_complete(&mut self, cx: &mut Context<Self>) {
+        let Some(toast) = self.undo_toast.take() else { return };
+        cx.notify();
+        self.write_completed(toast.task_id, false, toast.origin_view, cx);
     }
 
     /// Opens or closes a task's detail card — `docs/DESIGN_DIRECTION.md`'s
@@ -364,6 +433,76 @@ impl Flow {
         .detach();
     }
 
+    /// The floating "Completed \"…\"" banner shown after a task finishes its
+    /// collapse animation. Rendered once at the window level (`render.rs`),
+    /// not per view, so it survives navigating away from the view the
+    /// completion happened in — the same reason `origin_view` travels with
+    /// it instead of being read back off `self.destination`.
+    pub(super) fn render_undo_toast(&mut self, theme: Theme, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let toast = self.undo_toast.as_ref()?;
+        let title = toast.title.clone();
+
+        Some(
+            div()
+                .id("undo-toast")
+                .absolute()
+                .bottom(px(20.0))
+                .left_0()
+                .right_0()
+                .flex()
+                .justify_center()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(12.0))
+                        .px(px(14.0))
+                        .py(px(10.0))
+                        .rounded(px(8.0))
+                        .bg(theme.raised)
+                        .border_1()
+                        .border_color(theme.border_strong)
+                        .shadow(vec![
+                            gpui::BoxShadow::new(
+                                px(0.0),
+                                px(4.0),
+                                gpui::Hsla { h: 0.0, s: 0.0, l: 0.0, a: 0.35 },
+                            )
+                            .blur_radius(px(16.0)),
+                        ])
+                        .child(
+                            div()
+                                .text_size(px(12.5))
+                                .text_color(theme.text)
+                                .child(format!("Completed \u{201c}{title}\u{201d}")),
+                        )
+                        .child(
+                            div()
+                                .id("undo-toast-button")
+                                .px(px(8.0))
+                                .py(px(3.0))
+                                .rounded(px(5.0))
+                                .cursor_pointer()
+                                .text_size(px(12.5))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme.accent)
+                                .hover(|el| el.bg(theme.overlay))
+                                .on_click(cx.listener(|flow, _, _, cx| flow.undo_complete(cx)))
+                                .child("Undo"),
+                        ),
+                )
+                .with_animation(
+                    // Keyed to `token` (not a fixed id) so each new toast
+                    // gets its own fresh 0→1 timeline instead of reusing an
+                    // earlier toast's already-elapsed one.
+                    gpui::SharedString::from(format!("undo-toast-fade-{}", toast.token)),
+                    Animation::new(ROW_TRANSITION).with_easing(ease_out_quint()),
+                    |element, delta| element.opacity(delta),
+                )
+                .into_any_element(),
+        )
+    }
+
     pub(super) fn render_task_view(
         &mut self,
         destination: Destination,
@@ -385,6 +524,7 @@ impl Flow {
         let note_input = self.note_input.clone();
         let selected = self.selected_task_ids.clone();
         let completed_expanded = self.completed_expanded.contains(&view);
+        let completing_ids = self.completing_ids.clone();
         // Always fetched, not only once expanded — the collapsed row still
         // needs a count, and this is the same "resolve the whole collection
         // up front, render degrades on a miss" pattern `read_view` already
@@ -399,6 +539,7 @@ impl Flow {
                 tasks,
                 completed,
                 completed_expanded,
+                completing_ids,
                 expanded,
                 schedule_picker_open,
                 scheduling,
@@ -420,6 +561,7 @@ fn task_list(
     tasks: Arc<Vec<Task>>,
     completed: Arc<Vec<Task>>,
     completed_expanded: bool,
+    completing_ids: HashSet<String>,
     expanded: Option<String>,
     schedule_picker_open: bool,
     scheduling: bool,
@@ -459,11 +601,13 @@ fn task_list(
                 .children(tasks.iter().cloned().map(|task| {
                     let is_expanded = expanded.as_deref() == Some(task.id.as_str());
                     let is_selected = selected.contains(&task.id);
+                    let is_completing = completing_ids.contains(&task.id);
                     render_task_row(
                         task,
                         view,
                         is_expanded,
                         is_selected,
+                        is_completing,
                         schedule_picker_open,
                         scheduling,
                         note_input.clone(),
@@ -536,6 +680,7 @@ fn completed_section(
                             task,
                             view,
                             is_expanded,
+                            false,
                             false,
                             schedule_picker_open,
                             scheduling,
@@ -637,6 +782,7 @@ fn render_task_row(
     origin_view: View,
     is_expanded: bool,
     is_selected: bool,
+    is_completing: bool,
     schedule_picker_open: bool,
     scheduling: bool,
     note_input: Entity<ComposerInput>,
@@ -665,7 +811,13 @@ fn render_task_row(
     }
 
     let completed = task.completed_at.is_some();
+    // Checked visually the instant it's clicked, even though the actual
+    // `Db::set_completed` write (and the row's removal from this list)
+    // waits for the collapse animation below — the optimistic-check half of
+    // PRD §7's "checks the control immediately, fades and collapses...".
+    let checked = completed || is_completing;
     let id_for_click = task.id.clone();
+    let title_for_click = task.title.clone();
     // The schedule metadata is a fact about the task, not the view it's
     // being read from — a scheduled Inbox task (PRD §14) shows its date the
     // same as a scheduled Today/Upcoming one.
@@ -679,6 +831,7 @@ fn render_task_row(
         .gap(px(10.0))
         .px(px(8.0))
         .rounded(px(6.0))
+        .overflow_hidden()
         .cursor_pointer()
         .hover(|el| el.bg(theme.overlay))
         .when(is_selected, |row| row.bg(theme.sidebar_item_background))
@@ -696,15 +849,24 @@ fn render_task_row(
                 .w(px(17.0))
                 .h(px(17.0))
                 .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
                 .rounded_full()
                 .border_1()
-                .border_color(theme.border_strong)
+                .border_color(if checked { theme.accent } else { theme.border_strong })
                 .cursor_default()
                 .hover(|el| el.border_color(theme.accent))
                 .on_click(cx.listener(move |flow, _, _, cx| {
-                    flow.toggle_completed(id_for_click.clone(), !completed, origin_view, cx);
+                    if is_completing {
+                        return; // Already animating out from an earlier click.
+                    }
+                    flow.toggle_completed(id_for_click.clone(), title_for_click.clone(), !completed, origin_view, cx);
                     cx.stop_propagation();
-                })),
+                }))
+                .when(checked, |circle| {
+                    circle.child(crate::ui::icon("icons/check.svg", 11.0, theme.accent))
+                }),
         )
         .child(
             div()
@@ -725,9 +887,25 @@ fn render_task_row(
             )
         })
         .with_animation(
-            gpui::SharedString::from(format!("task-fade-{}", task.id)),
+            // A distinct id for the completing state rather than reusing
+            // the mount fade-in's — `with_animation` times an id from when
+            // it first appears, so switching `is_completing` on a row that
+            // already finished its fade-in needs a fresh id to get a fresh
+            // 0→1 timeline instead of jumping straight to the fade-in's
+            // already-elapsed delta of 1.
+            gpui::SharedString::from(if is_completing {
+                format!("task-collapse-{}", task.id)
+            } else {
+                format!("task-fade-{}", task.id)
+            }),
             Animation::new(ROW_TRANSITION).with_easing(ease_out_quint()),
-            |element, delta| element.opacity(delta),
+            move |element, delta| {
+                if is_completing {
+                    element.opacity(1.0 - delta).h(px(40.0 * (1.0 - delta)))
+                } else {
+                    element.opacity(delta)
+                }
+            },
         )
         .into_any_element()
 }
@@ -748,6 +926,7 @@ fn render_detail_card(
 ) -> AnyElement {
     let completed = task.completed_at.is_some();
     let id_for_complete = task.id.clone();
+    let title_for_complete = task.title.clone();
     let id_for_delete = task.id.clone();
     let id_for_collapse = task.id.clone();
     let note_for_collapse = task.note.clone();
@@ -778,7 +957,13 @@ fn render_detail_card(
                         .cursor_default()
                         .hover(|el| el.border_color(theme.accent))
                         .on_click(cx.listener(move |flow, _, _, cx| {
-                            flow.toggle_completed(id_for_complete.clone(), !completed, origin_view, cx);
+                            flow.toggle_completed(
+                                id_for_complete.clone(),
+                                title_for_complete.clone(),
+                                !completed,
+                                origin_view,
+                                cx,
+                            );
                             cx.stop_propagation();
                         })),
                 )

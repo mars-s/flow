@@ -35,6 +35,7 @@ impl Render for Flow {
             .on_action(cx.listener(Self::handle_cancel_turn_action))
             .child(self.render_sidebar(cx))
             .child(self.render_main_pane(theme, cx))
+            .children(self.render_undo_toast(theme, cx))
             // Layered on top rather than reserving its own row, so the
             // sidebar's border keeps running the full window height instead
             // of stopping at a row boundary above it.

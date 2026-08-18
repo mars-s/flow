@@ -97,6 +97,29 @@ pub struct Flow {
     /// expanded. A set rather than one bool per view, matching this
     /// codebase's `HashSet<View>` idiom for per-view UI flags.
     completed_expanded: HashSet<View>,
+    /// Tasks mid-way through the 180 ms fade/collapse
+    /// `docs/DESIGN_DIRECTION.md` names for completing a row. The checkbox
+    /// fills immediately, but the actual `Db::set_completed` write (and the
+    /// row's removal from the list) waits for the animation to finish, so
+    /// the row has something to animate instead of vanishing on the spot.
+    completing_ids: HashSet<String>,
+    /// The most recent "Completed" toast, if its 10-second window hasn't
+    /// elapsed. Only one at a time — a second completion while one is
+    /// showing simply replaces it, matching the single-slot toast most task
+    /// apps use rather than a queue nobody asked for.
+    undo_toast: Option<UndoToast>,
+    /// Distinguishes a stale dismiss timer from the current toast — see
+    /// `show_undo_toast`.
+    undo_token: u64,
+}
+
+/// What `render_undo_toast` (`app/tasks.rs`) shows and what `Flow::undo`
+/// reverses.
+struct UndoToast {
+    task_id: String,
+    title: gpui::SharedString,
+    origin_view: View,
+    token: u64,
 }
 
 impl Flow {
@@ -154,6 +177,9 @@ impl Flow {
                 selected_task_ids: HashSet::new(),
                 completed_tasks: QueryCache::new(8),
                 completed_expanded: HashSet::new(),
+                completing_ids: HashSet::new(),
+                undo_toast: None,
+                undo_token: 0,
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
