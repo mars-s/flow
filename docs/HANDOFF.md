@@ -93,7 +93,9 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       `docs/main-pane-blank-regression.md` for the full incident writeup —
       worth reading before touching `flow-shell`'s layout or adding any
       new overlay to it.
-- Working tree is clean as of commit `53a744b` unless the "Milestone 1
+  29. `fb4ff18` — Upcoming groups by date (PRD §6.3), with real unit test
+      coverage on the grouping/label logic.
+- Working tree is clean as of commit `fb4ff18` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - The `/loop` (self-paced autonomous mode) that was running earlier in this
@@ -417,12 +419,25 @@ landed which line.
       (including via the toast, or from the Completed section) still
       writes immediately — nothing to animate out.
 
+- [x] **Upcoming groups by date** (`fb4ff18`) — date sections with a
+      weekday-style header ("Tomorrow"/"Friday"/"Aug 23", factored out of
+      `format_schedule` into `day_label` so both share the logic), relying
+      on `list_view`'s existing `ORDER BY scheduled_date ASC` rather than
+      re-sorting client-side. PRD §6.3's "empty days with events still
+      show" isn't implemented — there's no calendar-events data yet to
+      populate an empty day with (Google Calendar glance is a later
+      milestone) — so only task-bearing days appear, correctly for now.
+      First unit tests in `tasks.rs` (3 new, on the pure grouping/label
+      functions, not GPUI element construction).
+- **Not independently visually verified in the running app** — this
+      session's terminal has no screen-recording permission (see the
+      blank-main-pane incident above for the lengths that was chased to);
+      only `cargo check`/`cargo test` and the watcher's successful rebuild
+      confirm this compiles and runs, not that it looks right. Worth an
+      actual look before trusting the visual result.
+
 **Not done yet, in the order they're planned:**
 
-- [ ] Upcoming currently renders as one flat list ordered by date, not
-      PRD §6.3's grouped-by-day sections with weekday headers. Correct
-      data, simplified presentation — a deliberate scope cut to land real
-      data first, not an oversight.
 - [ ] One-level subtasks and task detail expansion (`parent_id` has no UI
       or queries yet) — still deferred, not part of this session's UI
       passes.
