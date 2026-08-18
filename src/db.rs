@@ -602,4 +602,25 @@ mod tests {
         assert_eq!(db.list_view(View::Inbox).expect("list").len(), 0);
         assert_eq!(db.list_view(View::Anytime).expect("list").len(), 0);
     }
+
+    /// PRD §14: a parsed date attached to a captured task does not
+    /// activate it — it stays in Inbox as a review queue, just with its
+    /// schedule already attached. This is exactly what
+    /// `Flow::on_capture_event` (`app.rs`) relies on: it calls
+    /// `schedule(id, Bucket::Inbox, ...)` after `create_task`, never
+    /// `Bucket::Active`.
+    #[test]
+    fn a_scheduled_inbox_task_stays_in_inbox_not_today() {
+        let db = open_test_db();
+        let task = db.create_task("Bring Mya cake").expect("create");
+        let today = chrono::Local::now().date_naive().to_string();
+
+        db.schedule(&task.id, Bucket::Inbox, Some(today), None::<String>)
+            .expect("schedule");
+
+        let inbox = db.list_view(View::Inbox).expect("list");
+        assert_eq!(inbox.len(), 1);
+        assert!(inbox[0].scheduled_date.is_some());
+        assert_eq!(db.list_view(View::Today).expect("list").len(), 0);
+    }
 }

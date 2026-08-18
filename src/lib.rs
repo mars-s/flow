@@ -27,6 +27,7 @@ mod browser;
 mod db;
 mod input;
 mod md;
+mod parse;
 mod platform;
 mod query;
 mod theme;

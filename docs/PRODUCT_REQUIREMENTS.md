@@ -458,6 +458,15 @@ Exit: an isolated k3s install survives a pod restart and a restore drill.
 - **Shared lists and mobile/web clients:** require a real authentication,
   permissions, offline, and conflict-resolution design; they are not a quick
   extension of this single-user v1.
+- **System-wide quick capture:** a global hotkey (e.g. Option+Space) opens a
+  small always-on-top capture window from any app, parses natural language
+  the same way the in-app composer does, and creates the task in the
+  background — likely paired with turning Flow into a menu bar app. Named by
+  the user as the long-term direction for capture (2026-08-18); not started.
+  The in-app sidebar composer (`src/app.rs`'s `open_capture`/
+  `capture_input`) is deliberately built as a reusable, self-contained unit
+  now so this later surface can host the same field and submit logic rather
+  than duplicating it.
 
 ## 14. Open product decisions
 
@@ -465,7 +474,7 @@ Exit: an isolated k3s install survives a pod restart and a restore drill.
 
 ## Confirmed foundation decisions
 
-- Flow is GPL-3.0 open source and will reuse and strip Flow's GPUI shell in
+- Flow is GPL-3.0 open source and will reuse and strip Waku's GPUI shell in
   place. The distributed project must retain its GPL license and upstream
   notices.
 - The first usable build is local-first and NLP-first. Self-hosted Convex and

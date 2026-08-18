@@ -10,7 +10,7 @@ use std::array;
 
 use gpui::{AnyElement, App, Context, Entity, FocusHandle, Window, div, prelude::*};
 
-use crate::db::{Db, Task, View};
+use crate::db::{Bucket, Db, Task, View};
 use crate::input::{ComposerEvent, ComposerInput};
 use crate::query::QueryCache;
 use crate::theme::Theme;
@@ -129,15 +129,42 @@ impl Flow {
             return;
         };
         let Some(db) = self.db.clone() else { return };
-        let title = title.clone();
+
+        // Parsing is pure and cheap (no I/O), so it runs inline rather than
+        // adding a second background hop before the write below.
+        let parsed = crate::parse::parse(title, chrono::Local::now().date_naive());
+        // A title that parsed down to nothing but the date phrase itself
+        // (the user typed only "tomorrow") has no title left; PRD §6.1
+        // requires a nonempty title, so treat that as unrecognized rather
+        // than saving a blank one.
+        let (title, date, time) = if parsed.cleaned_title.is_empty() {
+            (title.clone(), None, None)
+        } else {
+            (parsed.cleaned_title, parsed.date, parsed.time)
+        };
+
         cx.spawn(async move |flow, cx| {
-            let Ok(_task) = cx
+            let created = cx
                 .background_executor()
-                .spawn(async move { db.create_task(title) })
-                .await
-            else {
+                .spawn(async move {
+                    let task = db.create_task(title)?;
+                    // Per PRD §5/§14, a parsed date does not activate the
+                    // task — it stays in Inbox as a review queue, just with
+                    // its schedule already attached.
+                    if date.is_some() || time.is_some() {
+                        db.schedule(
+                            &task.id,
+                            Bucket::Inbox,
+                            date.map(|d| d.to_string()),
+                            time.map(|t| t.format("%H:%M").to_string()),
+                        )?;
+                    }
+                    anyhow::Ok(())
+                })
+                .await;
+            if created.is_err() {
                 return;
-            };
+            }
             let _ = flow.update(cx, |flow, cx| {
                 flow.tasks.invalidate(&View::Inbox);
                 cx.notify();
