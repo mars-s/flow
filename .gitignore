@@ -1,5 +1,4 @@
 target
-.waku-cache
 .DS_Store
 *.log
 .env
@@ -11,3 +10,10 @@ temp/
 .DS_Store
 # CocoIndex Code (ccc)
 /.cocoindex_code/
+
+# Local agent-tool scaffolding and caches, not product source
+/.claude/skills/
+/.codebase-memory/
+/.github/agents/
+/.github/hooks/
+/.github/skills/
