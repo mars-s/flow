@@ -43,9 +43,12 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   7. `9908636` — handoff doc: Milestone 1 checklist added.
   8. `c215709` — Inbox view + sidebar badge wired to the real database.
   9. `e28af28` — handoff doc: Inbox+badge checkpoint noted.
-  10. `e407738` — "+ Capture" now creates real tasks (see "Milestone 1
-      progress" below).
-- Working tree is clean as of commit `e407738` unless the "Milestone 1
+  10. `e407738` — "+ Capture" now creates real tasks.
+  11. `6ecd6db` — handoff doc: capture-wiring checkpoint noted.
+  12. `863d31d` — Today/Upcoming/Anytime/Someday wired to real
+      bucket-filtered data, plus `Db::schedule` (see "Milestone 1 progress"
+      below).
+- Working tree is clean as of commit `863d31d` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 
@@ -63,14 +66,17 @@ real caller of `src/md/`'s syntax highlighting), and a slimmed
 `waku-protocol` crate's source).
 
 `cargo check --workspace` is clean throughout. Test count: 148 as of the
-Milestone 0 commit, 151 as of `2c098f8` (3 added for `db.rs`'s task CRUD).
-Run `cargo test --package flow --lib` to check the current count/status.
+Milestone 0 commit, 147 in `src/app` + `src/db.rs`'s lib tests as of commit
+`863d31d` (`cargo test --package flow --lib`). Run that command to check
+the current count/status rather than trusting this number as it ages.
 
 ## Current UI state
 
 - Sidebar (`src/app/sidebar.rs`, 252px, matches
   `docs/DESIGN_DIRECTION.md`'s navigation-rail spec):
-  - "Flow" wordmark, a "+ Capture" button (inert — no composer exists yet).
+  - "Flow" wordmark, a "+ Capture" row that **works** — click/enter/space or
+    `⌘N` opens a real composer field; Enter creates the task via
+    `Db::create_task`; Escape closes it. See "Milestone 1 progress" below.
   - A **Tasks/Calendar segmented mode switch** — this is a deliberate
     departure from the original PRD's flat 7-destination sidebar list,
     added per explicit user request in this session. Tasks mode lists
@@ -85,15 +91,22 @@ Run `cargo test --package flow --lib` to check the current count/status.
     existing focus-blue-only system). New icons authored this session:
     `inbox`, `calendar`, `layers`, `archive`, `home` (in
     `assets/icons/*.svg`, Lucide-style, registered in `src/assets.rs`).
-- Main pane: **Inbox is real now** (`src/app/tasks.rs`, added in Milestone
-  1 — see that section below), reading/writing the actual database. Every
-  other destination (Today/Upcoming/Anytime/Someday/Calendar/Settings)
-  still renders `components.rs`'s "Coming soon" placeholder. **No subtasks,
-  date picker, or toast/notification component exist yet** — the user
-  showed reference screenshots for these (Things-3-style task row with note
-  + subtask, a "When" date popover with Today/This Evening/calendar
-  grid/Someday/Add Reminder, a toast banner) but explicitly deferred them
-  out of the sidebar-focused UI pass; still future work.
+- Main pane: **all five task views are real** (`src/app/tasks.rs`,
+  `render_task_view`) — Inbox, Today, Upcoming, Anytime, and Someday all
+  read/write the actual database through `db::View`. Today/Upcoming rows
+  show a trailing `YYYY-MM-DD [· HH:mm]` schedule label (unstyled — no
+  "Tomorrow · 8:00 AM" friendly formatting yet, see the gap below). Calendar
+  and Settings still render `components.rs`'s "Coming soon" placeholder.
+  **No subtasks, date picker, or toast/notification component exist yet**
+  — the user showed reference screenshots for these (Things-3-style task
+  row with note + subtask, a "When" date popover with Today/This
+  Evening/calendar grid/Someday/Add Reminder, a toast banner) but
+  explicitly deferred them out of the sidebar-focused UI pass; still
+  future work. There is also currently **no UI path to actually schedule a
+  task** — `Db::schedule` exists and is tested, but nothing in the app
+  calls it yet (no "Process" action on Inbox rows, no date picker); Today/
+  Upcoming/Anytime will stay empty in real use until either that UI or the
+  NLP parser lands.
 - `theme.rs` was retokened this session to actually match
   `docs/DESIGN_DIRECTION.md` (it had drifted — still had Waku's old
   coral-accent palette after the strip). Light theme values were **not**
@@ -192,24 +205,56 @@ landed which line.
       see commit `e407738`'s message. **Known gap**: no confirmation before
       Escape discards unsaved text, since a bare title field has nothing to
       confirm yet; revisit once the composer grows a note field.
-- 145 tests passing as of commit `e407738`; verified in the running debug
+- [x] **All five task views render real, bucket-filtered data**, not just
+      Inbox. `db::View` (Inbox/Today/Upcoming/Anytime/Someday) is the
+      UI-facing address, distinct from the storage-level `Bucket`
+      (Inbox/Active/Someday); Today/Upcoming/Anytime all read
+      `Bucket::Active`, sliced by `scheduled_date` against
+      `chrono::Local::now()`. One generic `render_task_view`/
+      `render_task_row` pair serves all five — `Destination::view()`
+      (`sidebar.rs`) is the single Destination→View mapping everything
+      else routes through. Today/Upcoming rows show a trailing
+      `scheduled_date`/`scheduled_time` label (raw, unformatted).
+- [x] `Db::schedule(id, bucket, date, time)` — moves a task between
+      placements with an optional date/time, PRD §5's "Move to active" /
+      "Schedule and activate" actions. Two tests move a real task through
+      Anytime → Today → Upcoming by date (against real `chrono` dates, not
+      fixed strings) and confirm Someday stays isolated. **Nothing in the
+      UI calls this yet** — see the gap noted just below.
+- 147 tests passing as of commit `863d31d`; verified in the running debug
   app, not just `cargo check` (dev watcher rebuilt clean, process alive,
   matches this repo's `AGENTS.md` validation rule).
 
 **Not done yet, in the order they're planned:**
 
+- [ ] **No UI path to schedule a task.** `Db::schedule` exists and is
+      tested but nothing calls it — no "Process" action on an Inbox row
+      (PRD §6.3: "Today, Anytime, Someday, and schedule"), no date picker.
+      Until this or the NLP parser lands, Today/Upcoming/Anytime will
+      always be empty in real use — everything captured stays in Inbox
+      forever. This is probably the single highest-value next step: it's
+      what turns the four other task views from "correctly wired but
+      always empty" into something a real user can actually reach.
 - [ ] A proper completion-collapse animation + Undo toast, per
       `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
       collapse... available via Undo" spec — currently the row just
       vanishes on refetch, no collapse motion, no undo.
-- [ ] Today/Upcoming/Anytime/Someday views — bucket-filtering logic exists
-      in `db.rs` (`Bucket::Active` + date comparison, per PRD §5's table)
-      but no view renders them yet.
+- [ ] Friendly schedule formatting ("Tomorrow · 8:00 AM" per PRD §6.4)
+      instead of Today/Upcoming's current raw `scheduled_date`/
+      `scheduled_time` strings — naturally falls out of the NLP parser work
+      below, since that's the piece that owns date presentation throughout
+      the app; not worth a separate formatter before then.
+- [ ] Upcoming currently renders as one flat list ordered by date, not
+      PRD §6.3's grouped-by-day sections with weekday headers. Correct
+      data, simplified presentation — a deliberate scope cut to land real
+      data first, not an oversight.
 - [ ] One-level subtasks, task detail expansion, the task-row/date-picker/
       toast components the user showed reference screenshots for earlier in
       this session (explicitly deferred out of the sidebar-focused UI pass).
 - [ ] Deterministic local NLP date/time parser (PRD §6.4) — not started;
-      currently the biggest single unstarted piece of Milestone 1.
+      currently the biggest single unstarted piece of Milestone 1. Also the
+      dependency that unblocks the "no UI path to schedule" gap above most
+      completely (vs. a hand-built date picker as a stopgap).
 - [ ] Update `docs/PRODUCT_REQUIREMENTS.md` §9 (Convex → Turso) and §5 (IA
       diagram → Tasks/Calendar mode switch) so the PRD stops contradicting
       the actual code and this session's decisions. Low-risk, low-effort,
