@@ -91,18 +91,24 @@ icons, typography, spacing, and colors.
 ```text
 ┌──────────────────────┬─────────────────────────────────────────────┐
 │ Flow                 │  [view icon]  View title              ⌘K   │
-│ + New task           │                                             │
+│ + Capture            │                                             │
 │                      │  Calendar glance (where relevant)          │
-│ Inbox            3   │  ─────────────────────────────────────────  │
-│ Today                │  Task rows / date sections                  │
+│ [Tasks]  Calendar    │  ─────────────────────────────────────────  │
+│ Inbox            3   │  Task rows / date sections                  │
+│ Today                │                                             │
 │ Upcoming             │                                             │
 │ Anytime              │                                             │
 │ Someday              │                                             │
 │                      │                                             │
-│ Calendar             │                                             │
 │ Settings             │                                             │
 └──────────────────────┴─────────────────────────────────────────────┘
 ```
+
+The sidebar is a Tasks/Calendar mode switch, not a flat seven-destination
+list: Tasks mode lists the five task views below it; Calendar mode shows no
+list of its own. Settings is a single row pinned to the bottom, reachable
+from either mode. (This departs from an earlier flat-list draft of this
+diagram, per an explicit design decision — see `docs/HANDOFF.md`.)
 
 The navigation badge counts only uncompleted Inbox tasks. Completed items are
 hidden from primary views by default but remain available in a later Logbook
@@ -121,10 +127,16 @@ These are mutually exclusive for an incomplete task:
 | Someday | `bucket = someday` | Intentionally deferred work, with or without a future date hidden until activated. |
 
 Inbox is a deliberate state rather than an accidental absence of data. Moving
-an Inbox item to Today/Upcoming/Anytime changes its bucket to `active`.
-Scheduling an Inbox task does **not** silently remove it from Inbox; the user
-must explicitly “Move to active” or use the parsed-date prompt’s “Schedule and
-activate” action. This avoids losing unprocessed capture.
+an Inbox item to Today/Upcoming/Anytime changes its bucket to `active`,
+whether via the detail card's Today/Anytime/Someday picker, its free-text
+"Schedule…" field, or Capture's own NLP date parsing. **Revision:** an
+earlier draft of this section held that Capture's parsed-date path should
+*not* activate a task — that a date attached at capture time should still
+require an explicit "Move to active" afterward, to avoid losing unprocessed
+capture. That was overridden by explicit user instruction: a task with a
+parsed date now activates immediately and goes straight to Today/Upcoming,
+matching every other scheduling path in the app rather than being a special
+case. The code (`Flow::on_capture_event`) is the source of truth here.
 
 ## 6. Functional requirements
 
@@ -309,44 +321,51 @@ clean-room GPUI shell rather than copying Flow code.
 
 ### Backend
 
-Use a local task store for the first usable build. It keeps capture and
-deterministic natural-language date parsing free of setup friction. Adopt
-self-hosted Convex after that interaction model is proven: it supplies
-TypeScript schema, queries, mutations, generated client types, reactive
-subscriptions, and server functions in one place. Convex's self-hosted backend
-and dashboard run as containers; start with its persisted SQLite volume, then
-migrate its durable store to PostgreSQL and object storage when deploying on
-k3s. Keep application data behind a small repository boundary so GPUI code
-does not depend on storage details.
+**Revision (2026-08-18):** this section originally named self-hosted Convex
+as the sync-phase plan. That was superseded before Milestone 1 started — see
+`docs/HANDOFF.md`'s "Decisions made this session" and `docs/turso.md` for the
+full research. Convex is server-authoritative-over-websocket, not
+embedded/local, and still requires writing TypeScript functions regardless of
+client language; neither matches "really fast, concurrent, local" with
+sync added later and no backend code to write. **Turso** — a from-scratch
+Rust rewrite of SQLite, not a `libsql` fork — is the actual local store
+(`src/db.rs`) and the named plan for the later sync phase, via Turso's own
+`sync` feature (embedded replicas syncing to Turso Cloud or a self-hosted
+sync server) rather than a second backend service.
+
+Use a local Turso database for the first usable build (already shipped, not
+aspirational — see `src/db.rs`). It keeps capture and deterministic
+natural-language date parsing free of setup friction, and needs no server
+process, container, or schema-migration tool beyond Turso's own
+embedded engine. Adopt Turso Sync after that interaction model is proven,
+once multi-device access is a real requirement rather than a speculative one.
+Keep application data behind a small repository boundary (`Db`, in `src/db.rs`)
+so GPUI code does not depend on storage details — already the case.
 
 The first deployment is a single-user install. Add authentication before
-exposing it beyond a trusted network. OAuth callback URLs, Convex deployment
-keys, and calendar refresh tokens are secrets: store them in Kubernetes Secrets
-or an external secret store, never in the repository or client state.
+exposing it beyond a trusted network, once Turso Sync is actually in the
+picture. OAuth callback tokens and calendar refresh tokens are secrets: store
+them in Kubernetes Secrets or an external secret store, never in the
+repository or client state, once k3s deployment is real.
 
 ### Repository target after stripping
 
 ```text
 src/
   app/                 # Flow shell, sidebar, views, task components
+  db.rs                # local Turso store, one dedicated OS thread
   main.rs              # native entrypoint retained from Flow foundation
-convex/
-  schema.ts
-  tasks.ts
-  calendar.ts
-  auth.ts
 docs/
   PRODUCT_REQUIREMENTS.md
 deploy/
-  compose/             # local Convex and Flow development
   k8s/                 # later: namespace, secrets references, ingress, PVCs
 ```
 
 The desired executable path is intentionally short:
 
 ```text
-GPUI view → typed Flow client → Convex function → Convex storage
-                         └→ calendar sync function → cached event rows
+GPUI view → Db handle (src/db.rs) → dedicated DB thread → local Turso file
+                         └→ calendar sync (later) → cached event rows
 ```
 
 There is no separate REST API, ORM, custom websocket server, message queue, or
@@ -424,13 +443,14 @@ Use a small fixture-backed calendar-glance component only to prove layout.
 
 Exit: all Task core and Parsing acceptance criteria pass locally.
 
-### Milestone 2 — Convex sync
+### Milestone 2 — Turso Sync
 
-Introduce the Convex schema/functions and replace local task persistence with
-typed reactive mutations and queries. Add idempotency and the audit rows.
+Turn on Turso's `sync` feature (embedded replicas, per `docs/turso.md` §5)
+instead of introducing a second backend service. Add idempotency and audit
+rows for what sync needs to reconcile.
 
 Exit: two desktop instances for the same account converge after a mutation;
-the app remains useful when the server is temporarily unavailable.
+the app remains useful when the sync endpoint is temporarily unavailable.
 
 ### Milestone 3 — Google calendar glance
 
@@ -441,9 +461,8 @@ Exit: Calendar acceptance criteria pass against a test calendar.
 
 ### Milestone 4 — k3s deployment
 
-Package Flow, self-hosted Convex backend/dashboard, persistent volume strategy,
-TLS ingress, backup/restore procedure, and secret injection. Move storage to
-PostgreSQL only when the SQLite volume is no longer operationally sufficient.
+Package Flow, a Turso Sync endpoint (self-hosted or Turso Cloud), persistent
+volume strategy, TLS ingress, backup/restore procedure, and secret injection.
 
 Exit: an isolated k3s install survives a pod restart and a restore drill.
 
@@ -470,20 +489,25 @@ Exit: an isolated k3s install survives a pod restart and a restore drill.
 
 ## 14. Open product decisions
 
-1. Should Inbox tasks with a parsed date be activated automatically on save?
+1. ~~Should Inbox tasks with a parsed date be activated automatically on
+   save?~~ **Resolved 2026-08-19, by explicit user instruction: yes.** A
+   task with a parsed date now activates immediately and moves to
+   Today/Upcoming, rather than staying in Inbox with the schedule merely
+   attached. This PRD had recommended **no** (preserve Inbox as a review
+   queue) when the question was still open; that recommendation is
+   superseded, not the current behavior — see §5's "Canonical placement
+   rules" and `Flow::on_capture_event` for what actually ships.
 
 ## Confirmed foundation decisions
 
 - Flow is GPL-3.0 open source and will reuse and strip Waku's GPUI shell in
   place. The distributed project must retain its GPL license and upstream
   notices.
-- The first usable build is local-first and NLP-first. Self-hosted Convex and
+- The first usable build is local-first and NLP-first. Turso Sync and
   read-only Google Calendar follow after task capture, scheduling, and
   subtasks feel right.
-   This PRD recommends **no**: preserve Inbox as a review queue.
 
 ## 15. Implementation references
 
 - [Flow source and GPL-3.0-only license](https://github.com/egoist/waku)
-- [Convex self-hosting documentation](https://docs.convex.dev/self-hosting)
-- [Convex self-hosted Docker deployment guide](https://github.com/get-convex/convex-backend/blob/main/self-hosted/README.md)
+- [Turso](https://github.com/tursodatabase/turso) and its [Sync usage docs](https://docs.turso.tech/sync/usage) — see `docs/turso.md` for the full research this project did against the actual crate
