@@ -58,6 +58,11 @@ pub struct Flow {
     /// state stable. PRD §6.1's title-only capture; note/schedule/parent
     /// fields are a later Milestone 1 step (see docs/HANDOFF.md).
     capture_input: Entity<ComposerInput>,
+    /// The Inbox row currently showing its inline "Process" actions
+    /// (Today/Anytime/Someday), if any — PRD §6.3's "inline Process action"
+    /// on Inbox. Only one row processes at a time, matching how
+    /// `capturing` gates the sidebar to one open field.
+    processing_task_id: Option<String>,
 }
 
 impl Flow {
@@ -89,6 +94,7 @@ impl Flow {
                 tasks: QueryCache::new(8),
                 capturing: false,
                 capture_input,
+                processing_task_id: None,
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
