@@ -95,9 +95,29 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       new overlay to it.
   29. `fb4ff18` — Upcoming groups by date (PRD §6.3), with real unit test
       coverage on the grouping/label logic.
-- Working tree is clean as of commit `fb4ff18` unless the "Milestone 1
+  30. `acf3e55` — subtask persistence (`Db::create_subtask`/`list_subtasks`,
+      one-level ceiling enforced at the DB layer, every list_view/
+      list_completed query now filters `parent_id IS NULL`). No UI yet.
+  31. `55e5e0a` — four user-reported fixes/changes in one commit (see
+      "Milestone 1 progress" below for the itemized list): the
+      completed-cache invalidation bug, Capture activating a task the
+      moment it parses a date (an explicit PRD §14 override), the
+      redesigned schedule picker (NLP field focused immediately instead of
+      gated behind a button), and a "Clear" button on the expanded
+      "Completed" section. Also carries in-progress, not-yet-wired subtask
+      UI scaffolding (composer + event handler, no render changes).
+- Working tree is clean as of commit `55e5e0a` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
+- **A `/loop` (self-paced, 5-minute interval, cron job `57c760d9`) is
+  running as of 2026-08-19**, started when the user was heading to sleep
+  and asked to keep working through the Milestone 1 backlog
+  autonomously. It auto-expires after 7 days. This session's terminal has
+  no screen-recording permission (see the blank-main-pane incident
+  above) — every increment during the loop is verified by
+  `cargo check`/`cargo test` and the watcher's successful rebuild, not by
+  an actual look at the running app; say so plainly rather than claiming
+  visual verification that didn't happen.
 - The `/loop` (self-paced autonomous mode) that was running earlier in this
   session was stopped once the user started actively steering with live
   feedback (reference screenshots, specific complaints) — direct
@@ -436,11 +456,45 @@ landed which line.
       confirm this compiles and runs, not that it looks right. Worth an
       actual look before trusting the visual result.
 
+- [x] **Fixed: deleting a completed task left it stuck visible in
+      "Completed" forever** (`55e5e0a`, user-reported). Root cause:
+      `invalidate_all_views` only ever cleared the `tasks` cache, never
+      `completed_tasks` — now routes through `invalidate_view` (which
+      already clears both) instead of duplicating the logic, so every
+      call site through it (delete, bulk-delete, process, bulk-process)
+      is fixed at once.
+- [x] **Changed (explicit user correction, overrides PRD §14): Capture
+      activates a task the instant it parses a date** (`55e5e0a`) — a
+      task with a recognized date goes straight to Today/Upcoming instead
+      of staying in Inbox with the schedule merely attached. The PRD text
+      itself hasn't been updated to match yet (see the doc-drift item
+      below) — the code is now the source of truth here, not the PRD.
+- [x] **Redesigned the schedule picker** (`55e5e0a`) — opening it focuses
+      the free-text NLP field immediately instead of showing
+      Today/Anytime/Someday/"Schedule…" as buttons first with the field
+      gated behind a second click. Today/Anytime/Someday now render as a
+      quick-pick list under the always-visible field.
+- [x] **"Clear" button on the expanded "Completed" section** (`55e5e0a`,
+      user-requested) — soft-deletes every completed task currently shown
+      there.
+- **Subtasks are in progress, not done** — backend landed and is tested
+      (`acf3e55`: `Db::create_subtask`/`list_subtasks`, one-level ceiling
+      enforced server-side, every view query filters `parent_id IS NULL`
+      so a subtask never leaks in as an independent top-level row).
+      `55e5e0a` added the composer/event plumbing (`subtask_input`,
+      `Flow::open_add_subtask`/`on_subtask_event`, `pending_complete_confirm`
+      state for PRD §6.2's "complete parent with open children" confirm)
+      but **no render changes yet** — none of this is reachable from the
+      UI. Next increment: the actual "Subtasks" section in
+      `render_detail_card` (indented rows with a slender left guide per
+      `docs/DESIGN_DIRECTION.md`, the add-subtask row, a progress count,
+      and the inline complete-with-children confirm). Scope cut already
+      decided: the compact list row will *not* show subtask progress —
+      only fetched/shown once a task is expanded, to avoid an N+1 fetch
+      on every visible row (`CLAUDE.md`'s render-path I/O rule).
+
 **Not done yet, in the order they're planned:**
 
-- [ ] One-level subtasks and task detail expansion (`parent_id` has no UI
-      or queries yet) — still deferred, not part of this session's UI
-      passes.
 - [ ] **Notes don't actually persist/work right now** — user-reported,
       not yet diagnosed. `Db::set_note` exists and is tested at the DB
       layer, and the note field saves on blur (`Flow::on_note_blur`), but
@@ -450,8 +504,10 @@ landed which line.
 - [ ] Update `docs/PRODUCT_REQUIREMENTS.md` §9 (Convex → Turso, still
       describes the old self-hosted-Convex sync plan throughout — Milestone
       2's description, the deployment target, the architecture diagram, the
-      reference links at the bottom) and §5's IA diagram (still shows the
-      flat 7-destination sidebar, not the Tasks/Calendar mode switch) so
+      reference links at the bottom), §5's IA diagram (still shows the
+      flat 7-destination sidebar, not the Tasks/Calendar mode switch), and
+      **§14** (still says "a parsed date does not activate the task" —
+      `55e5e0a` made the opposite true by explicit user instruction) so
       the PRD stops contradicting the actual code and this session's
       decisions. Low-risk, low-effort, just hasn't been done — do this
       whenever convenient, doesn't block anything else. (One stray "Flow's
