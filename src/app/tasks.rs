@@ -11,7 +11,7 @@ use gpui::{
 };
 
 use super::Flow;
-use super::UndoToast;
+use super::{UndoKind, UndoToast};
 use super::sidebar::Destination;
 use crate::db::{Bucket, Task, View};
 use crate::input::ComposerInput;
@@ -262,21 +262,30 @@ impl Flow {
             let _ = flow.update(cx, |flow, cx| {
                 flow.completing_ids.remove(&id);
                 flow.write_completed(id.clone(), true, origin_view, cx);
-                flow.show_undo_toast(id, title, origin_view, cx);
+                flow.show_undo_toast(id, title, origin_view, UndoKind::Complete, cx);
             });
         })
         .detach();
     }
 
-    /// Shows (or replaces) the single-slot "Completed" toast and schedules
-    /// its own dismissal. `token` distinguishes this toast's timer from an
-    /// earlier one still in flight — without it, completing a second task
-    /// inside the first one's 10-second window would let the first timer
-    /// clear the second toast early.
-    fn show_undo_toast(&mut self, task_id: String, title: String, origin_view: View, cx: &mut Context<Self>) {
+    /// Shows (or replaces) the single-slot toast and schedules its own
+    /// dismissal — shared by completion and deletion (PRD §6.1 names the
+    /// 10-second window for deletion specifically; completion's own spec
+    /// doesn't state a different one, so it reuses it). `token`
+    /// distinguishes this toast's timer from an earlier one still in
+    /// flight — without it, a second action inside the first one's window
+    /// would let the first timer clear the second toast early.
+    fn show_undo_toast(
+        &mut self,
+        task_id: String,
+        title: String,
+        origin_view: View,
+        kind: UndoKind,
+        cx: &mut Context<Self>,
+    ) {
         self.undo_token += 1;
         let token = self.undo_token;
-        self.undo_toast = Some(UndoToast { task_id, title: title.into(), origin_view, token });
+        self.undo_toast = Some(UndoToast { task_id, title: title.into(), origin_view, token, kind });
         cx.notify();
         cx.spawn(async move |flow, cx| {
             cx.background_executor().timer(UNDO_TOAST_DURATION).await;
@@ -290,11 +299,32 @@ impl Flow {
         .detach();
     }
 
-    /// The toast's "Undo" button: reopens the task and dismisses the toast.
-    fn undo_complete(&mut self, cx: &mut Context<Self>) {
+    /// The toast's "Undo" button: reverses whichever action showed it
+    /// (reopens a completed task, or restores a deleted one) and dismisses
+    /// the toast.
+    fn undo_last_action(&mut self, cx: &mut Context<Self>) {
         let Some(toast) = self.undo_toast.take() else { return };
         cx.notify();
-        self.write_completed(toast.task_id, false, toast.origin_view, cx);
+        match toast.kind {
+            UndoKind::Complete => self.write_completed(toast.task_id, false, toast.origin_view, cx),
+            UndoKind::Delete => {
+                let Some(db) = self.db.clone() else { return };
+                cx.spawn(async move |flow, cx| {
+                    let result = cx
+                        .background_executor()
+                        .spawn(async move { db.restore_task(toast.task_id) })
+                        .await;
+                    if result.is_err() {
+                        return;
+                    }
+                    let _ = flow.update(cx, |flow, cx| {
+                        flow.invalidate_all_views();
+                        cx.notify();
+                    });
+                })
+                .detach();
+            }
+        }
     }
 
     /// The detail card's checkbox, when the task has subtasks: gates on
@@ -491,21 +521,19 @@ impl Flow {
     /// `docs/DESIGN_DIRECTION.md`'s task detail spec names "delete" as an
     /// exposed action. Soft-deletes via `Db::delete_task`, which every
     /// `list_view` query already filters out.
-    fn delete_task(&mut self, id: String, cx: &mut Context<Self>) {
+    fn delete_task(&mut self, id: String, title: String, origin_view: View, cx: &mut Context<Self>) {
         let Some(db) = self.db.clone() else { return };
         self.set_expanded_task(None, cx);
         self.schedule_picker_open = false;
         cx.spawn(async move |flow, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async move { db.delete_task(id) })
+                .spawn(async move { db.delete_task(id.clone()).map(|()| id) })
                 .await;
-            if result.is_err() {
-                return;
-            }
+            let Ok(id) = result else { return };
             let _ = flow.update(cx, |flow, cx| {
                 flow.invalidate_all_views();
-                cx.notify();
+                flow.show_undo_toast(id, title, origin_view, UndoKind::Delete, cx);
             });
         })
         .detach();
@@ -618,6 +646,10 @@ impl Flow {
     pub(super) fn render_undo_toast(&mut self, theme: Theme, cx: &mut Context<Self>) -> Option<AnyElement> {
         let toast = self.undo_toast.as_ref()?;
         let title = toast.title.clone();
+        let verb = match toast.kind {
+            UndoKind::Complete => "Completed",
+            UndoKind::Delete => "Deleted",
+        };
 
         Some(
             div()
@@ -651,7 +683,7 @@ impl Flow {
                             div()
                                 .text_size(px(12.5))
                                 .text_color(theme.text)
-                                .child(format!("Completed \u{201c}{title}\u{201d}")),
+                                .child(format!("{verb} \u{201c}{title}\u{201d}")),
                         )
                         .child(
                             div()
@@ -664,7 +696,7 @@ impl Flow {
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .text_color(theme.accent)
                                 .hover(|el| el.bg(theme.overlay))
-                                .on_click(cx.listener(|flow, _, _, cx| flow.undo_complete(cx)))
+                                .on_click(cx.listener(|flow, _, _, cx| flow.undo_last_action(cx)))
                                 .child("Undo"),
                         ),
                 )
@@ -1293,6 +1325,7 @@ fn render_detail_card(
     let title_for_complete = task.title.clone();
     let has_open_subtasks_for_complete = !open_subtask_ids.is_empty();
     let id_for_delete = task.id.clone();
+    let title_for_delete = task.title.clone();
     let id_for_collapse = task.id.clone();
     let note_for_collapse = task.note.clone();
     let placement = placement_label(task);
@@ -1440,7 +1473,7 @@ fn render_detail_card(
                         theme,
                     )
                     .on_click(cx.listener(move |flow, _, _, cx| {
-                        flow.delete_task(id_for_delete.clone(), cx);
+                        flow.delete_task(id_for_delete.clone(), title_for_delete.clone(), origin_view, cx);
                         cx.stop_propagation();
                     })),
                 ),

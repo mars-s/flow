@@ -140,6 +140,17 @@ struct UndoToast {
     title: gpui::SharedString,
     origin_view: View,
     token: u64,
+    kind: UndoKind,
+}
+
+/// What a toast's Undo button actually reverses — completion and deletion
+/// share the toast UI and the 10-second dismiss timer (PRD §6.1 names that
+/// window for deletion specifically; completion's own spec doesn't state a
+/// different one), but need different DB writes to undo.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum UndoKind {
+    Complete,
+    Delete,
 }
 
 impl Flow {

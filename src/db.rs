@@ -165,6 +165,10 @@ enum Command {
         id: String,
         reply: mpsc::Sender<Result<()>>,
     },
+    RestoreTask {
+        id: String,
+        reply: mpsc::Sender<Result<()>>,
+    },
     CreateSubtask {
         parent_id: String,
         title: String,
@@ -323,6 +327,22 @@ impl Db {
         rx.recv().context("database thread dropped the reply")?
     }
 
+    /// Clears `deleted_at`, the undo half of `delete_task` — PRD §6.1:
+    /// "Deletion shows an undo toast for 10 seconds; storage uses a
+    /// soft-delete timestamp until a future permanent-delete policy
+    /// exists." A soft-deleted row was never actually removed, so undo is
+    /// just clearing the same column `delete_task` set.
+    pub fn restore_task(&self, id: impl Into<String>) -> Result<()> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::RestoreTask {
+                id: id.into(),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
     /// Adds a subtask under `parent_id`. Rejects a parent that is itself a
     /// subtask — `docs/PRODUCT_REQUIREMENTS.md` §6.2's one-level ceiling
     /// ("a subtask cannot have children in v1"), enforced here rather than
@@ -435,6 +455,9 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             }
             Command::DeleteTask { id, reply } => {
                 let _ = reply.send(runtime.block_on(delete_task(&conn, id)));
+            }
+            Command::RestoreTask { id, reply } => {
+                let _ = reply.send(runtime.block_on(restore_task(&conn, id)));
             }
             Command::CreateSubtask {
                 parent_id,
@@ -701,6 +724,17 @@ async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
     Ok(())
 }
 
+async fn restore_task(conn: &turso::Connection, id: String) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE id = ?2",
+        (now, id),
+    )
+    .await
+    .context("restoring task")?;
+    Ok(())
+}
+
 async fn create_subtask(conn: &turso::Connection, parent_id: String, title: String) -> Result<Task> {
     let mut parent_rows = conn
         .query(
@@ -931,6 +965,19 @@ mod tests {
 
         db.delete_task(&task.id).expect("delete should succeed");
         assert_eq!(db.list_view(View::Inbox).expect("list").len(), 0);
+    }
+
+    #[test]
+    fn restore_task_undoes_a_delete() {
+        let db = open_test_db();
+        let task = db.create_task("Bring it back").expect("create");
+        db.delete_task(&task.id).expect("delete should succeed");
+        assert_eq!(db.list_view(View::Inbox).expect("list").len(), 0);
+
+        db.restore_task(&task.id).expect("restore should succeed");
+        let inbox = db.list_view(View::Inbox).expect("list");
+        assert_eq!(inbox.len(), 1);
+        assert_eq!(inbox[0].id, task.id);
     }
 
     #[test]
