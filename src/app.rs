@@ -63,6 +63,15 @@ pub struct Flow {
     /// on Inbox. Only one row processes at a time, matching how
     /// `capturing` gates the sidebar to one open field.
     processing_task_id: Option<String>,
+    /// Whether `processing_task_id`'s row is showing the free-text
+    /// "Schedule…" field instead of the three quick buttons. PRD §6.3
+    /// names "schedule" (an arbitrary date) as the fourth Process option;
+    /// rather than building a calendar widget, this reuses `parse.rs` on
+    /// whatever the user types, the same way Capture does.
+    scheduling: bool,
+    /// A single long-lived composer for the "Schedule…" field, same
+    /// reuse-not-recreate reasoning as `capture_input`.
+    schedule_input: Entity<ComposerInput>,
 }
 
 impl Flow {
@@ -85,6 +94,11 @@ impl Flow {
             });
             cx.subscribe(&capture_input, Self::on_capture_event).detach();
 
+            let schedule_input = cx.new(|cx| {
+                ComposerInput::new(window, cx).placeholder(tr!("input.schedule_when"))
+            });
+            cx.subscribe(&schedule_input, Self::on_schedule_event).detach();
+
             Self {
                 destination: Destination::Inbox,
                 new_task_focus: cx.focus_handle(),
@@ -95,6 +109,8 @@ impl Flow {
                 capturing: false,
                 capture_input,
                 processing_task_id: None,
+                scheduling: false,
+                schedule_input,
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
@@ -181,11 +197,78 @@ impl Flow {
         // cleared itself (ComposerInput::enter's Composer-mode branch).
     }
 
+    /// The Process row's "Schedule…" button: swaps the three quick buttons
+    /// for a free-text field, focused, for the row already in
+    /// `processing_task_id`.
+    pub(super) fn open_schedule_field(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.scheduling = true;
+        let focus = self.schedule_input.read(cx).focus();
+        window.focus(&focus, cx);
+        cx.notify();
+    }
+
+    fn on_schedule_event(
+        &mut self,
+        _input: Entity<ComposerInput>,
+        event: &ComposerEvent,
+        cx: &mut Context<Self>,
+    ) {
+        let ComposerEvent::Submit(text) = event else {
+            return;
+        };
+        let Some(id) = self.processing_task_id.clone() else {
+            return;
+        };
+        let Some(db) = self.db.clone() else { return };
+
+        let parsed = crate::parse::parse(text, chrono::Local::now().date_naive());
+        // Nothing recognized: leave the field open so the user can correct
+        // it, same as Capture leaves an unrecognized phrase in the title
+        // rather than guessing.
+        let Some(date) = parsed.date else { return };
+        let time = parsed.time;
+
+        self.scheduling = false;
+        self.processing_task_id = None;
+        self.schedule_input.update(cx, |input, cx| input.clear(cx));
+
+        cx.spawn(async move |flow, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    db.schedule(
+                        id,
+                        Bucket::Active,
+                        Some(date.to_string()),
+                        time.map(|t| t.format("%H:%M").to_string()),
+                    )
+                })
+                .await;
+            if result.is_err() {
+                return;
+            }
+            let _ = flow.update(cx, |flow, cx| {
+                for view in [View::Inbox, View::Today, View::Upcoming, View::Anytime] {
+                    flow.tasks.invalidate(&view);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn handle_new_task_action(&mut self, _: &NewTask, window: &mut Window, cx: &mut Context<Self>) {
         self.open_capture(window, cx);
     }
 
     fn handle_cancel_turn_action(&mut self, _: &CancelTurn, window: &mut Window, cx: &mut Context<Self>) {
+        if self.scheduling || self.processing_task_id.is_some() {
+            self.scheduling = false;
+            self.processing_task_id = None;
+            self.schedule_input.update(cx, |input, cx| input.clear(cx));
+            cx.notify();
+            return;
+        }
         self.close_capture(window, cx);
     }
 

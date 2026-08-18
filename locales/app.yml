@@ -115,6 +115,8 @@ input.do_anything:
   en: Do anything…
 input.capture_a_task:
   en: Capture a task…
+input.schedule_when:
+  en: When? (e.g. "tomorrow 5pm")
 input.detected_automatically:
   en: Detected automatically
 input.find:

@@ -5,13 +5,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    Animation, AnimationExt, AnyElement, Context, IntoElement, ParentElement, Styled, Window,
-    div, ease_out_quint, prelude::*, px,
+    Animation, AnimationExt, AnyElement, Context, Entity, IntoElement, ParentElement, Styled,
+    Window, div, ease_out_quint, prelude::*, px,
 };
 
 use super::Flow;
 use super::sidebar::Destination;
 use crate::db::{Bucket, Task, View};
+use crate::input::ComposerInput;
 use crate::query::Query;
 use crate::theme::Theme;
 
@@ -19,10 +20,10 @@ use crate::theme::Theme;
 /// too since nothing in the direction doc distinguishes them.
 const ROW_TRANSITION: Duration = Duration::from_millis(180);
 
-/// The three quick destinations PRD §6.3 names for Inbox's inline "Process"
-/// action. "Schedule" (an arbitrary date, not just "today") is the fourth
-/// option the PRD names but needs a real date picker — not built yet, see
-/// docs/HANDOFF.md.
+/// The three quick fixed destinations PRD §6.3 names for Inbox's inline
+/// "Process" action. The fourth, "Schedule" (an arbitrary date), is a
+/// free-text field parsed by `parse.rs` rather than one of these — see
+/// `render_process_row`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ProcessTarget {
     Today,
@@ -181,8 +182,13 @@ impl Flow {
         }
 
         let processing = self.processing_task_id.clone();
+        let scheduling = self.scheduling;
+        let schedule_input = self.schedule_input.clone();
         match self.read_view(view, cx) {
-            Query::Ready(tasks) => task_list(view, tasks, processing, theme, cx).into_any_element(),
+            Query::Ready(tasks) => {
+                task_list(view, tasks, processing, scheduling, schedule_input, theme, cx)
+                    .into_any_element()
+            }
             Query::Pending | Query::Missing(_) => loading_skeleton(theme).into_any_element(),
         }
     }
@@ -192,6 +198,8 @@ fn task_list(
     view: View,
     tasks: Arc<Vec<Task>>,
     processing: Option<String>,
+    scheduling: bool,
+    schedule_input: Entity<ComposerInput>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -215,7 +223,17 @@ fn task_list(
         .gap(px(1.0))
         .children(tasks.iter().cloned().map(|task| {
             let is_processing = processable && processing.as_deref() == Some(task.id.as_str());
-            render_task_row(task, view, show_schedule, processable, is_processing, theme, cx)
+            render_task_row(
+                task,
+                view,
+                show_schedule,
+                processable,
+                is_processing,
+                scheduling,
+                schedule_input.clone(),
+                theme,
+                cx,
+            )
         }))
         .into_any_element()
 }
@@ -226,6 +244,8 @@ fn render_task_row(
     show_schedule: bool,
     processable: bool,
     is_processing: bool,
+    scheduling: bool,
+    schedule_input: Entity<ComposerInput>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -294,15 +314,30 @@ fn render_task_row(
                 ),
         )
         .when(is_processing, |column| {
-            column.child(render_process_row(task.id, theme, cx))
+            column.child(render_process_row(task.id, scheduling, schedule_input, theme, cx))
         })
         .into_any_element()
 }
 
 /// PRD §6.3's "inline 'Process' action" on an Inbox row: three quick
-/// destinations. "Schedule" (an arbitrary date) needs a real date picker
-/// and isn't built yet — see docs/HANDOFF.md.
-fn render_process_row(task_id: String, theme: Theme, cx: &mut Context<Flow>) -> AnyElement {
+/// destinations plus "Schedule…", which swaps in a free-text field parsed
+/// the same way Capture parses a title (see `Flow::on_schedule_event`,
+/// `app.rs`) rather than a calendar widget.
+fn render_process_row(
+    task_id: String,
+    scheduling: bool,
+    schedule_input: Entity<ComposerInput>,
+    theme: Theme,
+    cx: &mut Context<Flow>,
+) -> AnyElement {
+    if scheduling {
+        return div()
+            .pl(px(35.0))
+            .pb(px(6.0))
+            .child(schedule_input)
+            .into_any_element();
+    }
+
     div()
         .flex()
         .items_center()
@@ -327,6 +362,23 @@ fn render_process_row(task_id: String, theme: Theme, cx: &mut Context<Flow>) -> 
                 }))
                 .child(target.label())
         }))
+        .child(
+            div()
+                .id(gpui::SharedString::from(format!("process-{task_id}-schedule")))
+                .px(px(8.0))
+                .py(px(3.0))
+                .rounded(px(5.0))
+                .cursor_pointer()
+                .text_size(px(11.5))
+                .text_color(theme.text_secondary)
+                .bg(theme.overlay)
+                .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
+                .on_click(cx.listener(move |flow, _, window, cx| {
+                    flow.open_schedule_field(window, cx);
+                    cx.stop_propagation();
+                }))
+                .child("Schedule…"),
+        )
         .into_any_element()
 }
 
