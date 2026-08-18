@@ -1,23 +1,32 @@
-//! The fixed navigation rail: the seven Flow destinations plus "+ New task".
+//! The fixed navigation rail: a Tasks/Calendar mode switch, the five task
+//! views inside Tasks mode, and Settings pinned to the bottom.
+//!
+//! Follows docs/DESIGN_DIRECTION.md's navigation-rail spec: 252px fixed
+//! width, icon-plus-label rows, Inbox's count in a soft pill aligned right,
+//! the active row filled with a focus-soft background. Tasks and Calendar
+//! are Flow's two whole-app modes, switched with a segmented control at the
+//! top of the rail; Settings is a single row pinned to the bottom, reachable
+//! from either mode.
 //!
 //! Milestone 0 has no task store yet, so selecting a destination only swaps
 //! the main pane's placeholder (see `render.rs`/`components.rs`). Every row
 //! is reachable and operable by keyboard per this repo's accessibility
 //! conventions: `tab` moves focus without changing the selection, arrow keys
-//! move focus and select (a conventional listbox), and `enter`/`space`
-//! select whatever row currently has focus.
+//! move focus and select within the task list (a conventional listbox), and
+//! `enter`/`space` select whatever row currently has focus.
 
 use gpui::{App, Context, Div, KeyDownEvent, SharedString, Stateful, Window, div, prelude::*, px};
 
 use super::Flow;
 use crate::theme::Theme;
+use crate::ui::icon;
 
 /// No global keybindings: the rail's arrow/enter handling is scoped to its
 /// own rows via `on_key_down`, not registered as app-wide actions.
 pub fn init(_cx: &mut App) {}
 
-const SIDEBAR_WIDTH: f32 = 272.0;
-const ROW_HEIGHT: f32 = 30.0;
+const SIDEBAR_WIDTH: f32 = 252.0;
+const ROW_HEIGHT: f32 = 32.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Destination {
@@ -30,6 +39,14 @@ pub(super) enum Destination {
     Settings,
 }
 
+/// The sidebar's two whole-app modes. Settings is reachable from either and
+/// does not belong to a mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Mode {
+    Tasks,
+    Calendar,
+}
+
 impl Destination {
     pub(super) const ALL: [Destination; 7] = [
         Destination::Inbox,
@@ -39,6 +56,15 @@ impl Destination {
         Destination::Someday,
         Destination::Calendar,
         Destination::Settings,
+    ];
+
+    /// The rows Tasks mode lists, in display order.
+    const TASK_VIEWS: [Destination; 5] = [
+        Destination::Inbox,
+        Destination::Today,
+        Destination::Upcoming,
+        Destination::Anytime,
+        Destination::Someday,
     ];
 
     pub(super) const COUNT: usize = Self::ALL.len();
@@ -70,6 +96,18 @@ impl Destination {
         }
     }
 
+    fn icon_path(self) -> &'static str {
+        match self {
+            Destination::Inbox => "icons/inbox.svg",
+            Destination::Today => "icons/star.svg",
+            Destination::Upcoming => "icons/list.svg",
+            Destination::Anytime => "icons/layers.svg",
+            Destination::Someday => "icons/archive.svg",
+            Destination::Calendar => "icons/calendar.svg",
+            Destination::Settings => "icons/settings.svg",
+        }
+    }
+
     pub(super) fn index(self) -> usize {
         self as usize
     }
@@ -77,24 +115,58 @@ impl Destination {
     pub(super) fn from_index(index: usize) -> Self {
         Self::ALL[index % Self::COUNT]
     }
+
+    /// `TASK_VIEWS[task_index]`'s position within `ALL`, for arrow-key wrap.
+    fn task_view_index(self) -> Option<usize> {
+        Self::TASK_VIEWS.iter().position(|&d| d == self)
+    }
+}
+
+impl Mode {
+    fn icon_path(self) -> &'static str {
+        match self {
+            Mode::Tasks => "icons/home.svg",
+            Mode::Calendar => "icons/calendar.svg",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Mode::Tasks => "Tasks",
+            Mode::Calendar => "Calendar",
+        }
+    }
 }
 
 impl Flow {
+    /// The mode the segmented control currently highlights. Calendar is the
+    /// only destination that belongs to Calendar mode; everything else,
+    /// Settings included, reads as Tasks mode.
+    fn sidebar_mode(&self) -> Mode {
+        if self.destination == Destination::Calendar {
+            Mode::Calendar
+        } else {
+            Mode::Tasks
+        }
+    }
+
     /// Move keyboard focus to `destination`'s row and select it. Used by
     /// arrow-key navigation, which — unlike `tab` — both moves focus and
-    /// changes the active destination.
-    fn focus_and_select_destination(
+    /// changes the active destination. Wraps within the five task views.
+    fn focus_and_select_task_view(
         &mut self,
-        destination: Destination,
+        task_index: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let destination = Destination::TASK_VIEWS[task_index % Destination::TASK_VIEWS.len()];
         window.focus(&self.nav_focuses[destination.index()], cx);
         self.set_destination(destination, window, cx);
     }
 
     pub(super) fn render_sidebar(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let theme = Theme::current(cx);
+        let mode = self.sidebar_mode();
 
         div()
             .id("sidebar")
@@ -118,7 +190,8 @@ impl Flow {
                     .text_color(theme.text)
                     .child("Flow"),
             )
-            .child(self.render_new_task_button(theme))
+            .child(self.render_capture_button(theme))
+            .child(self.render_mode_switch(mode, theme, cx))
             .child(
                 div()
                     .id("sidebar-nav")
@@ -126,23 +199,34 @@ impl Flow {
                     .tab_index(1)
                     .tab_stop(false)
                     .mt(px(6.0))
+                    .flex_1()
                     .flex()
                     .flex_col()
                     .gap(px(1.0))
-                    .children(
-                        Destination::ALL
-                            .into_iter()
-                            .map(|destination| self.render_nav_row(destination, theme, cx)),
-                    ),
+                    .when(mode == Mode::Tasks, |list| {
+                        list.children(
+                            Destination::TASK_VIEWS
+                                .into_iter()
+                                .map(|destination| self.render_nav_row(destination, theme, cx)),
+                        )
+                    }),
             )
+            .child(
+                div()
+                    .mx(px(4.0))
+                    .my(px(8.0))
+                    .h(px(1.0))
+                    .bg(theme.sidebar_border),
+            )
+            .child(self.render_nav_row(Destination::Settings, theme, cx))
     }
 
-    fn render_new_task_button(&self, theme: Theme) -> Stateful<Div> {
+    fn render_capture_button(&self, theme: Theme) -> Stateful<Div> {
         // ponytail: capture has no composer yet (Milestone 1). The row is
         // fully keyboard/mouse operable so the affordance is real, it just
         // has nothing to do until the task store exists.
         div()
-            .id("new-task")
+            .id("capture")
             .track_focus(&self.new_task_focus)
             .tab_index(0)
             .h(px(ROW_HEIGHT))
@@ -150,15 +234,104 @@ impl Flow {
             .rounded(px(6.0))
             .flex()
             .items_center()
-            .gap(px(6.0))
+            .gap(px(8.0))
             .cursor_default()
             .text_size(px(12.5))
+            .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(theme.text_secondary)
             .hover(|el| el.bg(theme.overlay))
             .active(|el| el.bg(theme.overlay_strong))
             .focus_visible(|style| style.border_1().border_color(theme.accent))
-            .child("+")
-            .child("New task")
+            .child(icon("icons/plus.svg", 14.0, theme.text_secondary))
+            .child("Capture")
+    }
+
+    /// The Tasks/Calendar pill: Flow's two whole-app modes. Each segment
+    /// fills half the pill's width; the active segment gets a raised
+    /// surface, matching the reference's "Home | Code" treatment but within
+    /// the monochrome focus-blue system (no per-segment color).
+    fn render_mode_switch(
+        &self,
+        mode: Mode,
+        theme: Theme,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        div()
+            .id("mode-switch")
+            .mt(px(6.0))
+            .p(px(2.0))
+            .rounded(px(8.0))
+            .bg(theme.inset)
+            .flex()
+            .child(self.render_mode_segment(Mode::Tasks, mode, theme, cx))
+            .child(self.render_mode_segment(Mode::Calendar, mode, theme, cx))
+    }
+
+    fn render_mode_segment(
+        &self,
+        segment: Mode,
+        active_mode: Mode,
+        theme: Theme,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let selected = segment == active_mode;
+        let focus = if segment == Mode::Calendar {
+            self.nav_focuses[Destination::Calendar.index()].clone()
+        } else {
+            self.mode_tasks_focus.clone()
+        };
+
+        div()
+            .id(SharedString::from(format!("mode-{}", segment.label())))
+            .track_focus(&focus)
+            .tab_index(0)
+            .flex_1()
+            .h(px(ROW_HEIGHT - 4.0))
+            .rounded(px(6.0))
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(px(6.0))
+            .cursor_default()
+            .text_size(px(12.5))
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .when(selected, |row| {
+                row.bg(theme.raised).text_color(theme.text)
+            })
+            .when(!selected, |row| {
+                row.text_color(theme.text_secondary)
+                    .hover(|el| el.bg(theme.overlay))
+            })
+            .focus_visible(|style| style.border_1().border_color(theme.accent))
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.select_mode(segment, window, cx);
+            }))
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.modifiers.modified() {
+                    return;
+                }
+                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                    this.select_mode(segment, window, cx);
+                    cx.stop_propagation();
+                }
+            }))
+            .child(icon(
+                segment.icon_path(),
+                14.0,
+                if selected { theme.text } else { theme.text_secondary },
+            ))
+            .child(segment.label())
+    }
+
+    fn select_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+        let destination = match mode {
+            Mode::Calendar => Destination::Calendar,
+            // Tasks mode has no destination of its own; landing on Inbox
+            // matches "+ Capture" and the rest of the app's default entry
+            // point into task review.
+            Mode::Tasks => Destination::Inbox,
+        };
+        self.set_destination(destination, window, cx);
     }
 
     fn render_nav_row(
@@ -171,6 +344,11 @@ impl Flow {
         let focus = self.nav_focuses[index].clone();
         let selected = self.destination == destination;
         let badge = (destination == Destination::Inbox).then_some(0u32);
+        let row_icon_color = if selected {
+            theme.text
+        } else {
+            theme.text_secondary
+        };
 
         div()
             .id(SharedString::from(format!("nav-{index}")))
@@ -182,6 +360,7 @@ impl Flow {
             .flex()
             .items_center()
             .justify_between()
+            .gap(px(8.0))
             .cursor_default()
             .text_size(px(12.5))
             .when(selected, |row| {
@@ -201,36 +380,44 @@ impl Flow {
                 if event.keystroke.modifiers.modified() {
                     return;
                 }
+                let Some(task_index) = destination.task_view_index() else {
+                    // Settings isn't part of the arrow-navigable task list;
+                    // it only supports enter/space, like the mode segments.
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                        this.set_destination(destination, window, cx);
+                        cx.stop_propagation();
+                    }
+                    return;
+                };
                 match event.keystroke.key.as_str() {
                     "enter" | "space" => {
                         this.set_destination(destination, window, cx);
                         cx.stop_propagation();
                     }
                     "down" => {
-                        this.focus_and_select_destination(
-                            Destination::from_index(index + 1),
-                            window,
-                            cx,
-                        );
+                        this.focus_and_select_task_view(task_index + 1, window, cx);
                         cx.stop_propagation();
                     }
                     "up" => {
-                        let previous = if index == 0 {
-                            Destination::COUNT - 1
+                        let previous = if task_index == 0 {
+                            Destination::TASK_VIEWS.len() - 1
                         } else {
-                            index - 1
+                            task_index - 1
                         };
-                        this.focus_and_select_destination(
-                            Destination::from_index(previous),
-                            window,
-                            cx,
-                        );
+                        this.focus_and_select_task_view(previous, window, cx);
                         cx.stop_propagation();
                     }
                     _ => {}
                 }
             }))
-            .child(destination.label())
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.0))
+                    .child(icon(destination.icon_path(), 14.0, row_icon_color))
+                    .child(destination.label()),
+            )
             .when_some(badge, |row, count| {
                 row.child(
                     div()

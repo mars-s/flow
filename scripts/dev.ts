@@ -11,53 +11,27 @@ const targetDir = resolve(root, process.env.CARGO_TARGET_DIR || "target");
 const appPath = isMacOS
   ? join(targetDir, "debug/Flow Debug.app")
   : join(targetDir, "debug/flow");
-const daemonPath = join(
-  targetDir,
-  `debug/flow-debug-daemon${process.platform === "win32" ? ".exe" : ""}`,
-);
 const watchedDirectories = ["src", "crates", "assets", "resources", "locales"];
 const watchedFiles = ["Cargo.toml", "Cargo.lock", "build.rs"];
 const rebuildDebounceMs = 1_000;
-type BuildTarget = "app" | "daemon";
 
 $.cwd(root);
 
 let app: ReturnType<typeof Bun.spawn> | undefined;
 let stopping = false;
 let building = false;
-let queuedBuild: BuildTarget | undefined;
-let debouncedBuild: BuildTarget | undefined;
-let appChangeRevision = 0;
-let daemonChangeRevision = 0;
+let queuedBuild = false;
+let debouncedBuild = false;
 let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 const watchers: FSWatcher[] = [];
 
-async function build(target: BuildTarget): Promise<boolean> {
-  if (target === "daemon") {
-    return buildDaemon();
-  }
-
+async function build(): Promise<boolean> {
   console.log(`[flow-dev] Building ${isMacOS ? "app bundle" : "app"}...`);
-  if (!(await buildDaemon())) {
-    console.error("[flow-dev] Daemon build failed; keeping the current app open.");
-    return false;
-  }
   const result = isMacOS
     ? await $`${join(root, "scripts/bundle.sh")} debug`.nothrow()
-    : await $`cargo build --package flow --bin flow --bin flow_js_repl`.nothrow();
+    : await $`cargo build --package flow --bin flow`.nothrow();
   if (result.exitCode !== 0) {
     console.error("[flow-dev] Build failed; keeping the current app open.");
-    return false;
-  }
-  return true;
-}
-
-async function buildDaemon(): Promise<boolean> {
-  console.log("[flow-dev] Building daemon...");
-  const result =
-    await $`cargo build --package flow-daemon --features dev-binary --bin flow-debug-daemon`.nothrow();
-  if (result.exitCode !== 0) {
-    console.error("[flow-dev] Daemon build failed; keeping the current daemon running.");
     return false;
   }
   return true;
@@ -81,7 +55,6 @@ function launchApp(): ReturnType<typeof Bun.spawn> {
   const command = isMacOS ? ["open", "-n", "-W", appPath] : [appPath];
   const launchedApp = Bun.spawn(command, {
     cwd: root,
-    env: { ...process.env, FLOW_DAEMON_PATH: daemonPath },
     stdout: "inherit",
     stderr: "inherit",
   });
@@ -113,36 +86,15 @@ function reportWatcherError(error: Error): void {
   void cleanup();
 }
 
-function mergedTarget(
-  current: BuildTarget | undefined,
-  next: BuildTarget,
-): BuildTarget {
-  return current === "app" || next === "app" ? "app" : "daemon";
-}
-
-function targetForChange(directory: string, filename: string | Buffer | null): BuildTarget {
-  if (directory !== "crates" || filename === null) return "app";
-  const relativePath = filename.toString().replaceAll("\\", "/");
-  if (
-    relativePath.startsWith("flow-daemon/") ||
-    relativePath.startsWith("flow-core/")
-  ) {
-    return "daemon";
-  }
-  return "app";
-}
-
-function scheduleBuild(target: BuildTarget): void {
+function scheduleBuild(): void {
   if (stopping) return;
-  daemonChangeRevision += 1;
-  if (target === "app") appChangeRevision += 1;
-  debouncedBuild = mergedTarget(debouncedBuild, target);
+  debouncedBuild = true;
   clearRebuildTimer();
   rebuildTimer = setTimeout(() => {
     rebuildTimer = undefined;
-    if (debouncedBuild !== undefined) {
-      queuedBuild = mergedTarget(queuedBuild, debouncedBuild);
-      debouncedBuild = undefined;
+    if (debouncedBuild) {
+      queuedBuild = true;
+      debouncedBuild = false;
     }
     void drainBuildQueue();
   }, rebuildDebounceMs);
@@ -150,17 +102,13 @@ function scheduleBuild(target: BuildTarget): void {
 
 function startWatchers(): void {
   for (const directory of watchedDirectories) {
-    const watcher = watch(
-      join(root, directory),
-      { recursive: true },
-      (_eventType, filename) => scheduleBuild(targetForChange(directory, filename)),
-    );
+    const watcher = watch(join(root, directory), { recursive: true }, () => scheduleBuild());
     watcher.on("error", reportWatcherError);
     watchers.push(watcher);
   }
 
   const rootWatcher = watch(root, (_eventType, filename) => {
-    if (filename && watchedFiles.includes(filename.toString())) scheduleBuild("app");
+    if (filename && watchedFiles.includes(filename.toString())) scheduleBuild();
   });
   rootWatcher.on("error", reportWatcherError);
   watchers.push(rootWatcher);
@@ -170,38 +118,15 @@ async function drainBuildQueue(): Promise<void> {
   if (building || stopping) return;
   building = true;
   try {
-    while (queuedBuild !== undefined && !stopping) {
-      const target = queuedBuild;
-      queuedBuild = undefined;
-      const buildAppRevision = appChangeRevision;
-      const buildDaemonRevision = daemonChangeRevision;
-      if (!(await build(target)) || stopping) continue;
-
-      if (target === "daemon") {
-        if (daemonChangeRevision === buildDaemonRevision) {
-          console.log(
-            "[flow-dev] Daemon rebuilt; Flow will swap the process without relaunching.",
-          );
-        }
-        continue;
-      }
-
-      // App changes make a bundle compiled from an older revision stale. A
-      // daemon-only edit does not: launch the app, then let its supervisor pick
-      // up the independently rebuilt daemon.
-      if (appChangeRevision !== buildAppRevision) {
-        console.log(
-          "[flow-dev] More changes arrived during the build; waiting to rebuild.",
-        );
-        continue;
-      }
-
+    while (queuedBuild && !stopping) {
+      queuedBuild = false;
+      if (!(await build()) || stopping) continue;
       await stopApp();
       if (!stopping) app = launchApp();
     }
   } finally {
     building = false;
-    if (queuedBuild !== undefined && !stopping) void drainBuildQueue();
+    if (queuedBuild && !stopping) void drainBuildQueue();
   }
 }
 
@@ -219,24 +144,14 @@ process.on("SIGTERM", () => void cleanup());
 
 startWatchers();
 building = true;
-const initialAppRevision = appChangeRevision;
-const initialBuildSucceeded = await build("app");
+const initialBuildSucceeded = await build();
 building = false;
 if (!initialBuildSucceeded) {
   closeWatchers();
   process.exit(1);
 }
 
-if (appChangeRevision === initialAppRevision) {
-  await stopApp();
-  app = launchApp();
-} else {
-  console.log(
-    "[flow-dev] Changes arrived during the initial build; waiting to rebuild.",
-  );
-  if (queuedBuild !== undefined) void drainBuildQueue();
-}
+await stopApp();
+app = launchApp();
 
-console.log(
-  "[flow-dev] Watching for source changes. Daemon-only edits hot-reload without relaunching Flow.",
-);
+console.log("[flow-dev] Watching for source changes.");

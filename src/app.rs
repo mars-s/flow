@@ -33,6 +33,11 @@ pub struct Flow {
     new_task_focus: FocusHandle,
     /// One stable handle per destination, indexed by `Destination::index`.
     nav_focuses: [FocusHandle; Destination::COUNT],
+    /// The sidebar's "Tasks" mode-switch segment. The "Calendar" segment
+    /// reuses `nav_focuses[Destination::Calendar.index()]` since it and the
+    /// Calendar destination are the same thing; Tasks has no destination of
+    /// its own, so it needs a handle that isn't one of the seven above.
+    mode_tasks_focus: FocusHandle,
 }
 
 impl Flow {
@@ -41,6 +46,7 @@ impl Flow {
             destination: Destination::Inbox,
             new_task_focus: cx.focus_handle(),
             nav_focuses: array::from_fn(|_| cx.focus_handle()),
+            mode_tasks_focus: cx.focus_handle(),
         });
         window.set_window_title(&window_title(Destination::Inbox));
         flow

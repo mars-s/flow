@@ -42,11 +42,14 @@ fn native_override(preference: ThemePreference) -> Option<bool> {
     }
 }
 
-/// Flow's visual language, take two: neutral graphite surfaces in the spirit
-/// of Cursor — color is reserved for meaning. On macOS the sidebar's semantic
-/// tint is installed as a native layer above Sidebar vibrancy; keeping this
-/// GPUI surface clear avoids incorrectly accumulating the alpha of nested Metal
-/// backgrounds. Selected, hovered, and pressed rows remain a 6% neutral layer.
+/// Flow's visual language: "focus light" — a charcoal work surface
+/// interrupted by a single cool blue accent. Blue means an intentional
+/// action or current focus (selection, keyboard focus, primary action);
+/// nothing else in the UI carries color. See docs/DESIGN_DIRECTION.md for
+/// the full token rationale. On macOS the sidebar's semantic tint is
+/// installed as a native layer above Sidebar vibrancy; keeping this GPUI
+/// surface clear avoids incorrectly accumulating the alpha of nested Metal
+/// backgrounds.
 #[derive(Clone, Copy)]
 pub struct Theme {
     pub is_dark: bool,
@@ -72,7 +75,8 @@ pub struct Theme {
     pub text_tertiary: Hsla,
     pub text_ghost: Hsla,
 
-    /// Brand coral. Logo, caret, live-activity pulses — nothing structural.
+    /// Focus blue: selection, keyboard focus, and primary action. The only
+    /// color that represents Flow state — never decoration, never per-item.
     pub accent: Hsla,
     pub resize_handle: Hsla,
     /// Meter fills in the usage panel. Quota-meter blue by convention;
@@ -110,47 +114,47 @@ impl Theme {
     pub fn dark() -> Self {
         Self {
             is_dark: true,
-            canvas: rgb(0x1A1A1A).into(),
+            canvas: rgb(0x171A1E).into(),
             sidebar: if cfg!(target_os = "macos") {
                 transparent_black()
             } else {
-                rgb(0x181818).into()
+                rgb(0x1C2025).into()
             },
-            sidebar_drag_background: rgb(0x181818).into(),
-            sidebar_item_background: hsla(0.0, 0.0, 0.941, 0.06),
-            surface: rgb(0x1A1A1A).into(),
-            raised: rgb(0x232323).into(),
-            composer: rgb(0x212121).into(),
-            inset: rgb(0x151515).into(),
-            terminal: rgb(0x151515).into(),
-            overlay: hsla(220.0 / 360.0, 0.10, 0.90, 0.05),
-            overlay_strong: hsla(220.0 / 360.0, 0.10, 0.90, 0.09),
+            sidebar_drag_background: rgb(0x1C2025).into(),
+            sidebar_item_background: rgb(0x234C78).into(),
+            surface: rgb(0x171A1E).into(),
+            raised: rgb(0x242A31).into(),
+            composer: rgb(0x242A31).into(),
+            inset: rgb(0x14171B).into(),
+            terminal: rgb(0x14171B).into(),
+            overlay: hsla(0.0, 0.0, 1.0, 0.045),
+            overlay_strong: hsla(0.0, 0.0, 1.0, 0.08),
 
-            border: hsla(220.0 / 360.0, 0.10, 0.90, 0.07),
-            border_strong: hsla(220.0 / 360.0, 0.10, 0.90, 0.14),
-            sidebar_border: hsla(126.93 / 360.0, 0.000_000_1, 0.16077, 1.0),
+            border: hsla(0.0, 0.0, 1.0, 0.055),
+            border_strong: hsla(0.0, 0.0, 1.0, 0.10),
+            sidebar_border: hsla(0.0, 0.0, 1.0, 0.06),
 
-            text: rgb(0xE2E2E2).into(),
-            text_secondary: rgb(0xA3A3A3).into(),
-            text_tertiary: rgb(0x7D7D7D).into(),
-            text_ghost: rgb(0x575757).into(),
+            text: rgb(0xEEF1F5).into(),
+            text_secondary: rgb(0x969FAA).into(),
+            text_tertiary: rgb(0x717A85).into(),
+            text_ghost: rgb(0x565D66).into(),
 
-            accent: rgb(0xE2795B).into(),
-            resize_handle: rgb(0x3B82F6).into(),
-            gauge: rgb(0x3B82F6).into(),
+            accent: rgb(0x69A9FF).into(),
+            resize_handle: rgb(0x69A9FF).into(),
+            gauge: rgb(0x69A9FF).into(),
 
             selection: hsla(211.0 / 360.0, 1.0, 0.50, 0.55),
             code_text: rgb(0xE0A882).into(),
-            code_wash: hsla(220.0 / 360.0, 0.10, 0.90, 0.08),
+            code_wash: hsla(0.0, 0.0, 1.0, 0.07),
 
             inverse: rgb(0xE7E9EC).into(),
-            on_inverse: rgb(0x17181C).into(),
+            on_inverse: rgb(0x14171B).into(),
 
             warning: rgb(0xE0B36A).into(),
             success: rgb(0x62C987).into(),
             favorite: rgb(0xEAB308).into(),
-            danger: rgb(0xE2726A).into(),
-            danger_soft: hsla(4.0 / 360.0, 0.55, 0.63, 0.10),
+            danger: rgb(0xEC6B73).into(),
+            danger_soft: hsla(357.0 / 360.0, 0.75, 0.72, 0.12),
         }
     }
 

@@ -78,11 +78,13 @@ not invert individual components.
 
 Width: 252 px, fixed. The wordmark is text, not a decorative logo. A compact
 Capture button sits below the titlebar. Destinations are icon plus label, with
-Inbox count aligned right. The active row uses `focus-soft`, a 3 px left focus
-bar, and primary text. Hover only changes the row surface.
+Inbox's count in a small rounded pill aligned right. The active row is filled
+with `focus-soft` and primary text; no separate border or focus bar. Hover
+only changes the row surface.
 
 Navigation is grouped by meaning, with one quiet divider before Calendar and
-Settings. There are no decorative dots, badges, gradients, or per-item colors.
+Settings. Icons are monochrome and uncolored per item; the Inbox count pill is
+the one functional exception, not decoration.
 
 ### Main task canvas
 
@@ -127,7 +129,7 @@ left empty. This is a context pane, not an appointment editor.
 - Capture field: focus border and soft blue internal highlight over 120 ms.
 - Task completion: 180-220 ms opacity and vertical collapse.
 - Task detail: 160 ms opacity and scale from 0.985 to 1.0.
-- Sidebar selection: 120 ms color and focus-bar transition.
+- Sidebar selection: 120 ms background-color transition.
 - No perpetual motion, parallax, magnetic effects, or animated gradients.
 - `prefers-reduced-motion` removes transforms and limits transitions to 100 ms.
 
