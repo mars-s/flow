@@ -52,9 +52,12 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       capture; also records the user's global-hotkey quick-capture north
       star in the PRD §13.
   15. `fe8df26` — handoff doc: NLP parser + capture-wiring checkpoint noted.
-  16. `05ef517` — Inbox's inline "Process" action (Today/Anytime/Someday)
-      (see "Milestone 1 progress" below).
-- Working tree is clean as of commit `05ef517` unless the "Milestone 1
+  16. `05ef517` — Inbox's inline "Process" action (Today/Anytime/Someday).
+  17. `b688ac4` — handoff doc: Process-action checkpoint noted.
+  18. `1a026b1` — "Schedule…" added to Process, reusing `parse.rs` for
+      arbitrary-date entry instead of a calendar widget (see "Milestone 1
+      progress" below).
+- Working tree is clean as of commit `1a026b1` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - This session is now running as a `/loop` (self-paced): work continues
@@ -265,27 +268,37 @@ landed which line.
       (`Flow::process_task`/`toggle_processing` in `app/tasks.rs`). Only
       one row processes at a time (`Flow.processing_task_id`). This is the
       first way, besides typing a date phrase into Capture, to move a task
-      out of Inbox. The fourth PRD-named option, "schedule" (an arbitrary
-      date, not just today), still needs a real date picker — not built,
-      see the gap below.
-- 164 tests passing as of commit `05ef517`; verified in the running debug
+      out of Inbox.
+- [x] **"Schedule…" (the fourth PRD-named Process option, an arbitrary
+      date).** Rather than a calendar widget, it swaps the three buttons
+      for a free-text field and runs the input through the same
+      `parse.rs` Capture uses (`Flow::on_schedule_event`, `app.rs`) —
+      reuse over building a new component. Schedules via
+      `Db::schedule(id, Bucket::Active, ...)`; unlike Capture's
+      parse-at-creation path (which deliberately leaves the bucket as
+      Inbox, PRD §14), this is the explicit user-driven "Schedule and
+      activate" action, so it does activate. An unrecognized phrase leaves
+      the field open rather than guessing. Escape now closes whichever of
+      scheduling/processing/capturing is open, checked in that order.
+- 164 tests passing as of commit `1a026b1`; verified in the running debug
   app, not just `cargo check` (dev watcher rebuilt clean, process alive,
   matches this repo's `AGENTS.md` validation rule). No new automated tests
-  landed with the Process action itself — it's GPUI click-handler wiring
-  with no dedicated test-support harness in this repo yet, same as
+  landed with the Process/Schedule UI itself — it's GPUI click-handler
+  wiring with no dedicated test-support harness in this repo yet, same as
   `toggle_completed`/`on_capture_event` before it; the `Db::schedule` calls
-  it drives are already covered at the database layer.
+  both drive are already covered at the database layer, and the parsing
+  `on_schedule_event` relies on is the same already-tested `parse.rs`.
 
 **Not done yet, in the order they're planned:**
 
-- [ ] **No arbitrary-date scheduling — only the three quick Process
-      buttons and typing a date phrase into Capture.** There's still no
-      date picker (PRD §6.3's fourth Process option, "schedule"), and no
-      task detail view to edit a title/note/schedule after capture at all.
-      A minimal click-to-expand detail view with a "when" field is the
-      natural next step — it would also be the natural home for
-      `parse.rs`'s `source_phrase`/preview-chip interaction mentioned
-      further down this list.
+- [ ] **No task detail view.** Every scheduling path so far (Capture's
+      parsed suffix, Process's three buttons, Process's "Schedule…" field)
+      only ever *sets* a schedule — there's still no way to view or edit a
+      task's title, note, or existing schedule after it's captured, and no
+      way to remove a schedule once set. A minimal click-to-expand detail
+      view is the natural next step, and the natural home for `parse.rs`'s
+      `source_phrase`/preview-chip interaction mentioned further down this
+      list.
 - [ ] A proper completion-collapse animation + Undo toast, per
       `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
       collapse... available via Undo" spec — currently the row just
