@@ -39,9 +39,11 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   4. `39dcab4` — wired up Turso (`src/db.rs`): dedicated tokio thread,
      placeholder `schema_version` table, ping smoke test passing.
   5. `6109057` — noted the new GitHub remote in this doc.
-  6. `2c098f8` — real task data model/schema/CRUD in `db.rs` (see "Milestone
-     1 progress" below).
-- Working tree is clean as of commit `2c098f8` unless the "Milestone 1
+  6. `2c098f8` — real task data model/schema/CRUD in `db.rs`.
+  7. `9908636` — handoff doc: Milestone 1 checklist added.
+  8. `c215709` — Inbox view + sidebar badge wired to the real database (see
+     "Milestone 1 progress" below).
+- Working tree is clean as of commit `c215709` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 
@@ -81,14 +83,15 @@ Run `cargo test --package flow --lib` to check the current count/status.
     existing focus-blue-only system). New icons authored this session:
     `inbox`, `calendar`, `layers`, `archive`, `home` (in
     `assets/icons/*.svg`, Lucide-style, registered in `src/assets.rs`).
-- Main pane: still placeholder-only ("Coming soon" copy per destination,
-  `src/app/components.rs`). **No real task rows, subtasks, date picker, or
-  toast/notification component exist yet** — the user showed reference
-  screenshots for these (Things-3-style task row with note + subtask, a
-  "When" date popover with Today/This Evening/calendar grid/Someday/Add
-  Reminder, a toast banner) but explicitly said only the sidebar and mode
-  switch should ship in this pass; those other components are future work,
-  not implemented.
+- Main pane: **Inbox is real now** (`src/app/tasks.rs`, added in Milestone
+  1 — see that section below), reading/writing the actual database. Every
+  other destination (Today/Upcoming/Anytime/Someday/Calendar/Settings)
+  still renders `components.rs`'s "Coming soon" placeholder. **No subtasks,
+  date picker, or toast/notification component exist yet** — the user
+  showed reference screenshots for these (Things-3-style task row with note
+  + subtask, a "When" date popover with Today/This Evening/calendar
+  grid/Someday/Add Reminder, a toast banner) but explicitly deferred them
+  out of the sidebar-focused UI pass; still future work.
 - `theme.rs` was retokened this session to actually match
   `docs/DESIGN_DIRECTION.md` (it had drifted — still had Waku's old
   coral-accent palette after the strip). Light theme values were **not**
@@ -150,25 +153,49 @@ landed which line.
 - [x] `Db::create_task` / `Db::list_bucket` / `Db::set_completed`, each with
       a passing test against a real temp-file database (not mocked).
 
+**Done (continued):**
+
+- [x] `Db` wired into `Flow` — opened once in `Flow::new` (`src/app.rs`), a
+      one-time sub-millisecond local-file open, not a render-path cost (see
+      the comment there for why that's an intentional exception, not an
+      oversight). `None` on failure, degrades gracefully rather than
+      panicking.
+- [x] Reactive task-list reads via the existing `QueryCache` in
+      `src/query.rs` (`Flow::read_bucket` in `src/app/tasks.rs`) — this repo
+      already had the exact right primitive for this (read from `render`,
+      background-fetch on a miss, `cx.notify()` on arrival), no new
+      abstraction needed.
+- [x] Real Inbox view (`src/app/tasks.rs::render_inbox`) replaces the
+      placeholder pane: task rows (title + a 17px completion circle per
+      `docs/DESIGN_DIRECTION.md`), a loading skeleton, an empty state
+      ("Nothing to process. Capture the next thing." per the direction
+      doc's required-states table), and a database-unavailable fallback.
+- [x] Completion toggle (`Flow::toggle_completed`) — writes via
+      `Db::set_completed`, invalidates the Inbox cache entry, refetches.
+      **Partial**: the row does fade via `with_animation` on initial
+      render, but there's no dedicated completion collapse/Undo yet — the
+      row just disappears on the next fetch since `list_bucket` filters out
+      completed tasks. `docs/DESIGN_DIRECTION.md`'s "10-second Undo toast"
+      is not implemented.
+- [x] Sidebar Inbox badge reads the same cache instead of a hardcoded `0`
+      (`Flow::inbox_count` in `sidebar.rs`).
+- 145 tests passing as of commit `c215709`; verified in the running debug
+  app, not just `cargo check` (dev watcher rebuilt clean, process alive,
+  matches this repo's `AGENTS.md` validation rule).
+
 **Not done yet, in the order they're planned:**
 
-- [ ] Wire a `Db` handle into `Flow` (opened once at startup — decide where:
-      probably `Flow::new` in `src/app.rs`, stored as a field, opened via
-      `cx.background_executor().spawn` so a slow first-open can't block
-      window creation).
-- [ ] A reactive task-list store on the GPUI side: load a bucket's tasks in
-      the background, cache on an entity field, `cx.notify()` on arrival —
-      same pattern this repo's `CLAUDE.md`/`AGENTS.md` performance section
-      already mandates for anything reached from `render`.
-- [ ] Real Inbox view: render actual task rows (title + completion control)
-      in place of `components.rs`'s placeholder pane, reading from that
-      store.
-- [ ] Wire the sidebar's "+ Capture" button and Inbox badge count to real
-      data — capture creates a task via `Db::create_task`, badge reflects
-      the live Inbox count instead of the hardcoded `0`.
-- [ ] Completion control interaction (toggle via `Db::set_completed`,
-      the 180-220ms opacity/collapse animation `docs/DESIGN_DIRECTION.md`
-      specifies, Undo).
+- [ ] **Capture is still inert.** The "+ Capture" button has no `on_click`
+      at all — it needs a real composer (text input, at minimum a title;
+      `input.rs`'s `ComposerInput` already exists generically and is a
+      candidate to reuse) wired to `Db::create_task`. This is the most
+      visible remaining gap: there's currently no way to add a task from
+      the UI, only to complete/reopen ones that already exist (e.g. via a
+      direct `Db::create_task` call from a test or a temporary debug path).
+- [ ] A proper completion-collapse animation + Undo toast, per
+      `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
+      collapse... available via Undo" spec — currently the row just
+      vanishes on refetch, no collapse motion, no undo.
 - [ ] Today/Upcoming/Anytime/Someday views — bucket-filtering logic exists
       in `db.rs` (`Bucket::Active` + date comparison, per PRD §5's table)
       but no view renders them yet.
