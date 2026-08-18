@@ -55,15 +55,21 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   16. `05ef517` — Inbox's inline "Process" action (Today/Anytime/Someday).
   17. `b688ac4` — handoff doc: Process-action checkpoint noted.
   18. `1a026b1` — "Schedule…" added to Process, reusing `parse.rs` for
-      arbitrary-date entry instead of a calendar widget (see "Milestone 1
-      progress" below).
-- Working tree is clean as of commit `1a026b1` unless the "Milestone 1
+      arbitrary-date entry instead of a calendar widget.
+  19. `ecfaf3d` — handoff doc: Schedule-action checkpoint noted.
+  20. `c4bc8c3` — task detail card redesign (raised surface, note field,
+      schedule pill, delete), the schedule-clipping display bug fix, and
+      Cmd+click multi-select with a bulk-action bar — built in an isolated
+      git worktree by a subagent, reviewed, and fast-forward merged (see
+      "Milestone 1 progress" below).
+- Working tree is clean as of commit `c4bc8c3` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
-- This session is now running as a `/loop` (self-paced): work continues
-  autonomously in small, tested, committed increments, with this doc
-  updated after each one, until the loop is stopped or nothing more can
-  usefully be done unattended.
+- The `/loop` (self-paced autonomous mode) that was running earlier in this
+  session was stopped once the user started actively steering with live
+  feedback (reference screenshots, specific complaints) — direct
+  conversation, not autonomous looping, is the current mode. A `/loop` can
+  be restarted later if the user wants to hand off to autonomous work again.
 
 ## What's built (Milestone 0 — done)
 
@@ -280,25 +286,49 @@ landed which line.
       activate" action, so it does activate. An unrecognized phrase leaves
       the field open rather than guessing. Escape now closes whichever of
       scheduling/processing/capturing is open, checked in that order.
-- 164 tests passing as of commit `1a026b1`; verified in the running debug
-  app, not just `cargo check` (dev watcher rebuilt clean, process alive,
-  matches this repo's `AGENTS.md` validation rule). No new automated tests
-  landed with the Process/Schedule UI itself — it's GPUI click-handler
-  wiring with no dedicated test-support harness in this repo yet, same as
-  `toggle_completed`/`on_capture_event` before it; the `Db::schedule` calls
-  both drive are already covered at the database layer, and the parsing
-  `on_schedule_event` relies on is the same already-tested `parse.rs`.
+- [x] **Fixed: the schedule-clipping display bug.** A task's
+      `scheduled_date`/`scheduled_time` is now shown on its row in *every*
+      view, not just Today/Upcoming. This was a real bug, not a missing
+      feature: `parse.rs` was already correctly stripping "tomorrow" out of
+      "take out trash tomorrow" and storing the date, but nothing displayed
+      it for an Inbox task — the date effectively vanished. User-confirmed:
+      the title-clipping itself is correct and intended; only the display
+      gate was wrong. Fixed in `render_task_row` (`app/tasks.rs`) —
+      `schedule_label(&task)` now runs unconditionally instead of being
+      gated on `view`.
+- [x] **Task detail card**, replacing the old bare pill-row Process
+      interaction. Matches `docs/DESIGN_DIRECTION.md`'s already-specified
+      "Task detail" component (a `theme.raised`, 10px-radius surface, not a
+      modal) rather than the user's reference app's literal look — their
+      reference showed tag/checklist/flag icons that are *that app's*
+      features, which Flow doesn't have, so those were deliberately not
+      copied; only real, wired controls made it in. Contains: checkbox +
+      title header, a note field (new `Db::set_note`, saved on blur since
+      the field is multiline and Enter inserts a newline instead of
+      submitting), a schedule-status pill showing the task's current
+      placement (click reopens the Today/Anytime/Someday/"Schedule…"
+      picker — the same one from before, relocated), and a delete action
+      (new `Db::delete_task`, soft delete via `deleted_at`, which every
+      `list_view` query already filters on for free). Available from every
+      task view now, not just Inbox, per the design doc's general spec.
+      Subtasks are skipped — no `parent_id` UI or queries exist yet.
+- [x] **Cmd+click multi-select**, with a bulk-action bar (same
+      Today/Anytime/Someday/Delete actions, applied to the whole selection)
+      appearing at 2+ selected rows. Uses `gpui::Modifiers::secondary()` —
+      a ready-made cross-platform Cmd(mac)/Ctrl(other) check already in the
+      pinned GPUI fork, found by reading `ClickEvent`/`MouseDownEvent`
+      usage in `src/input.rs` rather than guessing at field names.
+- Built via an isolated `git worktree` subagent (per explicit user
+  request), independently re-verified by the coordinating session before
+  merging — not just trusted from the agent's own report. 166 tests
+  passing as of commit `c4bc8c3` (2 new: `set_note`, `delete_task`);
+  verified in the running debug app after merge, not just `cargo check`.
 
 **Not done yet, in the order they're planned:**
 
-- [ ] **No task detail view.** Every scheduling path so far (Capture's
-      parsed suffix, Process's three buttons, Process's "Schedule…" field)
-      only ever *sets* a schedule — there's still no way to view or edit a
-      task's title, note, or existing schedule after it's captured, and no
-      way to remove a schedule once set. A minimal click-to-expand detail
-      view is the natural next step, and the natural home for `parse.rs`'s
-      `source_phrase`/preview-chip interaction mentioned further down this
-      list.
+- [ ] No way to *remove* a schedule once set (only change it to a
+      different Today/Anytime/Someday/date). A "Clear schedule" option on
+      the picker or pill would close this.
 - [ ] A proper completion-collapse animation + Undo toast, per
       `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
       collapse... available via Undo" spec — currently the row just
