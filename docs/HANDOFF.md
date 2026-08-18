@@ -540,13 +540,41 @@ landed which line.
       it — bulk-delete and "Clear completed" don't, matching how bulk
       actions already skip per-item completion toasts too.
 
-**Not done yet:**
+**Not done yet, in the order they're planned:**
 
-*(empty — every item from this session's backlog is done; check `git log`
-against this document for what's landed since, and pick the next real gap
-from "Current UI state" or the PRD's acceptance criteria rather than
-stalling here. The `/loop` job `57c760d9` is still running per the note
-near the top of this document and will keep finding/fixing real issues.)*
+- [ ] **`src/app/tasks.rs` has zero keyboard-accessible controls.** Found
+      by audit (not requested), 2026-08-19: `grep -c "track_focus\|
+      tab_index\|on_key_down" src/app/tasks.rs` → **0**, against **17**
+      `.on_click(` sites (task rows, the completion checkbox, title,
+      schedule pill, process/quick-pick pills, delete, subtask checkboxes,
+      the add-subtask row, the Undo toast button, the "Clear completed"
+      button, the complete-with-subtasks confirm). Every one of them is
+      mouse-only right now. This directly contradicts three explicit,
+      already-written requirements: `AGENTS.md`/`CLAUDE.md`'s "Every
+      control reachable by mouse must be reachable and operable by
+      keyboard," the PRD's goal of "complete keyboard operation," and
+      §11's acceptance criterion "A user can create, edit, complete,
+      reopen, move, schedule, and undo-delete a task **without leaving
+      the keyboard**" — currently false for every one of those verbs.
+      `src/app/sidebar.rs` already has the working pattern to follow (11
+      matches on the same grep) — `track_focus(&handle)`, `tab_index(N)`,
+      `focus_visible(|style| style.border_1().border_color(theme.accent))`,
+      and `on_key_down` matching `"enter" | "space"` — see
+      `render_mode_switch` there for a complete worked example.
+      **Deliberately not attempted blind tonight**, rather than rushed:
+      task rows are a *dynamic* list (unlike the sidebar's fixed seven
+      destinations), so this needs a real design decision about where
+      per-row `FocusHandle`s live (a `HashMap<String, FocusHandle>` on
+      `Flow`, most likely, pruned or left to grow boundedly — a real task
+      list doesn't have thousands of simultaneously-rendered rows, but the
+      cleanup story still deserves a decision, not a guess) and probably
+      arrow-key navigation between rows once the row itself is focusable.
+      That's exactly the kind of structural choice this session's
+      complete inability to visually verify tab order or focus rings
+      (no screen-recording permission — see the blank-main-pane incident)
+      makes a bad idea to guess at silently. Flagging precisely, with the
+      exact evidence above, is worth more than a half-correct
+      implementation nobody can check.
 
 ## Where to find things
 
