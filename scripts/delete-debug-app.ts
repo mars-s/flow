@@ -22,7 +22,7 @@ function addCandidate(path: string): void {
 }
 
 function isDebugDiagnostic(name: string): boolean {
-  return /^Flow Debug(?: Computer Use)?[-_.]/.test(name);
+  return /^Flow (?:Debug|Dev)(?: Computer Use)?[-_.]/.test(name);
 }
 
 async function addMatchingChildren(
@@ -65,23 +65,25 @@ async function existingTargets(): Promise<Target[]> {
 // Checkout-local state and build artifacts. Keep the release cache intact.
 addCandidate(join(projectRoot, "temp"));
 addCandidate(join(projectRoot, ".flow-cache", "computer-use", "debug"));
+addCandidate(join(projectRoot, "target", "debug", "Flow Dev.app"));
+// "Flow Debug" was this app's name before it was renamed to "Flow Dev";
+// still cleaned up here for checkouts with leftovers from before the rename.
 addCandidate(join(projectRoot, "target", "debug", "Flow Debug.app"));
 
 if (process.env.CARGO_TARGET_DIR) {
-  addCandidate(
-    join(
-      resolve(projectRoot, process.env.CARGO_TARGET_DIR),
-      "debug",
-      "Flow Debug.app",
-    ),
-  );
+  const targetDebug = join(resolve(projectRoot, process.env.CARGO_TARGET_DIR), "debug");
+  addCandidate(join(targetDebug, "Flow Dev.app"));
+  addCandidate(join(targetDebug, "Flow Debug.app"));
 }
 
 // Debug app bundles that may have been copied outside the checkout.
+addCandidate(join(userHome, "Applications", "Flow Dev.app"));
+addCandidate("/Applications/Flow Dev.app");
 addCandidate(join(userHome, "Applications", "Flow Debug.app"));
 addCandidate("/Applications/Flow Debug.app");
 
 // Debug-only app data. The release app uses Flow/sh.flow and is not included.
+addCandidate(join(library, "Application Support", "Flow Dev"));
 addCandidate(join(library, "Application Support", "Flow Debug"));
 addCandidate(
   join(
@@ -92,7 +94,9 @@ addCandidate(
     "Flow Debug Computer Use.app",
   ),
 );
+addCandidate(join(library, "Caches", "Flow Dev"));
 addCandidate(join(library, "Caches", "Flow Debug"));
+addCandidate(join(library, "Logs", "Flow Dev"));
 addCandidate(join(library, "Logs", "Flow Debug"));
 
 // codes.flow.dev was Flow Debug's bundle ID before sh.flow.dev.
@@ -137,18 +141,22 @@ await addMatchingChildren(
 
 const targets = await existingTargets();
 if (targets.length === 0) {
-  console.log("No Flow Debug files or directories found.");
+  console.log("No Flow Dev/Debug files or directories found.");
   process.exit(0);
 }
 
 console.log(
-  "The following Flow Debug paths, including directory contents, will be permanently deleted:\n",
+  "The following Flow Dev/Debug paths, including directory contents, will be permanently deleted:\n",
 );
 for (const target of targets) {
   console.log(`  [${target.kind}] ${target.path}`);
 }
 
-const runningProcesses = ["Flow Debug", "Flow Debug Computer Use"].filter(
+const runningProcesses = [
+  "Flow Dev",
+  "Flow Debug",
+  "Flow Debug Computer Use",
+].filter(
   (name) =>
     Bun.spawnSync(["/usr/bin/pgrep", "-x", name], {
       stdout: "ignore",

@@ -6,10 +6,10 @@ import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 const isMacOS = process.platform === "darwin";
-const appName = "Flow Debug";
+const appName = "Flow Dev";
 const targetDir = resolve(root, process.env.CARGO_TARGET_DIR || "target");
 const appPath = isMacOS
-  ? join(targetDir, "debug/Flow Debug.app")
+  ? join(targetDir, "debug/Flow Dev.app")
   : join(targetDir, "debug/flow");
 const watchedDirectories = ["src", "crates", "assets", "resources", "locales"];
 const watchedFiles = ["Cargo.toml", "Cargo.lock", "build.rs"];

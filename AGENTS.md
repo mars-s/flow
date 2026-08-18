@@ -31,11 +31,11 @@ colored left border on a list row) before they ship instead of after.
 ## Development runtime
 
 - Assume `bun ./scripts/dev.ts` is already running and owns the current
-  `Flow Debug.app` process. Source changes are rebuilt, signed, and
+  `Flow Dev.app` process. Source changes are rebuilt, signed, and
   relaunched automatically. Only run it yourself if not already launched.
 - During normal development and UI validation, do not run
   `scripts/bundle.sh debug`, start a second watcher, or manually quit/relaunch
-  `Flow Debug.app`. Quitting the app also stops the watcher.
+  `Flow Dev.app`. Quitting the app also stops the watcher.
 - After an edit, wait for the watcher to finish its successful rebuild and
   validate the freshly relaunched debug app. Only start or recover the watcher
   manually when it is confirmed unavailable.

@@ -32,7 +32,7 @@ bun install
 bun run dev
 ```
 
-On macOS the watcher builds and signs `target/debug/Flow Debug.app`; on Linux
+On macOS the watcher builds and signs `target/debug/Flow Dev.app`; on Linux
 it builds `target/debug/flow`. In both cases the provider daemon remains an
 external `target/debug/flow-debug-daemon`: provider-only edits rebuild and
 hot-swap that process without relaunching the app, while desktop edits rebuild

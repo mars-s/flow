@@ -38,7 +38,7 @@ else
 fi
 case "$profile" in
   debug)
-    app_name="Flow Debug"
+    app_name="Flow Dev"
     bundle_identifier="sh.flow.dev"
     icon_file="AppIconDev.icns"
     ;;
