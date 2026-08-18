@@ -162,6 +162,37 @@ impl Flow {
         query
     }
 
+    /// A task's direct subtasks, kicking off a background fetch on a miss —
+    /// same `QueryCache` read-through pattern as `read_view`/`read_completed`,
+    /// keyed by parent task id rather than `View`. Only ever called for the
+    /// currently expanded task (see `render_detail_card`), not per row.
+    pub(super) fn read_subtasks(&mut self, parent_id: &str, cx: &mut Context<Self>) -> Query<String, Vec<Task>> {
+        let query = self.subtasks.read(&parent_id.to_string());
+        if let Query::Missing(token) = &query {
+            let Some(db) = self.db.clone() else {
+                return query;
+            };
+            let token = token.clone();
+            let parent_id = parent_id.to_string();
+            cx.spawn(async move |flow, cx| {
+                let Ok(subtasks) = cx
+                    .background_executor()
+                    .spawn(async move { db.list_subtasks(parent_id) })
+                    .await
+                else {
+                    return;
+                };
+                let _ = flow.update(cx, |flow, cx| {
+                    if flow.subtasks.fulfill(token, subtasks) {
+                        cx.notify();
+                    }
+                });
+            })
+            .detach();
+        }
+        query
+    }
+
     /// The "Completed (N)" row's click: expands or collapses that view's
     /// section. Collapsed by default (`Flow::new`'s empty `completed_expanded`).
     fn toggle_completed_expanded(&mut self, view: View, cx: &mut Context<Self>) {
@@ -264,6 +295,97 @@ impl Flow {
         let Some(toast) = self.undo_toast.take() else { return };
         cx.notify();
         self.write_completed(toast.task_id, false, toast.origin_view, cx);
+    }
+
+    /// The detail card's checkbox, when the task has subtasks: gates on
+    /// whether any are still open. PRD §6.2: "Completing a parent with
+    /// incomplete children asks: 'Complete parent and all subtasks' or
+    /// 'Cancel.' It never leaves a completed parent with open children."
+    /// `has_open_subtasks` is decided by the caller (`render_detail_card`)
+    /// from the subtasks it already has loaded, rather than this method
+    /// re-reading the cache.
+    fn request_complete(
+        &mut self,
+        id: String,
+        title: String,
+        has_open_subtasks: bool,
+        origin_view: View,
+        cx: &mut Context<Self>,
+    ) {
+        if has_open_subtasks {
+            self.pending_complete_confirm = Some(id);
+            cx.notify();
+            return;
+        }
+        self.toggle_completed(id, title, true, origin_view, cx);
+    }
+
+    /// The inline confirm's "Cancel" — leaves the parent and its subtasks
+    /// untouched.
+    fn cancel_complete_confirm(&mut self, cx: &mut Context<Self>) {
+        self.pending_complete_confirm = None;
+        cx.notify();
+    }
+
+    /// The inline confirm's "Complete parent and all subtasks" — completes
+    /// every still-open subtask (immediate writes, same as
+    /// `toggle_subtask_completed`, no collapse animation since they stay
+    /// visible under the parent either way) and the parent itself through
+    /// the normal animated path.
+    fn confirm_complete_with_subtasks(
+        &mut self,
+        id: String,
+        title: String,
+        open_subtask_ids: Vec<String>,
+        origin_view: View,
+        cx: &mut Context<Self>,
+    ) {
+        self.pending_complete_confirm = None;
+        if let Some(db) = self.db.clone() {
+            let parent_id = id.clone();
+            cx.spawn(async move |flow, cx| {
+                let _ = cx
+                    .background_executor()
+                    .spawn(async move {
+                        for subtask_id in open_subtask_ids {
+                            if let Err(error) = db.set_completed(subtask_id.clone(), true) {
+                                eprintln!(
+                                    "Flow: confirm_complete_with_subtasks failed for subtask {subtask_id}: {error:#}"
+                                );
+                            }
+                        }
+                    })
+                    .await;
+                let _ = flow.update(cx, |flow, cx| {
+                    flow.subtasks.invalidate(&parent_id);
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+        self.toggle_completed(id, title, true, origin_view, cx);
+    }
+
+    /// A subtask's own completion circle — unlike a top-level task, there's
+    /// no collapse-and-disappear here (`list_subtasks` keeps completed
+    /// children visible under their expanded parent), so this just writes
+    /// immediately.
+    fn toggle_subtask_completed(&mut self, id: String, parent_id: String, completed: bool, cx: &mut Context<Self>) {
+        let Some(db) = self.db.clone() else { return };
+        cx.spawn(async move |flow, cx| {
+            let Ok(()) = cx
+                .background_executor()
+                .spawn(async move { db.set_completed(id, completed) })
+                .await
+            else {
+                return;
+            };
+            let _ = flow.update(cx, |flow, cx| {
+                flow.subtasks.invalidate(&parent_id);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Opens or closes a task's detail card — `docs/DESIGN_DIRECTION.md`'s
@@ -578,6 +700,21 @@ impl Flow {
         let selected = self.selected_task_ids.clone();
         let completed_expanded = self.completed_expanded.contains(&view);
         let completing_ids = self.completing_ids.clone();
+        // Only the expanded task's card ever reads this — fetched here
+        // (not per row) since only one task can be expanded at a time, the
+        // same reasoning `note_input` already follows.
+        let subtask_context = expanded.as_ref().map(|id| {
+            let subtasks = match self.read_subtasks(id, cx) {
+                Query::Ready(subtasks) => subtasks,
+                Query::Pending | Query::Missing(_) => Arc::new(Vec::new()),
+            };
+            SubtaskContext {
+                subtasks,
+                adding: self.adding_subtask,
+                input: self.subtask_input.clone(),
+                pending_confirm: self.pending_complete_confirm.as_deref() == Some(id.as_str()),
+            }
+        });
         // Always fetched, not only once expanded — the collapsed row still
         // needs a count, and this is the same "resolve the whole collection
         // up front, render degrades on a miss" pattern `read_view` already
@@ -598,6 +735,7 @@ impl Flow {
                 scheduling,
                 note_input,
                 schedule_input,
+                subtask_context,
                 selected,
                 theme,
                 cx,
@@ -608,6 +746,19 @@ impl Flow {
     }
 }
 
+/// Everything only the expanded task's detail card needs for its subtasks
+/// section — bundled into one struct rather than four separate parameters
+/// threaded through every row-rendering function in this file, when only
+/// one row (the expanded one) ever actually uses any of it.
+#[derive(Clone)]
+struct SubtaskContext {
+    subtasks: Arc<Vec<Task>>,
+    adding: bool,
+    input: Entity<ComposerInput>,
+    pending_confirm: bool,
+}
+
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn task_list(
     view: View,
@@ -620,6 +771,7 @@ fn task_list(
     scheduling: bool,
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
+    subtask_context: Option<SubtaskContext>,
     selected: HashSet<String>,
     theme: Theme,
     cx: &mut Context<Flow>,
@@ -669,6 +821,7 @@ fn task_list(
                                     scheduling,
                                     note_input.clone(),
                                     schedule_input.clone(),
+                                    subtask_context.clone(),
                                     theme,
                                     cx,
                                 )
@@ -689,6 +842,7 @@ fn task_list(
                                 scheduling,
                                 note_input.clone(),
                                 schedule_input.clone(),
+                                subtask_context.clone(),
                                 theme,
                                 cx,
                             )
@@ -712,6 +866,7 @@ fn task_list(
                         scheduling,
                         note_input,
                         schedule_input,
+                        subtask_context,
                         theme,
                         cx,
                     )),
@@ -743,6 +898,7 @@ fn group_by_scheduled_date(tasks: &[Task]) -> Vec<(String, Vec<Task>)> {
 /// task-bearing days, not the PRD's "empty days with events still show"
 /// case, which has nothing to populate it with yet.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn render_upcoming_section(
     date: String,
     tasks: Vec<Task>,
@@ -754,6 +910,7 @@ fn render_upcoming_section(
     scheduling: bool,
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
+    subtask_context: Option<SubtaskContext>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -792,6 +949,7 @@ fn render_upcoming_section(
                 scheduling,
                 note_input.clone(),
                 schedule_input.clone(),
+                subtask_context.clone(),
                 theme,
                 cx,
             )
@@ -812,6 +970,7 @@ fn completed_section(
     scheduling: bool,
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
+    subtask_context: Option<SubtaskContext>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -844,6 +1003,7 @@ fn completed_section(
                             scheduling,
                             note_input.clone(),
                             schedule_input.clone(),
+                            subtask_context.clone(),
                             theme,
                             cx,
                         )
@@ -973,6 +1133,7 @@ fn render_task_row(
     scheduling: bool,
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
+    subtask_context: Option<SubtaskContext>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -991,6 +1152,7 @@ fn render_task_row(
             scheduling,
             note_input,
             schedule_input,
+            subtask_context,
             theme,
             cx,
         );
@@ -1097,8 +1259,9 @@ fn render_task_row(
 }
 
 /// `docs/DESIGN_DIRECTION.md`'s "Task detail" component: a 10 px raised
-/// surface, not a modal, exposing note, schedule, move, and delete in that
-/// order. Subtasks are skipped — no UI or `parent_id` queries exist yet.
+/// surface, not a modal, exposing note, subtasks, schedule, move, and
+/// delete in that order. A subtask itself shows no Subtasks section of its
+/// own — PRD §6.2's one-level ceiling ("a subtask cannot have children").
 #[allow(clippy::too_many_arguments)]
 fn render_detail_card(
     task: &Task,
@@ -1107,12 +1270,26 @@ fn render_detail_card(
     scheduling: bool,
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
+    subtask_context: Option<SubtaskContext>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
+    // Always `Some` in practice — `render_task_view` only computes it when
+    // a task is expanded, and this function is only reached for that exact
+    // task (see `render_task_row`'s `is_expanded` branch).
+    let subtask_context = subtask_context
+        .expect("render_detail_card is only reached for the expanded task, which always has a SubtaskContext");
+    let open_subtask_ids: Vec<String> = subtask_context
+        .subtasks
+        .iter()
+        .filter(|subtask| subtask.completed_at.is_none())
+        .map(|subtask| subtask.id.clone())
+        .collect();
+
     let completed = task.completed_at.is_some();
     let id_for_complete = task.id.clone();
     let title_for_complete = task.title.clone();
+    let has_open_subtasks_for_complete = !open_subtask_ids.is_empty();
     let id_for_delete = task.id.clone();
     let id_for_collapse = task.id.clone();
     let note_for_collapse = task.note.clone();
@@ -1143,13 +1320,23 @@ fn render_detail_card(
                         .cursor_default()
                         .hover(|el| el.border_color(theme.accent))
                         .on_click(cx.listener(move |flow, _, _, cx| {
-                            flow.toggle_completed(
-                                id_for_complete.clone(),
-                                title_for_complete.clone(),
-                                !completed,
-                                origin_view,
-                                cx,
-                            );
+                            if completed {
+                                flow.toggle_completed(
+                                    id_for_complete.clone(),
+                                    title_for_complete.clone(),
+                                    false,
+                                    origin_view,
+                                    cx,
+                                );
+                            } else {
+                                flow.request_complete(
+                                    id_for_complete.clone(),
+                                    title_for_complete.clone(),
+                                    has_open_subtasks_for_complete,
+                                    origin_view,
+                                    cx,
+                                );
+                            }
                             cx.stop_propagation();
                         })),
                 )
@@ -1168,6 +1355,76 @@ fn render_detail_card(
                 ),
         )
         .child(note_input)
+        .when(subtask_context.pending_confirm, |card| {
+            let id_for_confirm = task.id.clone();
+            let title_for_confirm = task.title.clone();
+            let confirm_subtask_ids = open_subtask_ids.clone();
+            card.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(8.0))
+                    .p(px(8.0))
+                    .rounded(px(6.0))
+                    .bg(theme.overlay)
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(px(11.5))
+                            .text_color(theme.text)
+                            .child("Complete parent and all subtasks?"),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.0))
+                            .child(
+                                div()
+                                    .id("complete-confirm-cancel")
+                                    .px(px(8.0))
+                                    .py(px(3.0))
+                                    .rounded(px(5.0))
+                                    .cursor_pointer()
+                                    .text_size(px(11.5))
+                                    .text_color(theme.text_secondary)
+                                    .hover(|el| el.bg(theme.overlay_strong))
+                                    .on_click(cx.listener(move |flow, _, _, cx| {
+                                        flow.cancel_complete_confirm(cx);
+                                        cx.stop_propagation();
+                                    }))
+                                    .child("Cancel"),
+                            )
+                            .child(
+                                div()
+                                    .id("complete-confirm-yes")
+                                    .px(px(8.0))
+                                    .py(px(3.0))
+                                    .rounded(px(5.0))
+                                    .cursor_pointer()
+                                    .text_size(px(11.5))
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(theme.accent)
+                                    .hover(|el| el.bg(theme.overlay_strong))
+                                    .on_click(cx.listener(move |flow, _, _, cx| {
+                                        flow.confirm_complete_with_subtasks(
+                                            id_for_confirm.clone(),
+                                            title_for_confirm.clone(),
+                                            confirm_subtask_ids.clone(),
+                                            origin_view,
+                                            cx,
+                                        );
+                                        cx.stop_propagation();
+                                    }))
+                                    .child("Complete all"),
+                            ),
+                    ),
+            )
+        })
+        .when(task.parent_id.is_none(), |card| {
+            card.child(render_subtasks_section(task.id.clone(), &subtask_context, theme, cx))
+        })
         .child(
             div()
                 .flex()
@@ -1197,6 +1454,122 @@ fn render_detail_card(
                 cx,
             ))
         })
+        .into_any_element()
+}
+
+/// PRD §6.2's subtasks: "shown indented beneath an expanded parent."
+/// `docs/DESIGN_DIRECTION.md`: "one indentation level and a slender left
+/// guide that ends at the last child" — a plain `border_l_1()` around just
+/// the row list achieves that for free, since a border only ever wraps its
+/// own box. The header's "(done/total)" is the progress PRD §6.2 asks for,
+/// as a plain count rather than a literal ring — no chart/ring primitive
+/// exists in this codebase yet to justify building one for a single spot.
+fn render_subtasks_section(
+    parent_id: String,
+    context: &SubtaskContext,
+    theme: Theme,
+    cx: &mut Context<Flow>,
+) -> AnyElement {
+    let total = context.subtasks.len();
+    let done = context.subtasks.iter().filter(|t| t.completed_at.is_some()).count();
+
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(4.0))
+        .child(
+            div()
+                .text_size(px(11.5))
+                .text_color(theme.text_secondary)
+                .child(if total > 0 {
+                    format!("Subtasks ({done}/{total})")
+                } else {
+                    "Subtasks".to_string()
+                }),
+        )
+        .when(!context.subtasks.is_empty(), |section| {
+            let parent_id = parent_id.clone();
+            section.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .pl(px(10.0))
+                    .border_l_1()
+                    .border_color(theme.border)
+                    .children(context.subtasks.iter().cloned().map(|subtask| {
+                        render_subtask_row(subtask, parent_id.clone(), theme, cx)
+                    })),
+            )
+        })
+        .child(if context.adding {
+            div().pl(px(10.0)).child(context.input.clone()).into_any_element()
+        } else {
+            div()
+                .id(SharedString::from(format!("add-subtask-{parent_id}")))
+                .pl(px(10.0))
+                .h(px(22.0))
+                .flex()
+                .items_center()
+                .gap(px(4.0))
+                .cursor_pointer()
+                .text_size(px(11.5))
+                .text_color(theme.text_tertiary)
+                .hover(|el| el.text_color(theme.text_secondary))
+                .on_click(cx.listener(move |flow, _, window, cx| {
+                    flow.open_add_subtask(window, cx);
+                    cx.stop_propagation();
+                }))
+                .child(crate::ui::icon("icons/plus.svg", 11.0, theme.text_tertiary))
+                .child("Add subtask")
+                .into_any_element()
+        })
+        .into_any_element()
+}
+
+/// One subtask row: a smaller completion circle + title, no schedule
+/// metadata (subtasks don't show one — PRD §6.2: "a child inherits no
+/// schedule automatically" — and no click-to-expand, since a subtask has
+/// no detail card of its own under the one-level ceiling).
+fn render_subtask_row(subtask: Task, parent_id: String, theme: Theme, cx: &mut Context<Flow>) -> AnyElement {
+    let checked = subtask.completed_at.is_some();
+    let id = subtask.id.clone();
+
+    div()
+        .h(px(24.0))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            div()
+                .id(SharedString::from(format!("subtask-{}-complete", subtask.id)))
+                .w(px(13.0))
+                .h(px(13.0))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_full()
+                .border_1()
+                .border_color(if checked { theme.accent } else { theme.border_strong })
+                .cursor_default()
+                .hover(|el| el.border_color(theme.accent))
+                .on_click(cx.listener(move |flow, _, _, cx| {
+                    flow.toggle_subtask_completed(id.clone(), parent_id.clone(), !checked, cx);
+                    cx.stop_propagation();
+                }))
+                .when(checked, |circle| {
+                    circle.child(crate::ui::icon("icons/check.svg", 9.0, theme.accent))
+                }),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_size(px(12.5))
+                .text_color(if checked { theme.text_tertiary } else { theme.text })
+                .child(subtask.title.clone()),
+        )
         .into_any_element()
 }
 
