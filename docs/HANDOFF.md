@@ -17,11 +17,13 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
 
 - `main` is a **fresh, orphan branch** — root commit `98d1b69`, no shared
   history with anything else. It was deliberately detached from the Waku
-  repo it was forked from (github.com/egoist/waku); the user wants this
-  history-free, remote-free, and pushed to a **new GitHub repo they will
-  create themselves**. No `origin` remote is configured. Don't create or
-  push to a remote unasked; the user said they plan to do that step
-  themselves.
+  repo it was forked from (github.com/egoist/waku).
+- `origin` is **https://github.com/mars-s/flow**, a public repo created
+  2026-08-18 (`gh repo create flow --public --source=. --remote=origin
+  --push`). Only `main` was pushed; `archive/waku-upstream` and
+  `milestone-0-strip` are intentionally local-only. GPL-3.0 (`LICENSE`,
+  unchanged) plus the README's upstream-attribution sentence to Waku
+  satisfy the license carry-over the user asked for when creating this repo.
 - Two other local branches exist purely as an archival safety net, not for
   active work: `archive/waku-upstream` (the pre-detachment Waku-based
   history) and `milestone-0-strip` (the working branch used during the
@@ -140,10 +142,7 @@ passing as of the Milestone 0 commit; more added since for `db.rs`).
 3. **The task-row/date-picker/toast components** the user showed reference
    screenshots for — explicitly deferred out of this session's UI pass, but
    real work items for Milestone 1, once there's task data to render.
-4. **New GitHub repo + push** — the user said they'll do this themselves.
-   Be ready to help if asked (e.g. confirming what should/shouldn't be
-   committed, checking `.gitignore`), but don't create or push to a remote
-   unprompted.
+4. ~~New GitHub repo + push~~ — done, see "Repo / git state" above.
 
 ## Where to find things
 
