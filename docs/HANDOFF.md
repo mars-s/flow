@@ -62,7 +62,25 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       Cmd+click multi-select with a bulk-action bar — built in an isolated
       git worktree by a subagent, reviewed, and fast-forward merged (see
       "Milestone 1 progress" below).
-- Working tree is clean as of commit `c4bc8c3` unless the "Milestone 1
+  21. `75df865` — fixed a duplicate task title rendering in the expanded
+      detail card (the compact row and the card both drew a header; the
+      card now replaces the row instead of sitting below it).
+  22. `9d6a156` — stopped bulk process/delete from silently swallowing
+      per-task errors (now logged via `eprintln!` instead of `let _ =`).
+  23. `6869c1c` — icons on the Today/Anytime/Someday/Schedule… pills,
+      space-to-capture from any task view, friendly schedule formatting,
+      a collapsed-by-default "Completed" section per view, and live
+      highlighting of the parser-recognized date/time phrase in Capture/
+      Schedule… — built in an isolated git worktree by a subagent
+      (interrupted once by a usage-limit reset mid-run, resumed from the
+      same worktree), independently re-verified, fast-forward merged.
+  24. `c8f2922` — made the custom titlebar actually draggable
+      (`window.start_window_move()` on mouse-down; the `window_control_area`
+      tag alone only feeds Windows' non-client hit-testing, not macOS),
+      fixed the sidebar divider not running the full window height, and
+      reverted an over-correction that had centered the task list into a
+      narrow column — kept as widescreen per explicit user feedback.
+- Working tree is clean as of commit `c8f2922` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - The `/loop` (self-paced autonomous mode) that was running earlier in this
@@ -112,20 +130,21 @@ the current count/status rather than trusting this number as it ages.
     `assets/icons/*.svg`, Lucide-style, registered in `src/assets.rs`).
 - Main pane: **all five task views are real** (`src/app/tasks.rs`,
   `render_task_view`) — Inbox, Today, Upcoming, Anytime, and Someday all
-  read/write the actual database through `db::View`. Today/Upcoming rows
-  show a trailing `YYYY-MM-DD [· HH:mm]` schedule label (unstyled — no
-  "Tomorrow · 8:00 AM" friendly formatting yet, see the gap below). Calendar
-  and Settings still render `components.rs`'s "Coming soon" placeholder.
-  **No subtasks, date picker, or toast/notification component exist yet**
-  — the user showed reference screenshots for these (Things-3-style task
-  row with note + subtask, a "When" date popover with Today/This
-  Evening/calendar grid/Someday/Add Reminder, a toast banner) but
-  explicitly deferred them out of the sidebar-focused UI pass; still
-  future work. There is also currently **no UI path to actually schedule a
-  task** — `Db::schedule` exists and is tested, but nothing in the app
-  calls it yet (no "Process" action on Inbox rows, no date picker); Today/
-  Upcoming/Anytime will stay empty in real use until either that UI or the
-  NLP parser lands.
+  read/write the actual database through `db::View`. Task rows show a
+  friendly schedule label ("Today"/"Tomorrow"/weekday/short date + 12-hour
+  time — see the "Milestone 1 progress" section below for
+  `format_schedule`, which superseded the raw `YYYY-MM-DD [· HH:mm]` this
+  paragraph originally described). Completed tasks live in a collapsed
+  "Completed" section per view rather than vanishing. Calendar and Settings
+  still render `components.rs`'s "Coming soon" placeholder.
+  **No subtasks or toast/notification component exist yet** — the user
+  showed reference screenshots for these (Things-3-style task row with
+  note + subtask, a toast banner) but explicitly deferred them out of the
+  sidebar-focused UI pass; still future work. Scheduling a task now has
+  three real paths: typing a date phrase into Capture, the detail card's
+  Today/Anytime/Someday/"Schedule…" picker, and the same picker's bulk
+  variant for multi-select — the original "no UI path to schedule" gap
+  this paragraph described is closed.
 - `theme.rs` was retokened this session to actually match
   `docs/DESIGN_DIRECTION.md` (it had drifted — still had Waku's old
   coral-accent palette after the strip). Light theme values were **not**
@@ -323,6 +342,49 @@ landed which line.
   merging — not just trusted from the agent's own report. 166 tests
   passing as of commit `c4bc8c3` (2 new: `set_note`, `delete_task`);
   verified in the running debug app after merge, not just `cargo check`.
+- [x] **Fixed: duplicate task title in the expanded detail card** (`75df865`)
+      and **bulk process/delete no longer silently swallow per-task errors**
+      (`9d6a156`).
+- [x] **Icons on the schedule-picker pills** — Today/Anytime/Someday/
+      Schedule… now show their sidebar-matching icon (`star`/`layers`/
+      `archive`/`calendar`) instead of plain text, no per-item color (kept
+      the single-accent rule).
+- [x] **Space opens Capture from any task view.** Bound globally
+      (`SpaceCapture`/`lib.rs`) but scoped off composer focus via a
+      `"Flow && !ComposerInput"` key-context predicate, plus a defensive
+      `capturing`/`scheduling`/`expanded_task_id` guard, so a literal typed
+      space in Capture/Schedule…/the note field is unaffected.
+- [x] **Friendly schedule formatting** (closes the gap below) —
+      `format_schedule` in `app/tasks.rs` renders Today/Tomorrow/weekday
+      name (next 6 days)/short date (`"Aug 23"`), with 12-hour time
+      appended (`"Tomorrow 6:00 PM"`). Used by both the row's trailing
+      label and the detail card's status pill.
+- [x] **Collapsed-by-default "Completed" section per view**, instead of a
+      completed task disappearing entirely. New `Db::list_completed(view)`
+      mirrors `list_view`'s bucket/date filtering with
+      `completed_at IS NOT NULL`. Docked at the bottom of the view; when
+      expanded it grows upward capped at 280px before scrolling internally
+      rather than pushing the open list further up or growing unbounded.
+      Un-completing a row from there works via the same completion circle.
+- [x] **Live highlight of the recognized date/time phrase while typing**
+      Capture (and Schedule…) — `parse.rs`'s `ParsedTitle` now carries a
+      `source_range`, and `ComposerEvent::Edited` repaints it live using
+      the composer's existing search-match highlight mechanism
+      (`ComposerInput::set_search_matches`), reused rather than building a
+      second highlight system. This is the "clickable preview chip" gap
+      below, resolved as an in-place highlight instead of a separate chip
+      per explicit user direction ("just highlighting the words is fine").
+- [x] **Custom titlebar is actually draggable**, and the traffic-light /
+      "Flow" wordmark overlap is fixed. An invisible full-width strip is
+      layered on top of the window (not its own flex row, to keep the
+      sidebar's divider running the full height) calling
+      `window.start_window_move()` on mouse-down; double-click zooms via
+      `window.titlebar_double_click()`. The sidebar's top padding is tied
+      to the same `DRAG_BAR_HEIGHT` constant so the two can't drift apart.
+- 169 tests passing as of commit `6869c1c` (3 new: `list_completed`, two
+  `parse.rs` `source_range` tests); the window-chrome fixes in `c8f2922`
+  added no new tests (pure layout/interaction, no new logic to unit-test).
+  Both increments verified in the running debug app, not just `cargo check`.
 
 **Not done yet, in the order they're planned:**
 
@@ -331,23 +393,23 @@ landed which line.
       the picker or pill would close this.
 - [ ] A proper completion-collapse animation + Undo toast, per
       `docs/DESIGN_DIRECTION.md`'s "180-220ms opacity and vertical
-      collapse... available via Undo" spec — currently the row just
-      vanishes on refetch, no collapse motion, no undo.
-- [ ] Friendly schedule formatting ("Tomorrow · 8:00 AM" per PRD §6.4)
-      instead of Today/Upcoming's current raw `scheduled_date`/
-      `scheduled_time` strings. `parse.rs` computes real dates; nothing
-      formats them back into the friendly relative form for display yet.
+      collapse... available via Undo" spec. Partially superseded: a
+      completed task is no longer lost (it moves into the "Completed"
+      section above), but there's still no collapse motion on the moment
+      of completing and no Undo affordance.
 - [ ] Upcoming currently renders as one flat list ordered by date, not
       PRD §6.3's grouped-by-day sections with weekday headers. Correct
       data, simplified presentation — a deliberate scope cut to land real
       data first, not an oversight.
-- [ ] One-level subtasks, task detail expansion, the task-row/date-picker/
-      toast components the user showed reference screenshots for earlier in
-      this session (explicitly deferred out of the sidebar-focused UI pass).
-      The composer's clickable date-phrase preview chip and Backspace-to-
-      restore interaction from PRD §6.4 are also not built — `parse.rs`
-      exposes `source_phrase` specifically so this can be added later
-      without changing the parser itself.
+- [ ] One-level subtasks and task detail expansion (`parent_id` has no UI
+      or queries yet) — still deferred, not part of this session's UI
+      passes.
+- [ ] **Notes don't actually persist/work right now** — user-reported,
+      not yet diagnosed. `Db::set_note` exists and is tested at the DB
+      layer, and the note field saves on blur (`Flow::on_note_blur`), but
+      the user reports "a lot of things don't work" around notes in the
+      live app. Explicitly deferred by the user pending a dedicated look;
+      next session should reproduce and diagnose before assuming the fix.
 - [ ] Update `docs/PRODUCT_REQUIREMENTS.md` §9 (Convex → Turso, still
       describes the old self-hosted-Convex sync plan throughout — Milestone
       2's description, the deployment target, the architecture diagram, the
