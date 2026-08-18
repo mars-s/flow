@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Context, Div, ElementId, Hsla, Img, InteractiveElement, Interactivity,
     KeyDownEvent, ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString, Stateful,
-    StyleRefinement, Styled, Svg, Window, div, img, prelude::*, px, rgb, svg,
+    StyleRefinement, Styled, Svg, Window, div, img, prelude::*, px, svg,
 };
 
 pub mod menu;

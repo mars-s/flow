@@ -10,7 +10,6 @@ use gpui::{
 
 use super::Flow;
 use super::components::placeholder_pane;
-use super::sidebar::Destination;
 use crate::theme::Theme;
 
 /// PRD §7: "Navigation cross-fades or slides only the main pane (120–160
