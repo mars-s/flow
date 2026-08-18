@@ -119,6 +119,8 @@ input.schedule_when:
   en: When? (e.g. "tomorrow 5pm")
 input.notes:
   en: Notes
+input.add_subtask:
+  en: Add subtask…
 input.detected_automatically:
   en: Detected automatically
 input.find:

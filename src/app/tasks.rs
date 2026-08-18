@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use gpui::{
     Animation, AnimationExt, AnyElement, ClickEvent, Context, Entity, IntoElement, ParentElement,
-    SharedString, Styled, div, ease_out_quint, prelude::*, px,
+    SharedString, Styled, Window, div, ease_out_quint, prelude::*, px,
 };
 
 use super::Flow;
@@ -107,6 +107,13 @@ impl Flow {
     /// user action rather than a per-frame cost, so invalidating all five
     /// beats threading the exact affected set through every call site.
     fn invalidate_all_views(&mut self) {
+        // Routes through `invalidate_view` (not a direct `self.tasks`
+        // touch) specifically so this also clears `completed_tasks` — a
+        // delete or bulk-delete can remove a row from either cache, and
+        // the previous version only cleared `tasks`, so a deleted task
+        // that was already completed stayed visible in its "Completed"
+        // section forever (the cache never refetched to notice it was
+        // gone).
         for view in [
             View::Inbox,
             View::Today,
@@ -114,7 +121,7 @@ impl Flow {
             View::Anytime,
             View::Someday,
         ] {
-            self.tasks.invalidate(&view);
+            self.invalidate_view(view);
         }
     }
 
@@ -267,6 +274,8 @@ impl Flow {
             self.expanded_task_id = None;
             self.schedule_picker_open = false;
             self.scheduling = false;
+            self.adding_subtask = false;
+            self.pending_complete_confirm = None;
             cx.notify();
             return;
         }
@@ -274,6 +283,8 @@ impl Flow {
         self.note_task_id = Some(id);
         self.schedule_picker_open = false;
         self.scheduling = false;
+        self.adding_subtask = false;
+        self.pending_complete_confirm = None;
         self.note_input
             .update(cx, |input, cx| input.set_content(note.unwrap_or_default(), cx));
         cx.notify();
@@ -288,10 +299,16 @@ impl Flow {
         cx.notify();
     }
 
-    /// The detail card's schedule pill: opens/closes the
-    /// Today/Anytime/Someday/"Schedule…" quick-picker.
-    fn toggle_schedule_picker(&mut self, cx: &mut Context<Self>) {
+    /// The detail card's schedule pill: opens/closes the picker. Opening it
+    /// also focuses the free-text NLP field immediately — `scheduling` and
+    /// `schedule_picker_open` now always move together, since the picker no
+    /// longer has a separate button-only state before the field appears.
+    fn toggle_schedule_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.schedule_picker_open = !self.schedule_picker_open;
+        self.scheduling = self.schedule_picker_open;
+        if self.schedule_picker_open {
+            self.focus_schedule_field(window, cx);
+        }
         cx.notify();
     }
 
@@ -427,6 +444,42 @@ impl Flow {
                 .await;
             let _ = flow.update(cx, |flow, cx| {
                 flow.invalidate_all_views();
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The "Completed" section's "Clear" button: soft-deletes every
+    /// completed task currently shown there, same loop-in-background
+    /// pattern as `bulk_delete`. Reads straight off the already-loaded
+    /// `completed_tasks` cache rather than re-fetching — the button only
+    /// renders once that cache is `Ready` (the section itself is gated on
+    /// `has_completed` in `task_list`), so a read here is never a genuine
+    /// miss.
+    fn clear_completed(&mut self, view: View, cx: &mut Context<Self>) {
+        let Query::Ready(completed) = self.completed_tasks.read(&view) else {
+            return;
+        };
+        let ids: Vec<String> = completed.iter().map(|task| task.id.clone()).collect();
+        if ids.is_empty() {
+            return;
+        }
+        let Some(db) = self.db.clone() else { return };
+
+        cx.spawn(async move |flow, cx| {
+            let _ = cx
+                .background_executor()
+                .spawn(async move {
+                    for id in ids {
+                        if let Err(error) = db.delete_task(id.clone()) {
+                            eprintln!("Flow: clear_completed failed for task {id}: {error:#}");
+                        }
+                    }
+                })
+                .await;
+            let _ = flow.update(cx, |flow, cx| {
+                flow.invalidate_view(view);
                 cx.notify();
             });
         })
@@ -799,27 +852,55 @@ fn completed_section(
         })
         .child(
             div()
-                .id(SharedString::from(format!("completed-toggle-{view:?}")))
                 .h(px(28.0))
                 .flex()
                 .items_center()
-                .gap(px(6.0))
-                .px(px(8.0))
-                .rounded(px(6.0))
-                .cursor_pointer()
-                .hover(|el| el.bg(theme.overlay))
-                .on_click(cx.listener(move |flow, _, _, cx| flow.toggle_completed_expanded(view, cx)))
-                .child(crate::ui::icon(
-                    if expanded { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" },
-                    12.0,
-                    theme.text_tertiary,
-                ))
+                .justify_between()
                 .child(
                     div()
-                        .text_size(px(12.0))
-                        .text_color(theme.text_secondary)
-                        .child(format!("Completed ({})", completed.len())),
-                ),
+                        .id(SharedString::from(format!("completed-toggle-{view:?}")))
+                        .h_full()
+                        .flex_1()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0))
+                        .px(px(8.0))
+                        .rounded(px(6.0))
+                        .cursor_pointer()
+                        .hover(|el| el.bg(theme.overlay))
+                        .on_click(
+                            cx.listener(move |flow, _, _, cx| flow.toggle_completed_expanded(view, cx)),
+                        )
+                        .child(crate::ui::icon(
+                            if expanded { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" },
+                            12.0,
+                            theme.text_tertiary,
+                        ))
+                        .child(
+                            div()
+                                .text_size(px(12.0))
+                                .text_color(theme.text_secondary)
+                                .child(format!("Completed ({})", completed.len())),
+                        ),
+                )
+                .when(expanded, |row| {
+                    row.child(
+                        div()
+                            .id(SharedString::from(format!("completed-clear-{view:?}")))
+                            .px(px(8.0))
+                            .py(px(3.0))
+                            .rounded(px(5.0))
+                            .cursor_pointer()
+                            .text_size(px(11.5))
+                            .text_color(theme.text_tertiary)
+                            .hover(|el| el.bg(theme.overlay).text_color(theme.danger))
+                            .on_click(cx.listener(move |flow, _, _, cx| {
+                                flow.clear_completed(view, cx);
+                                cx.stop_propagation();
+                            }))
+                            .child("Clear"),
+                    )
+                }),
         )
         .into_any_element()
 }
@@ -1133,20 +1214,23 @@ fn render_schedule_pill(id: String, label: String, theme: Theme, cx: &mut Contex
         .text_color(theme.text_secondary)
         .bg(theme.overlay)
         .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
-        .on_click(cx.listener(move |flow, _, _, cx| {
-            flow.toggle_schedule_picker(cx);
+        .on_click(cx.listener(move |flow, _, window, cx| {
+            flow.toggle_schedule_picker(window, cx);
             cx.stop_propagation();
         }))
         .child(label)
         .into_any_element()
 }
 
-/// PRD §6.3's "inline 'Process' action": three quick destinations plus
-/// "Schedule…", which swaps in a free-text field parsed the same way
-/// Capture parses a title (see `Flow::on_schedule_event`, `app.rs`) rather
-/// than a calendar widget. Lives inside the task detail card's schedule
-/// picker now, relocated from the old bare-pill row. A fifth "Clear" option
-/// appears only when the task actually has a schedule to remove.
+/// PRD §6.3's "inline 'Process' action". The free-text NLP field is now the
+/// primary surface — opening the picker (`Flow::toggle_schedule_picker`)
+/// focuses it immediately rather than gating it behind a separate
+/// "Schedule…" click — with Today/Anytime/Someday as a quick-pick list
+/// underneath for the common cases that don't need typing. A "Clear"
+/// option appears only when the task actually has a schedule to remove.
+/// `scheduling` is threaded through purely for signature consistency with
+/// the rest of this file's render chain; it's always true by the time this
+/// renders, since nothing opens the picker without also opening the field.
 #[allow(clippy::too_many_arguments)]
 fn render_process_row(
     task_id: String,
@@ -1157,81 +1241,64 @@ fn render_process_row(
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
-    if scheduling {
-        return div().child(schedule_input).into_any_element();
-    }
-
+    let _ = scheduling;
     div()
         .flex()
-        .items_center()
+        .flex_col()
         .gap(px(6.0))
-        .children(ProcessTarget::ALL.into_iter().map(|target| {
-            let id = task_id.clone();
-            div()
-                .id(gpui::SharedString::from(format!("process-{task_id}-{}", target.label())))
-                .flex()
-                .items_center()
-                .gap(px(4.0))
-                .px(px(8.0))
-                .py(px(3.0))
-                .rounded(px(5.0))
-                .cursor_pointer()
-                .text_size(px(11.5))
-                .text_color(theme.text_secondary)
-                .bg(theme.overlay)
-                .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
-                .on_click(cx.listener(move |flow, _, _, cx| {
-                    flow.process_task(id.clone(), target, cx);
-                    cx.stop_propagation();
-                }))
-                .child(crate::ui::icon(target.icon_path(), 12.0, theme.text_secondary))
-                .child(target.label())
-        }))
+        .child(schedule_input)
         .child(
             div()
-                .id(gpui::SharedString::from(format!("process-{task_id}-schedule")))
                 .flex()
                 .items_center()
-                .gap(px(4.0))
-                .px(px(8.0))
-                .py(px(3.0))
-                .rounded(px(5.0))
-                .cursor_pointer()
-                .text_size(px(11.5))
-                .text_color(theme.text_secondary)
-                .bg(theme.overlay)
-                .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
-                .on_click(cx.listener(move |flow, _, window, cx| {
-                    flow.open_schedule_field(window, cx);
-                    cx.stop_propagation();
+                .gap(px(6.0))
+                .children(ProcessTarget::ALL.into_iter().map(|target| {
+                    let id = task_id.clone();
+                    div()
+                        .id(gpui::SharedString::from(format!("process-{task_id}-{}", target.label())))
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
+                        .rounded(px(5.0))
+                        .cursor_pointer()
+                        .text_size(px(11.5))
+                        .text_color(theme.text_secondary)
+                        .bg(theme.overlay)
+                        .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
+                        .on_click(cx.listener(move |flow, _, _, cx| {
+                            flow.process_task(id.clone(), target, cx);
+                            cx.stop_propagation();
+                        }))
+                        .child(crate::ui::icon(target.icon_path(), 12.0, theme.text_secondary))
+                        .child(target.label())
                 }))
-                .child(crate::ui::icon("icons/calendar.svg", 12.0, theme.text_secondary))
-                .child("Schedule…"),
+                .when(has_schedule, |row| {
+                    let id = task_id.clone();
+                    row.child(
+                        div()
+                            .id(gpui::SharedString::from(format!("process-{task_id}-clear")))
+                            .flex()
+                            .items_center()
+                            .gap(px(4.0))
+                            .px(px(8.0))
+                            .py(px(3.0))
+                            .rounded(px(5.0))
+                            .cursor_pointer()
+                            .text_size(px(11.5))
+                            .text_color(theme.text_secondary)
+                            .bg(theme.overlay)
+                            .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
+                            .on_click(cx.listener(move |flow, _, _, cx| {
+                                flow.clear_schedule(id.clone(), bucket, cx);
+                                cx.stop_propagation();
+                            }))
+                            .child(crate::ui::icon("icons/x.svg", 12.0, theme.text_secondary))
+                            .child("Clear"),
+                    )
+                }),
         )
-        .when(has_schedule, |row| {
-            let id = task_id.clone();
-            row.child(
-                div()
-                    .id(gpui::SharedString::from(format!("process-{task_id}-clear")))
-                    .flex()
-                    .items_center()
-                    .gap(px(4.0))
-                    .px(px(8.0))
-                    .py(px(3.0))
-                    .rounded(px(5.0))
-                    .cursor_pointer()
-                    .text_size(px(11.5))
-                    .text_color(theme.text_secondary)
-                    .bg(theme.overlay)
-                    .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
-                    .on_click(cx.listener(move |flow, _, _, cx| {
-                        flow.clear_schedule(id.clone(), bucket, cx);
-                        cx.stop_propagation();
-                    }))
-                    .child(crate::ui::icon("icons/x.svg", 12.0, theme.text_secondary))
-                    .child("Clear"),
-            )
-        })
         .into_any_element()
 }
 

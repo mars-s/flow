@@ -111,6 +111,26 @@ pub struct Flow {
     /// Distinguishes a stale dismiss timer from the current toast — see
     /// `show_undo_toast`.
     undo_token: u64,
+    /// Subtasks, keyed by parent task id — a third `QueryCache` alongside
+    /// `tasks`/`completed_tasks` rather than folding into either, since a
+    /// key here is a task id, not a `View`. Only fetched for the currently
+    /// expanded task (`Flow::toggle_expanded`), the same lazy-on-demand
+    /// reasoning as `note_input`'s content: a compact row never shows
+    /// subtask progress, so nothing here is reachable from a frame that
+    /// only has the list open, matching CLAUDE.md's render-path I/O rule.
+    subtasks: QueryCache<String, Vec<Task>>,
+    /// Whether the expanded card's "+ Add subtask" affordance has swapped
+    /// in `subtask_input`, mirroring `scheduling`'s relationship to the
+    /// schedule picker.
+    adding_subtask: bool,
+    /// A single long-lived composer for adding a subtask, same reuse-not-
+    /// recreate reasoning as `capture_input`/`schedule_input`.
+    subtask_input: Entity<ComposerInput>,
+    /// The task id currently showing the inline "Complete parent and all
+    /// subtasks?" prompt (PRD §6.2), if any — set instead of completing
+    /// immediately when the expanded card's checkbox is clicked on a task
+    /// with at least one incomplete subtask.
+    pending_complete_confirm: Option<String>,
 }
 
 /// What `render_undo_toast` (`app/tasks.rs`) shows and what `Flow::undo`
@@ -159,6 +179,11 @@ impl Flow {
             let note_focus = note_input.read(cx).focus();
             cx.on_blur(&note_focus, window, Self::on_note_blur).detach();
 
+            let subtask_input = cx.new(|cx| {
+                ComposerInput::new(window, cx).placeholder(tr!("input.add_subtask"))
+            });
+            cx.subscribe(&subtask_input, Self::on_subtask_event).detach();
+
             Self {
                 destination: Destination::Inbox,
                 new_task_focus: cx.focus_handle(),
@@ -180,6 +205,10 @@ impl Flow {
                 completing_ids: HashSet::new(),
                 undo_toast: None,
                 undo_token: 0,
+                subtasks: QueryCache::new(8),
+                adding_subtask: false,
+                subtask_input,
+                pending_complete_confirm: None,
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
@@ -238,18 +267,21 @@ impl Flow {
             (parsed.cleaned_title, parsed.date, parsed.time)
         };
 
+        let has_schedule = date.is_some() || time.is_some();
         cx.spawn(async move |flow, cx| {
             let created = cx
                 .background_executor()
                 .spawn(async move {
                     let task = db.create_task(title)?;
-                    // Per PRD §5/§14, a parsed date does not activate the
-                    // task — it stays in Inbox as a review queue, just with
-                    // its schedule already attached.
-                    if date.is_some() || time.is_some() {
+                    // A parsed date activates the task immediately — it
+                    // moves straight to Today/Upcoming instead of sitting
+                    // in Inbox with a schedule attached. Explicit product
+                    // decision overriding this project's earlier PRD §14
+                    // reading ("a parsed date does not activate the task").
+                    if has_schedule {
                         db.schedule(
                             &task.id,
-                            Bucket::Inbox,
+                            Bucket::Active,
                             date.map(|d| d.to_string()),
                             time.map(|t| t.format("%H:%M").to_string()),
                         )?;
@@ -261,7 +293,9 @@ impl Flow {
                 return;
             }
             let _ = flow.update(cx, |flow, cx| {
-                flow.tasks.invalidate(&View::Inbox);
+                for view in [View::Inbox, View::Today, View::Upcoming, View::Anytime] {
+                    flow.tasks.invalidate(&view);
+                }
                 cx.notify();
             });
         })
@@ -288,14 +322,13 @@ impl Flow {
             .update(cx, |input, cx| input.set_search_matches(matches, active, cx));
     }
 
-    /// The detail card's schedule-pill picker's "Schedule…" button: swaps
-    /// the three quick buttons for a free-text field, focused, for the row
-    /// already in `expanded_task_id`.
-    pub(super) fn open_schedule_field(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.scheduling = true;
+    /// Focuses `schedule_input` for the row already in `expanded_task_id` —
+    /// called by `Flow::toggle_schedule_picker` (`tasks.rs`) the moment the
+    /// picker opens, so the NLP field is ready to type into immediately
+    /// rather than needing a separate "Schedule…" click first.
+    pub(super) fn focus_schedule_field(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let focus = self.schedule_input.read(cx).focus();
         window.focus(&focus, cx);
-        cx.notify();
     }
 
     fn on_schedule_event(
@@ -367,6 +400,50 @@ impl Flow {
             .update(cx, |input, cx| input.set_search_matches(matches, active, cx));
     }
 
+    /// The detail card's "+ Add subtask" row: swaps in `subtask_input`,
+    /// focused, for the task already in `expanded_task_id` — same
+    /// swap-in-place idiom as `focus_schedule_field`.
+    pub(super) fn open_add_subtask(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.adding_subtask = true;
+        let focus = self.subtask_input.read(cx).focus();
+        window.focus(&focus, cx);
+        cx.notify();
+    }
+
+    fn on_subtask_event(
+        &mut self,
+        _input: Entity<ComposerInput>,
+        event: &ComposerEvent,
+        cx: &mut Context<Self>,
+    ) {
+        let ComposerEvent::Submit(title) = event else {
+            return;
+        };
+        let Some(parent_id) = self.expanded_task_id.clone() else {
+            return;
+        };
+        let Some(db) = self.db.clone() else { return };
+        if title.trim().is_empty() {
+            return; // PRD §6.1: a task needs a nonempty title.
+        }
+        let title = title.clone();
+
+        cx.spawn(async move |flow, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { db.create_subtask(parent_id.clone(), title).map(|_| parent_id) })
+                .await;
+            let Ok(parent_id) = result else { return };
+            let _ = flow.update(cx, |flow, cx| {
+                flow.subtasks.invalidate(&parent_id);
+                cx.notify();
+            });
+        })
+        .detach();
+        // Stay open for adding several subtasks in a row, same reasoning
+        // as Capture; the field already cleared itself on submit.
+    }
+
     fn handle_new_task_action(&mut self, _: &NewTask, window: &mut Window, cx: &mut Context<Self>) {
         self.open_capture(window, cx);
     }
@@ -398,7 +475,10 @@ impl Flow {
             self.scheduling = false;
             self.schedule_picker_open = false;
             self.expanded_task_id = None;
+            self.adding_subtask = false;
+            self.pending_complete_confirm = None;
             self.schedule_input.update(cx, |input, cx| input.clear(cx));
+            self.subtask_input.update(cx, |input, cx| input.clear(cx));
             cx.notify();
             return;
         }
