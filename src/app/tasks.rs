@@ -234,7 +234,15 @@ impl Flow {
                 .background_executor()
                 .spawn(async move {
                     for id in ids {
-                        let _ = db.schedule(id, target.bucket(), today.clone(), None::<String>);
+                        if let Err(error) =
+                            db.schedule(id.clone(), target.bucket(), today.clone(), None::<String>)
+                        {
+                            // No error-surface UI exists yet (see
+                            // docs/HANDOFF.md) — logging beats silently
+                            // dropping a failure mid-batch, which the
+                            // previous `let _ =` did.
+                            eprintln!("Flow: bulk_process failed for task {id}: {error:#}");
+                        }
                     }
                 })
                 .await;
@@ -259,7 +267,9 @@ impl Flow {
                 .background_executor()
                 .spawn(async move {
                     for id in ids {
-                        let _ = db.delete_task(id);
+                        if let Err(error) = db.delete_task(id.clone()) {
+                            eprintln!("Flow: bulk_delete failed for task {id}: {error:#}");
+                        }
                     }
                 })
                 .await;
