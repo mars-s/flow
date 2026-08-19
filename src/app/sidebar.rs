@@ -17,7 +17,7 @@
 
 use gpui::{
     Animation, AnimationExt, AnyElement, App, Context, Div, IntoElement, KeyDownEvent,
-    SharedString, Stateful, Window, div, ease_out_quint, prelude::*, px,
+    SharedString, Stateful, Window, div, ease_out_quint, prelude::*, px, relative,
 };
 
 use super::Flow;
@@ -153,6 +153,15 @@ impl Mode {
             Mode::Calendar => "Calendar",
         }
     }
+
+    /// Where the sliding thumb sits for this mode, as a fraction of the
+    /// pill's width — each segment is half, so this is just its index.
+    fn thumb_position(self) -> f32 {
+        match self {
+            Mode::Tasks => 0.0,
+            Mode::Calendar => 1.0,
+        }
+    }
 }
 
 impl Flow {
@@ -181,7 +190,7 @@ impl Flow {
         self.set_destination(destination, window, cx);
     }
 
-    pub(super) fn render_sidebar(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(super) fn render_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
         let theme = Theme::current(cx);
         let mode = self.sidebar_mode();
 
@@ -209,7 +218,7 @@ impl Flow {
                     .child("Flow"),
             )
             .child(self.render_capture_row(theme, cx))
-            .child(self.render_mode_switch(mode, theme, cx))
+            .child(self.render_mode_switch(mode, theme, window, cx))
             .child(
                 div()
                     .id("sidebar-nav")
@@ -334,23 +343,64 @@ impl Flow {
             .into_any_element()
     }
 
-    /// The Tasks/Calendar pill: Flow's two whole-app modes. Each segment
-    /// fills half the pill's width; the active segment gets a raised
-    /// surface, matching the reference's "Home | Code" treatment but within
-    /// the monochrome focus-blue system (no per-segment color).
+    /// The Tasks/Calendar pill: Flow's two whole-app modes. A single thumb
+    /// slides between the two segments rather than each segment toggling
+    /// its own background — the earlier per-segment opacity fade (a fresh
+    /// mount replaying its own 0→1 timeline) read as correct in code review
+    /// but, per direct user feedback, didn't actually register as motion:
+    /// a color-only crossfade on a small pill is easy to miss even when
+    /// it's technically playing. An actual moving thumb is unambiguous.
+    /// Evaluated by hand via `ui::motion::Tween` rather than
+    /// `with_animation`, since the thumb has to resume from wherever it
+    /// currently sits on a fast double-toggle, not replay from a fixed
+    /// endpoint — see `Tween`'s own doc for why `with_animation` can't do
+    /// that.
     fn render_mode_switch(
-        &self,
+        &mut self,
         mode: Mode,
         theme: Theme,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
+        let target = mode.thumb_position();
+        let position = match self.mode_thumb {
+            Some(tween) => match tween.toward(target) {
+                Some(position) => {
+                    window.request_animation_frame();
+                    position
+                }
+                None => {
+                    self.mode_thumb = None;
+                    target
+                }
+            },
+            None => target,
+        };
+
         div()
             .id("mode-switch")
+            .relative()
             .mt(px(6.0))
             .p(px(2.0))
             .rounded(px(8.0))
             .bg(theme.inset)
             .flex()
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .left(relative(position * 0.5))
+                    .w(relative(0.5))
+                    // The pill's own `.p(px(2.0))` insets its flex children
+                    // from the border; margin gives the absolutely
+                    // positioned thumb that same 2px gap on every edge
+                    // without needing to know the pill's exact pixel width
+                    // to compute it.
+                    .m(px(2.0))
+                    .rounded(px(6.0))
+                    .bg(theme.raised),
+            )
             .child(self.render_mode_segment(Mode::Tasks, mode, theme, cx))
             .child(self.render_mode_segment(Mode::Calendar, mode, theme, cx))
     }
@@ -371,7 +421,6 @@ impl Flow {
 
         div()
             .id(SharedString::from(format!("mode-{}", segment.label())))
-            .relative()
             .track_focus(&focus)
             .tab_index(0)
             .flex_1()
@@ -399,29 +448,6 @@ impl Flow {
                     cx.stop_propagation();
                 }
             }))
-            // The raised fill fades in behind the label rather than
-            // snapping on with the click — a separate layer (not `.bg()`
-            // directly on this row) so it can carry its own opacity
-            // animation independent of the icon/label painted on top of
-            // it. Only rendered on the segment becoming selected: the
-            // losing segment's fill just unmounts (no fade-out id to
-            // reuse — this is a real GPUI "mount" every time, not a
-            // persisted style flip), which reads as the same crossfade
-            // since the entering segment's fade-in is what draws the eye.
-            .when(selected, |row| {
-                row.child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .rounded(px(6.0))
-                        .bg(theme.raised)
-                        .with_animation(
-                            SharedString::from(format!("mode-{}-reveal", segment.label())),
-                            Animation::new(motion::TRANSITION).with_easing(ease_out_quint()),
-                            |element, delta| element.opacity(delta),
-                        ),
-                )
-            })
             .child(icon(
                 segment.icon_path(),
                 14.0,
@@ -451,6 +477,18 @@ impl Flow {
     }
 
     fn select_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+        let current = self.sidebar_mode();
+        if current != mode {
+            // Resume from wherever the thumb currently sits (mid-slide or
+            // at rest) rather than jumping back to `current`'s resting
+            // position — a fast double-toggle reverses smoothly instead of
+            // snapping to the wrong end first.
+            let from = self
+                .mode_thumb
+                .and_then(|tween| tween.toward(current.thumb_position()))
+                .unwrap_or_else(|| current.thumb_position());
+            self.mode_thumb = Some(motion::Tween::new(from, motion::TRANSITION));
+        }
         let destination = match mode {
             Mode::Calendar => Destination::Calendar,
             // Tasks mode has no destination of its own; landing on Inbox

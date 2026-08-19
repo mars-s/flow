@@ -46,6 +46,13 @@ pub struct Flow {
     /// Calendar destination are the same thing; Tasks has no destination of
     /// its own, so it needs a handle that isn't one of the seven above.
     mode_tasks_focus: FocusHandle,
+    /// The Tasks/Calendar pill's sliding thumb, mid-flight — `None` at
+    /// rest (thumb sitting exactly at the active mode's position, nothing
+    /// to evaluate every render). `ui::sidebar::render_mode_switch`
+    /// evaluates it by hand each frame via `ui::motion::Tween` rather than
+    /// `with_animation`, since a fast double-toggle needs to resume from
+    /// wherever the thumb currently sits, not replay from a fixed start.
+    mode_thumb: Option<crate::ui::motion::Tween>,
     /// `None` when opening the local database failed at startup (e.g. an
     /// unwritable data directory) — task views degrade to an error state
     /// rather than panicking. See `tasks.rs`.
@@ -228,6 +235,7 @@ impl Flow {
                 new_task_focus: cx.focus_handle(),
                 nav_focuses: array::from_fn(|_| cx.focus_handle()),
                 mode_tasks_focus: cx.focus_handle(),
+                mode_thumb: None,
                 db,
                 tasks: QueryCache::new(8),
                 last_tasks: HashMap::new(),

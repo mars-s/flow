@@ -217,42 +217,52 @@ pub const TRANSITION: Duration = Duration::from_millis(180);
 /// settled before the pointer arrives anywhere else.
 pub const PANEL_SLIDE: Duration = Duration::from_millis(200);
 
-/// A one-shot width slide, evaluated from `render` instead of wrapped around
-/// an element.
+/// A one-shot value slide, evaluated from `render` instead of wrapped around
+/// an element — generic over whatever f32 is being animated (a panel's
+/// width, a segmented control's thumb position, ...).
 ///
-/// `with_animation` cannot drive this. The width feeds the flex layout of the
-/// panel's *siblings* — the transcript column takes whatever the panels leave
-/// — and gpui keys an animation element by its element-id path, so a wrapper
-/// that remounts would replay the slide from zero. Evaluating by hand keeps
-/// the element tree's shape constant: a finished or dropped tween is exactly
-/// the steady state.
+/// `with_animation` cannot drive this in two situations: when the animated
+/// value feeds a *sibling's* layout rather than the animated element's own
+/// style (a panel's width setting how much room its neighbor gets), or when
+/// the value must resume from wherever it currently sits on interruption
+/// rather than replay from a fixed endpoint (a toggle reversed mid-slide, or
+/// a control switched back to its other state before the first slide
+/// finished) — `with_animation` keys its state by element-id path, so a
+/// value that has to carry over across a *different* target can't just be
+/// re-triggered by mounting a fresh id the way this codebase's opacity
+/// reveals do. Evaluating by hand keeps the element tree's shape constant: a
+/// finished or dropped tween is exactly the steady state.
 #[derive(Clone, Copy, Debug)]
-pub struct WidthTween {
+pub struct Tween {
     from: f32,
     started: Instant,
+    duration: Duration,
 }
 
-impl WidthTween {
-    /// Start a slide from the width the panel currently occupies, so a toggle
-    /// mid-slide reverses from where the edge actually is instead of jumping
-    /// back to the far end.
-    pub fn new(from: f32) -> Self {
+impl Tween {
+    /// Start a slide from the value the control currently shows, so a
+    /// toggle mid-slide reverses from where it actually is instead of
+    /// jumping back to the far end.
+    pub fn new(from: f32, duration: Duration) -> Self {
         Self {
             from,
             started: Instant::now(),
+            duration,
         }
     }
 
-    /// Eased width on the way to `target`, or `None` once the slide is over —
-    /// the caller then drops the tween and reads `target` directly, which is
-    /// also what retires a closed panel from the element tree.
-    pub fn width_toward(&self, target: f32) -> Option<f32> {
-        width_at(self.from, target, self.started.elapsed())
+    /// Eased value on the way to `target`, or `None` once the slide is
+    /// over — the caller then drops the tween and reads `target` directly,
+    /// which is also what retires a finished slide from the element tree
+    /// (or, for a persistent control like a segmented thumb, just stops
+    /// re-evaluating it every frame).
+    pub fn toward(&self, target: f32) -> Option<f32> {
+        tween_at(self.from, target, self.started.elapsed(), self.duration)
     }
 }
 
-fn width_at(from: f32, target: f32, elapsed: Duration) -> Option<f32> {
-    let progress = elapsed.as_secs_f32() / PANEL_SLIDE.as_secs_f32();
+fn tween_at(from: f32, target: f32, elapsed: Duration, duration: Duration) -> Option<f32> {
+    let progress = elapsed.as_secs_f32() / duration.as_secs_f32();
     (progress < 1.0).then(|| from + (target - from) * ease_out_quint()(progress.max(0.0)))
 }
 
@@ -262,17 +272,18 @@ mod tests {
 
     #[test]
     fn a_slide_eases_out_and_then_retires() {
-        let start = width_at(0.0, 260.0, Duration::ZERO).expect("a fresh slide is in flight");
+        let start =
+            tween_at(0.0, 260.0, Duration::ZERO, PANEL_SLIDE).expect("a fresh slide is in flight");
         assert!(start.abs() < 0.01, "the slide opens from its start width");
 
-        let half = width_at(0.0, 260.0, PANEL_SLIDE / 2).expect("halfway is in flight");
+        let half = tween_at(0.0, 260.0, PANEL_SLIDE / 2, PANEL_SLIDE).expect("halfway is in flight");
         assert!(
             half > 130.0,
             "ease-out covers most of the distance early, got {half}"
         );
 
         assert_eq!(
-            width_at(0.0, 260.0, PANEL_SLIDE),
+            tween_at(0.0, 260.0, PANEL_SLIDE, PANEL_SLIDE),
             None,
             "an elapsed slide reports no width so the caller settles on the target"
         );
@@ -280,8 +291,9 @@ mod tests {
 
     #[test]
     fn a_slide_reversed_mid_flight_leaves_from_where_it_is() {
-        let interrupted = width_at(0.0, 260.0, PANEL_SLIDE / 4).expect("in flight");
-        let reversed = width_at(interrupted, 0.0, Duration::ZERO).expect("in flight");
+        let interrupted =
+            tween_at(0.0, 260.0, PANEL_SLIDE / 4, PANEL_SLIDE).expect("in flight");
+        let reversed = tween_at(interrupted, 0.0, Duration::ZERO, PANEL_SLIDE).expect("in flight");
         assert!(
             (reversed - interrupted).abs() < 0.01,
             "the reversed slide starts at the interrupted width"
