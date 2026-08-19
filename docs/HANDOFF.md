@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `01156dc` — check `git status` before
+- Working tree is clean as of commit `922abb4` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -257,14 +257,19 @@ re-introduce with the next unrelated change nearby.
       closure so it stays O(visible) not O(total tasks), pruned alongside
       `completing_ids` on every refetch), `track_focus`/`tab_index(0)`/
       `focus_visible`/`on_key_down` on the row mirroring
-      `sidebar.rs::render_nav_row` exactly. **Not done, deliberately
-      scoped out of the first pass** rather than attempted blind: the
-      completion checkbox, title, schedule pill, delete button, subtask
+      `sidebar.rs::render_nav_row`. Enter opens the row (matches a click);
+      Space toggles completion (`922abb4`) — a deliberate choice over
+      giving the checkbox its own tab stop, since that would double tab
+      stops across what can be a long list; Space already means "act on
+      the task" at the app level (`SpaceCapture`), so extending it once a
+      row has focus is consistent rather than novel. **Not done,
+      deliberately scoped out of these first two passes** rather than
+      attempted blind: the title, schedule pill, delete button, subtask
       checkboxes, the add-subtask row, the Undo toast button, "Clear
       completed", the complete-with-subtasks confirm — every *individual
-      control*, not just the row shell, per the PRD's per-verb
-      requirement (complete, delete, schedule, etc. each need their own
-      keyboard path, not just "open the row"). Also not done: Completed-
+      control* besides open/complete, per the PRD's per-verb requirement
+      (delete, schedule, undo, etc. each still need their own keyboard
+      path). Also not done: Completed-
       section rows, Upcoming's rows (both still pass `None` for `focus` —
       see `render_task_row`'s param doc), and arrow-key navigation between
       rows (tab order is currently the only way to move focus between
