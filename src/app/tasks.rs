@@ -1240,6 +1240,7 @@ fn task_list(
                                 date,
                                 group,
                                 view,
+                                cx.entity(),
                                 &expanded,
                                 &selected,
                                 &completing_ids,
@@ -1461,6 +1462,7 @@ fn render_upcoming_section(
     date: String,
     tasks: Vec<Task>,
     view: View,
+    entity: Entity<Flow>,
     expanded: &Option<String>,
     selected: &HashSet<String>,
     completing_ids: &HashSet<String>,
@@ -1507,6 +1509,16 @@ fn render_upcoming_section(
             let is_expanded = expanded.as_deref() == Some(task.id.as_str());
             let is_selected = selected.contains(&task.id);
             let is_completing = completing_ids.contains(&task.id);
+            // Upcoming isn't virtualized (`task_list_states`'s own field
+            // doc), so every visible row already renders eagerly each
+            // frame regardless — a `row_focus` HashMap lookup per task
+            // here is a cheap addition to that existing cost profile, not
+            // new per-frame I/O. Was `None` (mouse-only, a disclosed gap
+            // from this session's original keyboard-accessibility pass);
+            // reuses the same pruned `row_focuses` map the flat views'
+            // rows already share, keyed by task id regardless of which
+            // view a task is currently visible in.
+            let focus = entity.update(cx, |flow, cx| flow.row_focus(&task.id, cx));
             render_task_row(
                 task,
                 view,
@@ -1521,9 +1533,7 @@ fn render_upcoming_section(
                 title_focus.clone(),
                 schedule_input.clone(),
                 subtask_context.clone(),
-                // Upcoming's rows aren't in this first keyboard-access
-                // pass's scope — see `render_task_row`'s `focus` param doc.
-                None,
+                Some(focus),
                 detail_delete_focus.clone(),
                 schedule_pill_focus.clone(),
                 process_pill_focuses.clone(),
@@ -1772,14 +1782,13 @@ fn render_task_row(
     title_focus: FocusHandle,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
-    // `Some` only from the virtualized flat-list path (Inbox/Today/
-    // Anytime/Someday's compact rows), which is the one call site that
-    // already runs inside `entity.update` and so can cheaply fetch a
-    // handle per visible row without the O(n) cost of doing it for every
-    // task up front. `None` from the Completed section and Upcoming's
-    // rows (still mouse-only) — see `Flow::row_focuses`'s field doc and
-    // `docs/HANDOFF.md` for the full scope of what this first pass covers
-    // and what's deliberately left for later.
+    // `Some` from the virtualized flat-list path (Inbox/Today/Anytime/
+    // Someday's compact rows) and Upcoming's own eager render
+    // (`render_upcoming_section`) — both fetch a handle per row via
+    // `entity.update`/`Flow::row_focus`, sharing the same pruned
+    // `row_focuses` map since a task only ever appears in one view's rows
+    // at a time. `None` only from the Completed section, still mouse-only
+    // — see `Flow::row_focuses`'s field doc and `docs/HANDOFF.md`.
     focus: Option<FocusHandle>,
     // Bound to the expanded card's delete button, schedule pill, and
     // (once the picker is open) its quick-pick pills, when this row
