@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `359411c` — check `git status` before
+- Working tree is clean as of commit `80485d5` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -330,6 +330,12 @@ reopen the render-path-I/O question — see that method's own doc), then
 either completes immediately (no open subtasks, the common case) or
 expands the card into the same confirm banner the detail card already
 has. Reopening is untouched.
+
+**Fixed (`80485d5`, same doc-staleness sweep): PRODUCT.md still named
+Convex and Google Calendar** in its Stack/Capabilities sections (both
+superseded — Turso, EventKit), plus a "strips Flow's GPUI shell" typo that
+should read "Waku's" (confirmed against
+`wayfinder/tickets/choose-distribution-boundary.md`'s own resolution text).
 
 **Flagged, not fixed (`359411c`, same doc-staleness sweep):
 `docs/DESIGN_DIRECTION.md`'s hero mockup and "Calendar rail" section
