@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `4994c56` — check `git status` before
+- Working tree is clean as of commit `ad95f6f` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -330,6 +330,20 @@ reopen the render-path-I/O question — see that method's own doc), then
 either completes immediately (no open subtasks, the common case) or
 expands the card into the same confirm banner the detail card already
 has. Reopening is untouched.
+
+**Fixed (`ad95f6f`, found via a PRD §10 idempotency audit — a correction
+of a dismissal made earlier the same night): Capture's create+schedule
+wasn't atomic, a real local duplicate-task path.** `submit_capture` did
+`create_task` then `schedule` as two separate writes; if the schedule call
+failed after create landed, the whole capture was reported as failed while
+a real task sat unscheduled in Inbox, invisible to the user — and clicking
+Retry created a second, duplicate task on top of the first. New
+`Db::create_task_scheduled` wraps both in a real `BEGIN`/`COMMIT`/
+`ROLLBACK` transaction, skipped entirely for the common unscheduled-capture
+case. New tests: `create_task_scheduled_is_atomic`,
+`create_task_scheduled_activates_the_task_when_it_succeeds`. (The PRD's own
+client-mutation-ID note from earlier tonight has a correction appended —
+that dismissal was right about network retries but missed this local gap.)
 
 **Fixed (`4994c56`, found via a PRD §6.1 audit): bulk delete had no Undo
 toast.** Single-row delete always showed the 10-second Undo toast; the

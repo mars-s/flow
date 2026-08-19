@@ -424,6 +424,14 @@ microservice in v1.
   can't double-create); building client mutation IDs now would be
   speculative infrastructure for a race that doesn't exist until there's an
   actual network boundary. Revisit when Milestone 2 adds one.
+  **Correction, same night**: that reasoning held for a single write, but
+  missed that Capture's own create-then-schedule was two separate writes,
+  not one — a real, entirely local non-atomicity gap (`create_task`
+  landing, the follow-up `schedule` failing) that silently orphaned a task
+  and let Retry duplicate it. Fixed (`ad95f6f`) by making that specific
+  sequence a real transaction, not by building client mutation IDs — the
+  mutation-ID bullet's own Milestone-2 framing above still stands for
+  network-retry idempotency specifically.
 
 ## 11. Acceptance criteria
 
