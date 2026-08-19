@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `ef42b8a` — check `git status` before
+- Working tree is clean as of commit `609b8d5` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -124,21 +124,21 @@ button on the expanded Completed section, and a hidden dev inspector
 
 **Not done yet, in the order they're planned:**
 
-- [ ] **Motion pass, round 2.** `0b4e4e9` fixed the one reported glitch
-      (completion collapse: opacity and height shrank on the same pace, so
-      `overflow_hidden` clipped a still-visible checkbox/title mid-shrink —
-      fade now races ahead of the collapse) and the two starkest hard-cuts
-      against it (the detail card's mount, the Completed section's
-      reveal-on-expand), plus consolidated the app's two previously-
-      duplicated magic durations into `ui::motion::REVEAL`/`TRANSITION`.
-      Deliberately not a full sweep — per Impeccable's `animate`/`polish`
-      guidance ("one authored moment... not scattered effects"), the rest
-      needs actual triage, not reflexive motion everywhere. Candidates
-      flagged for the next round: the schedule picker's field↔pills swap
-      (`render_process_row`) has no transition; `bulk_action_bar` and the
-      inline complete-with-subtasks confirm banner both mount instantly;
-      the sidebar destination switch has no motion of its own beyond the
-      main pane's cross-fade.
+- [x] **Motion pass — done, both rounds.** Round 1 (`0b4e4e9`) fixed the
+      one reported glitch (completion collapse: opacity and height shrank
+      on the same pace, so `overflow_hidden` clipped a still-visible
+      checkbox/title mid-shrink — fade now races ahead of the collapse)
+      and the two starkest hard-cuts (detail card mount, Completed reveal),
+      plus consolidated two duplicated magic durations into
+      `ui::motion::REVEAL`/`TRANSITION`. Round 2 (`609b8d5`) added the same
+      reveal-on-mount fade to the three remaining `.when(...)`-gated
+      surfaces that mounted instantly: the schedule picker's field↔pills
+      swap, `bulk_action_bar`, and the complete-with-subtasks confirm
+      banner. Every appear/disappear in the app now shares one motion
+      vocabulary. Deliberately left alone: the sidebar destination switch's
+      instant selection feedback, which matches native macOS convention
+      (Mail, Finder) rather than being a gap. Not yet visually verified —
+      this session has no screen-recording access; worth an actual look.
 - [ ] **`src/app/tasks.rs` has zero keyboard-accessible controls.** Found
       by audit (not requested), 2026-08-19: 0 matches for `track_focus|
       tab_index|on_key_down` against 17 `.on_click(` sites (task rows, the
