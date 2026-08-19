@@ -323,6 +323,17 @@ pub struct Flow {
     /// `cx.background_executor().spawn` + `cx.notify()` convention as
     /// `today_calendar_events`, for the same render-path-I/O reason.
     calendar_range_events: Option<Arc<Vec<crate::platform::CalendarEvent>>>,
+    /// Bumped by every `refresh_calendar_tab` call and captured by its own
+    /// async fetch — a superseded fetch (a slower earlier request, e.g. a
+    /// full-year query, landing after a faster later one, e.g. flipping
+    /// straight back to Day) checks its captured value against the current
+    /// one before applying its result, so rapid navigation/mode-switching
+    /// can't let stale data overwrite what's actually being shown. Same
+    /// superseded-result problem `query.rs`'s own generation counter
+    /// solves for `tasks`/`subtasks`, just not routed through
+    /// `QueryCache` itself since a calendar fetch's key (mode + cursor)
+    /// isn't naturally `View`-shaped.
+    calendar_fetch_generation: u64,
     /// One focus handle per calendar row in the tab's sidebar, keyed by
     /// calendar id — same pruned-map pattern as `row_focuses`, pruned
     /// against `calendar_list` whenever it's refetched.
@@ -491,6 +502,7 @@ impl Flow {
                 calendar_hidden_ids: HashSet::new(),
                 calendar_list: None,
                 calendar_range_events: None,
+                calendar_fetch_generation: 0,
                 calendar_row_focuses: HashMap::new(),
                 calendar_day_focus: cx.focus_handle(),
                 calendar_week_focus: cx.focus_handle(),
@@ -1109,6 +1121,8 @@ impl Flow {
         }
         let (start_date, end_date) = self.calendar_visible_range();
         let fetch_list = self.calendar_list.is_none();
+        self.calendar_fetch_generation += 1;
+        let generation = self.calendar_fetch_generation;
         cx.spawn(async move |flow, cx| {
             let (list, events) = cx
                 .background_executor()
@@ -1121,6 +1135,13 @@ impl Flow {
                 })
                 .await;
             let _ = flow.update(cx, |flow, cx| {
+                // A newer navigation/mode-switch already started its own
+                // fetch since this one began — this result is for a range
+                // nobody's looking at anymore, so it's dropped rather than
+                // clobbering whatever the newer fetch lands with.
+                if flow.calendar_fetch_generation != generation {
+                    return;
+                }
                 if let Some(list) = list {
                     flow.prune_calendar_row_focuses(&list);
                     flow.calendar_list = Some(Arc::new(list));
