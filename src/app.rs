@@ -123,6 +123,9 @@ pub struct Flow {
     /// across every task avoids needing a `row_focuses`-style per-task map
     /// for something that's never actually rendered more than once.
     detail_delete_focus: FocusHandle,
+    /// The expanded detail card's schedule pill — same single-stable-
+    /// handle reasoning as `detail_delete_focus`.
+    schedule_pill_focus: FocusHandle,
     /// What `render_task_view` last saw for the expanded task's row —
     /// `(id, schedule_picker_open, scheduling, adding_subtask,
     /// pending_complete_confirm, subtask_count)`. Compared against each
@@ -305,6 +308,7 @@ impl Flow {
                 completed_clear_focuses: HashMap::new(),
                 undo_toast_focus: cx.focus_handle(),
                 detail_delete_focus: cx.focus_handle(),
+                schedule_pill_focus: cx.focus_handle(),
                 nav_focuses: array::from_fn(|_| cx.focus_handle()),
                 mode_tasks_focus: cx.focus_handle(),
                 mode_thumb: None,

@@ -1010,6 +1010,7 @@ impl Flow {
         });
         let completed_clear_focus = self.completed_clear_focus(view, cx);
         let detail_delete_focus = self.detail_delete_focus.clone();
+        let schedule_pill_focus = self.schedule_pill_focus.clone();
         match tasks {
             Some(tasks) => task_list(
                 view,
@@ -1028,6 +1029,7 @@ impl Flow {
                 scrollbar_state,
                 completed_clear_focus,
                 detail_delete_focus,
+                schedule_pill_focus,
                 theme,
                 cx,
             )
@@ -1071,6 +1073,7 @@ fn task_list(
     scrollbar_state: Option<Rc<crate::ui::scrollbar::ScrollbarState>>,
     completed_clear_focus: FocusHandle,
     detail_delete_focus: FocusHandle,
+    schedule_pill_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1134,6 +1137,7 @@ fn task_list(
                                 schedule_input.clone(),
                                 subtask_context.clone(),
                                 detail_delete_focus.clone(),
+                                schedule_pill_focus.clone(),
                                 theme,
                                 cx,
                             )
@@ -1153,6 +1157,7 @@ fn task_list(
                 let list_subtask_context = subtask_context.clone();
                 let list_expanded = expanded.clone();
                 let list_detail_delete_focus = detail_delete_focus.clone();
+                let list_schedule_pill_focus = schedule_pill_focus.clone();
                 div()
                     .id("task-list-open")
                     .relative()
@@ -1220,6 +1225,7 @@ fn task_list(
                                             list_subtask_context.clone(),
                                             focus,
                                             list_detail_delete_focus.clone(),
+                                            list_schedule_pill_focus.clone(),
                                             theme,
                                             cx,
                                         )
@@ -1259,6 +1265,7 @@ fn task_list(
                         subtask_context,
                         completed_clear_focus,
                         detail_delete_focus,
+                        schedule_pill_focus,
                         theme,
                         cx,
                     )),
@@ -1303,6 +1310,7 @@ fn render_upcoming_section(
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     detail_delete_focus: FocusHandle,
+    schedule_pill_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1346,6 +1354,7 @@ fn render_upcoming_section(
                 // pass's scope — see `render_task_row`'s `focus` param doc.
                 None,
                 detail_delete_focus.clone(),
+                schedule_pill_focus.clone(),
                 theme,
                 cx,
             )
@@ -1369,6 +1378,7 @@ fn completed_section(
     subtask_context: Option<SubtaskContext>,
     completed_clear_focus: FocusHandle,
     detail_delete_focus: FocusHandle,
+    schedule_pill_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1407,6 +1417,7 @@ fn completed_section(
                             // `render_task_row`'s `focus` param doc.
                             None,
                             detail_delete_focus.clone(),
+                            schedule_pill_focus.clone(),
                             theme,
                             cx,
                         )
@@ -1575,10 +1586,12 @@ fn render_task_row(
     // `docs/HANDOFF.md` for the full scope of what this first pass covers
     // and what's deliberately left for later.
     focus: Option<FocusHandle>,
-    // Bound to the expanded card's delete button, when this row happens
-    // to be the expanded one — see `Flow::detail_delete_focus`'s field
-    // doc for why one stable handle covers every task instead of a map.
+    // Bound to the expanded card's delete button and schedule pill, when
+    // this row happens to be the expanded one — see
+    // `Flow::detail_delete_focus`'s field doc for why one stable handle
+    // covers every task instead of a map.
     detail_delete_focus: FocusHandle,
+    schedule_pill_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1601,6 +1614,7 @@ fn render_task_row(
             schedule_input,
             subtask_context,
             detail_delete_focus,
+            schedule_pill_focus,
             theme,
             cx,
         );
@@ -1791,6 +1805,7 @@ fn render_detail_card(
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     detail_delete_focus: FocusHandle,
+    schedule_pill_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1966,7 +1981,13 @@ fn render_detail_card(
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(render_schedule_pill(task.id.clone(), placement, theme, cx))
+                .child(render_schedule_pill(
+                    task.id.clone(),
+                    placement,
+                    schedule_pill_focus,
+                    theme,
+                    cx,
+                ))
                 .child(
                     crate::ui::icon_button(
                         gpui::SharedString::from(format!("task-{}-delete", task.id)),
@@ -2139,9 +2160,17 @@ fn render_subtask_row(subtask: Task, parent_id: String, theme: Theme, cx: &mut C
 /// The detail card's schedule status: the task's current placement in the
 /// same four buckets the quick-picker offers. Clicking it opens that
 /// picker so placement can be changed without leaving the card.
-fn render_schedule_pill(id: String, label: String, theme: Theme, cx: &mut Context<Flow>) -> AnyElement {
+fn render_schedule_pill(
+    id: String,
+    label: String,
+    focus: FocusHandle,
+    theme: Theme,
+    cx: &mut Context<Flow>,
+) -> AnyElement {
     div()
         .id(gpui::SharedString::from(format!("schedule-pill-{id}")))
+        .track_focus(&focus)
+        .tab_index(0)
         .px(px(8.0))
         .py(px(3.0))
         .rounded(px(5.0))
@@ -2150,9 +2179,19 @@ fn render_schedule_pill(id: String, label: String, theme: Theme, cx: &mut Contex
         .text_color(theme.text_secondary)
         .bg(theme.overlay)
         .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
+        .focus_visible(|style| style.border_1().border_color(theme.accent))
         .on_click(cx.listener(move |flow, _, window, cx| {
             flow.toggle_schedule_picker(window, cx);
             cx.stop_propagation();
+        }))
+        .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, window, cx| {
+            if event.keystroke.modifiers.modified() {
+                return;
+            }
+            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                flow.toggle_schedule_picker(window, cx);
+                cx.stop_propagation();
+            }
         }))
         .child(label)
         .into_any_element()
