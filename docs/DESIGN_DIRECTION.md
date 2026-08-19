@@ -1,5 +1,24 @@
 # Flow visual direction
 
+> **Flagged stale 2026-08-19, not yet corrected — read before trusting the
+> hero mockup or "Calendar rail" section below.** Both describe a persistent
+> 3-column IA (task list + an always-visible 236px calendar rail, collapsible
+> with `Cmd+Shift+C`) that was superseded early in the project by an explicit
+> user decision: a sidebar Tasks/Calendar segmented mode switch instead (see
+> `docs/HANDOFF.md`'s "Decisions made" §4, and `src/app/sidebar.rs`'s own
+> `Mode` enum). No `Cmd+Shift+C` binding exists; Calendar is a separate
+> full-pane destination, not a rail. As of tonight it's also a real,
+> substantially larger surface than a "glance" — a full Day/Week/Month/Year
+> tab (`src/app/calendar.rs`) with a per-calendar sidebar, not the compact
+> rail this doc still describes. Redrawing the hero mockup and rewriting the
+> "Calendar rail" component section to match what's actually shipped is real
+> design work (this doc is UI-visual, not just prose) deliberately left for a
+> dedicated pass — possibly `impeccable document`, which exists to derive a
+> design doc from shipped code rather than hand-written from memory — rather
+> than rushed through in an autonomous audit cycle. Everything else in this
+> document (tokens, type/spacing, the non-calendar components, motion specs)
+> was checked during this same audit and still matches the shipped app.
+
 ## Design read
 
 A native personal productivity desktop app for a keyboard-heavy solo user, with
