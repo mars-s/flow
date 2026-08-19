@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `041d301` — check `git status` before
+- Working tree is clean as of commit `3fbcf7d` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -301,6 +301,13 @@ Calendar" and "Open System Settings" buttons were mouse-only** — no
 as every other button this session: single-stable `FocusHandle`s
 (`settings_connect_calendar_focus`, `settings_open_privacy_focus`),
 `focus_visible`, Enter/Space handling, `h(px(28.0))`.
+
+**Fixed (`3fbcf7d`, found via a self-review sweep): the calendar sidebar's
+visibility toggle encoded "hidden" in opacity alone.** No icon, no shape
+change, no text distinction — CLAUDE.md: "never encode meaning in color,
+hover, or motion alone." Fixed by making the dot itself filled (visible)
+vs. hollow (hidden), with the calendar's own color kept as the border
+either way, plus `text_ghost` instead of blanket opacity on the title.
 
 **Not done yet**: whether calendar visibility toggles should persist
 across launches (currently don't — no settings-persistence infrastructure
