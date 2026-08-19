@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `3fbcf7d` — check `git status` before
+- Working tree is clean as of commit `df0c882` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -490,8 +490,14 @@ re-introduce with the next unrelated change nearby.
       refetch; documented in both fields' doc comments so it isn't
       "simplified" back together later).
       **Genuinely out of scope, not silently dropped:**
-      - Completed-section rows and Upcoming's rows still pass `None` for
-        `focus` (`render_task_row`'s param doc) — mouse-only.
+      - Completed-section rows still pass `None` for `focus`
+        (`render_task_row`'s param doc) — mouse-only. (Upcoming's rows were
+        in this same category originally; **fixed in `df0c882`** —
+        `render_upcoming_section` now fetches a real per-row `FocusHandle`
+        via `entity.update`/`Flow::row_focus`, the same pruned map the
+        virtualized flat views' rows already share, since Upcoming's rows
+        render eagerly every frame anyway and a HashMap lookup per row
+        costs nothing new.)
       - Arrow-key navigation between rows — Tab order is currently the
         only way to move focus between tasks; no listbox-style arrow
         handling.
