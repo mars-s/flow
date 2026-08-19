@@ -26,7 +26,8 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `1d4fa7b` — check `git status` before
+- Working tree is clean as of commit (pending, this HANDOFF commit) —
+  check `git status` before assuming that's still true.
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -536,6 +537,27 @@ re-introduce with the next unrelated change nearby.
 - PRD §6.3's "empty days with events still show" in Upcoming isn't
   implemented — there's no calendar-events data yet to populate an empty
   day with (Google Calendar glance is a later milestone).
+
+**Real cleanup candidate, flagged rather than acted on unilaterally**
+(found while auditing for dead code after tonight's EventKit work):
+`src/browser.rs` (1640 lines, a generic WKWebView wrapper) has zero
+callers anywhere in the codebase (`grep -rn "browser::" src/` — nothing;
+`mod browser;` in `lib.rs` is the only reference). It was deliberately
+kept during Milestone 0's strip specifically "for a future Calendar OAuth
+flow" (`wayfinder/tickets/strip-waku-core-backend.md`'s own stated
+reasoning, quoted almost verbatim in this doc's own Milestone 0 section
+above) — that specific justification is now void, since Milestone 3 uses
+EventKit, not OAuth, so there's no browser-based auth flow coming. Not
+deleted here: this session already made the symmetric call to *keep*
+`calendar_connections`/`calendar_events`'s DB schema shape "for a future
+non-macOS or OAuth-based provider" (§8's annotation, `343480c`)  — the
+same hypothetical future provider is exactly what `browser.rs` would
+serve, just at 1640 lines of cost instead of a few schema lines. Deleting
+1640 lines of previously-intentional code on a solo 3am judgment call,
+when the two decisions pull toward opposite defaults depending on how
+speculative "a future OAuth provider" is judged to be, is a bigger and
+less obviously-correct action than this session's many "add a fix + a
+test" changes — flagged for a deliberate call instead.
 
 **Known, genuinely undisclosed gap, flagged rather than built blind**
 (found via the same data-integrity audit sweep that found tonight's
