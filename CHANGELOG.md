@@ -19,6 +19,22 @@ the original feature bullet instead of adding separate entries for them.
 - Fork from Waku as Flow, a personal task manager. The entries below this
   point are Waku's release history prior to the fork and are kept for
   provenance, not as Flow release notes.
+- Capture a task in plain language — "take out laundry 8am tomorrow"
+  becomes a task with a real date and time attached, editable before you
+  save. Place it in Inbox, Today, Upcoming, Anytime, or Someday, and break
+  it into one level of subtasks.
+- A read-only glance at your Mac's own Calendar app: connect it from
+  Settings, see today's events alongside your tasks, and browse
+  Day/Week/Month/Year views in the Calendar tab. Flow never creates,
+  edits, or deletes anything in your calendar.
+- Fully usable from the keyboard: capture, complete, reschedule, delete,
+  and undo without touching the mouse.
+
+<!-- Draft, not yet reviewed for an actual release: written to close a
+     gap (this section previously had nothing describing any of Flow's
+     shipped functionality, only the fork note), in plain factual terms
+     rather than as polished marketing copy. Worth a pass before this
+     ships in a real Sparkle update dialog. -->
 
 ## [0.1.4]
 
