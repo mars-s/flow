@@ -107,6 +107,31 @@ OAuth flow), `input.rs` (generic text-input widget), and a slimmed
 
 ## Milestone 1 (local task vertical slice) — feature status
 
+**Exit bar met (PRD §12: "all Task core and Parsing acceptance criteria
+pass locally"), verified 2026-08-19, not just claimed:**
+- Task core (§11): every verb in "create, edit, complete, reopen, move,
+  schedule, and undo-delete" now has a real, working path — `edit` was
+  the one genuine gap (no way to rename a task existed at all), found by
+  this exact audit and fixed in `d1c3621`/`346c2b6`. The rest were
+  already there: create (Capture), complete/reopen (checkbox/Space),
+  move (`process_task`/`bulk_process`/the schedule picker's quick-picks),
+  schedule (NLP parsing + the picker), undo-delete (delete + the Undo
+  toast).
+- Parsing: both §6.4 acceptance examples ("take out laundry 8 am
+  tomorrow", "bring Mya cake in 3 days") have dedicated tests in
+  `parse.rs`; an unrecognized phrase leaves the title untouched rather
+  than blocking save; Capture is a live-editable field, so every parse
+  result can be overridden before saving; stored dates are plain
+  `NaiveDate` calendar days with no DST-sensitive time math, so they
+  can't drift across a transition.
+
+This doesn't mean Milestone 1 is "done" in every sense — Calendar/
+Settings are still placeholders, the keyboard-accessibility pass has
+disclosed gaps (Completed/Upcoming rows, arrow-key nav), and nothing in
+this session has been visually verified. It means the specific bar the
+PRD itself set for exiting this milestone is met, which is a narrower
+and more useful claim than "feels finished."
+
 **Shipped and wired to the real database:** task CRUD, all five views,
 Capture (with live NLP-parse highlighting), Inbox's inline Process action
 (Today/Anytime/Someday/Schedule…), the task detail card (note, schedule
