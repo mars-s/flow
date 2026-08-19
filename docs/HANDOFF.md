@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `7b47c52` — check `git status` before
+- Working tree is clean as of commit `4994c56` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -330,6 +330,16 @@ reopen the render-path-I/O question — see that method's own doc), then
 either completes immediately (no open subtasks, the common case) or
 expands the card into the same confirm banner the detail card already
 has. Reopening is untouched.
+
+**Fixed (`4994c56`, found via a PRD §6.1 audit): bulk delete had no Undo
+toast.** Single-row delete always showed the 10-second Undo toast; the
+multi-select action bar's "Delete" permanently removed every selected task
+with zero recovery — arguably the higher-risk path, since it's one shared
+button after selecting several rows. `UndoToast.task_id: String` became
+`task_ids: Vec<String>` (a new `summary: bool` decides quoted-title vs.
+plain-count display); `undo_last_action`'s Delete branch now restores every
+id in a loop; `bulk_delete` only shows the toast for ids that actually
+succeeded.
 
 **Fixed (`57c2b1d`, found via a data-integrity audit): deleting a parent
 task orphaned its subtasks instead of deleting them.** `delete_task` only
