@@ -402,8 +402,16 @@ microservice in v1.
   below as a note for whenever a non-macOS or multi-account provider is
   reconsidered, not as current v1 scope.
 - Authenticate every backend function; authorize every row by `user_id`.
-- Rate-limit calendar refresh, validate all parsed values server-side, and
-  reject malformed dates and parent relationships.
+- Rate-limiting calendar refresh doesn't apply to v1's EventKit design
+  (§6.5): there's no remote API or quota behind a local `EKEventStore`
+  query, so this bullet's original OAuth-era wording is dropped rather than
+  kept as dead guidance — kept as a note for whenever a rate-limited
+  provider is reconsidered, not current v1 scope. Validate all parsed
+  values server-side and reject malformed dates and parent relationships —
+  both real and enforced: `Db::schedule` rejects a `scheduled_time` with no
+  `scheduled_date` (found via this exact audit, fixed `58fc090`),
+  `Db::create_subtask` rejects a parent that's itself a subtask, deleted,
+  or completed (fixed `f4a264f`).
 - Keep a daily durable backup of backend data plus calendar cache. Restore must
   be tested before calling k3s production-ready.
 - Local optimistic writes must be idempotent using a client mutation ID; retries
