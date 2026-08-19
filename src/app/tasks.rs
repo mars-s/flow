@@ -1109,40 +1109,63 @@ fn task_list(
                     .flex_1()
                     .min_h(px(0.0))
                     .child(
-                        list(list_state.clone(), move |ix, _window, cx| {
-                            let task = tasks[ix].clone();
-                            let is_expanded = list_expanded.as_deref() == Some(task.id.as_str());
-                            let is_selected = selected.contains(&task.id);
-                            let is_completing = completing_ids.contains(&task.id);
-                            entity.update(cx, |_flow, cx| {
-                                render_task_row(
-                                    task,
-                                    view,
-                                    is_expanded,
-                                    is_selected,
-                                    is_completing,
-                                    schedule_picker_open,
-                                    scheduling,
-                                    list_note_input.clone(),
-                                    list_schedule_input.clone(),
-                                    list_subtask_context.clone(),
-                                    theme,
-                                    cx,
-                                )
-                            })
-                        })
-                        .px(px(24.0))
-                        // The 40px top inset belongs to whichever element is
-                        // visually first in this region — the pinned bulk
-                        // bar (which carries its own pt(40) above) when 2+
-                        // are selected, the list itself otherwise. Applying
-                        // both unconditionally would double the gap above
-                        // the first row whenever the bulk bar shows.
-                        .when(selected_count < 2, |list| list.pt(px(40.0)))
-                        .pb(px(20.0))
-                        .w_full()
-                        .h_full(),
+                        // `gpui::list()`'s own padding is a no-op for
+                        // horizontal inset: it positions each item at
+                        // `bounds.origin.x + 0` regardless of `.px()`
+                        // (confirmed by reading its `prepaint_items`
+                        // source — only vertical padding actually offsets
+                        // item position there). A plain padded wrapper
+                        // around `list()` gets normal box-model layout
+                        // instead: the wrapper's padding genuinely shrinks
+                        // the space `list()` fills, so its bounds — and
+                        // every row's `.w_full()` inside it — are already
+                        // correctly inset by the time GPUI lays them out.
+                        div()
+                            .w_full()
+                            .h_full()
+                            .px(px(24.0))
+                            // The 40px top inset belongs to whichever
+                            // element is visually first in this region —
+                            // the pinned bulk bar (which carries its own
+                            // pt(40) above) when 2+ are selected, the list
+                            // itself otherwise. Applying both
+                            // unconditionally would double the gap above
+                            // the first row whenever the bulk bar shows.
+                            .when(selected_count < 2, |wrapper| wrapper.pt(px(40.0)))
+                            .pb(px(20.0))
+                            .child(
+                                list(list_state.clone(), move |ix, _window, cx| {
+                                    let task = tasks[ix].clone();
+                                    let is_expanded =
+                                        list_expanded.as_deref() == Some(task.id.as_str());
+                                    let is_selected = selected.contains(&task.id);
+                                    let is_completing = completing_ids.contains(&task.id);
+                                    entity.update(cx, |_flow, cx| {
+                                        render_task_row(
+                                            task,
+                                            view,
+                                            is_expanded,
+                                            is_selected,
+                                            is_completing,
+                                            schedule_picker_open,
+                                            scheduling,
+                                            list_note_input.clone(),
+                                            list_schedule_input.clone(),
+                                            list_subtask_context.clone(),
+                                            theme,
+                                            cx,
+                                        )
+                                    })
+                                })
+                                .w_full()
+                                .h_full(),
+                            ),
                     )
+                    // Scrollbar is a sibling of the padded wrapper, not a
+                    // child of it — it hugs `#task-list-open`'s true right
+                    // edge (per `ui::scrollbar::vertical`'s own doc: pinned
+                    // to the *parent's* edge), sitting in the gutter past
+                    // the content's own inset rather than inside it.
                     .when_some(scrollbar_state, |el, scrollbar_state| {
                         el.child(crate::ui::scrollbar::vertical(&list_state, &scrollbar_state))
                     })
