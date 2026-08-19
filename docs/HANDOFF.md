@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `af12d82` — check `git status` before
+- Working tree is clean as of commit `1b72d08` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -536,6 +536,13 @@ re-introduce with the next unrelated change nearby.
 - PRD §6.3's "empty days with events still show" in Upcoming isn't
   implemented — there's no calendar-events data yet to populate an empty
   day with (Google Calendar glance is a later milestone).
+
+**Fixed (`1b72d08`, same craft-floor self-review, continued further): a
+day column's empty state rendered no text at all** — `render_calendar_body`'s
+placeholder was `.child("")`, a genuinely empty string, instead of the
+"No events today" treatment the Today glance already established for the
+same situation. Fixed to "No events". Also swept `settings.rs` against
+the same checklist — clean.
 
 **Fixed (`af12d82`, found via a self-review against the `impeccable`
 craft-floor checklist): two banned patterns in the Calendar tab.**
