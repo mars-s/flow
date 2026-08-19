@@ -1023,10 +1023,7 @@ impl Flow {
             .then(|| self.task_list_states.get(&view).cloned())
             .flatten();
         let scrollbar_state = (view != View::Upcoming).then(|| {
-            self.task_list_scrollbars
-                .entry(view)
-                .or_insert_with(crate::ui::scrollbar::ScrollbarState::new)
-                .clone()
+            self.task_list_scrollbars.entry(view).or_default().clone()
         });
         let completed_clear_focus = self.completed_clear_focus(view, cx);
         let detail_delete_focus = self.detail_delete_focus.clone();
