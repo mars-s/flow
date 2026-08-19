@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `59c5398` — check `git status` before
+- Working tree is clean as of commit `262afce` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -274,12 +274,20 @@ re-introduce with the next unrelated change nearby.
       isn't scoped to just the virtualized path — whichever task happens
       to be expanded needs it, regardless of which view its row lives in.
       `59c5398` did the schedule pill the same way — opening the picker
-      is now keyboard-reachable; the picker's own contents once open (the
-      NLP field, the Today/Anytime/Someday/Clear quick-picks) are still
-      mouse-only, an honest boundary rather than a claimed full path.
-      **Not done, deliberately scoped out of these five passes** rather
-      than attempted blind: the title, the schedule picker's own
-      contents, subtask checkboxes, the add-subtask row, the
+      is now keyboard-reachable. `262afce` did the picker's
+      Today/Anytime/Someday/Clear quick-pick pills too (`[FocusHandle; 3]`
+      named fields, not a map, since `ProcessTarget` is a small fixed
+      enum) — six function signatures touched to thread it from
+      `render_task_view` down to `render_process_row`, the deepest hop
+      yet in this pass but the same mechanical pattern. **Found, not
+      fixed**: the picker's NLP free-text field itself has `track_focus`
+      internally (`input.rs`) but no `.tab_index()` call, so it may not
+      currently be in the Tab order at all — this affects every composer
+      field app-wide (Capture, notes, this field, subtask-add), not just
+      task rows, so it's a separate, broader fix than this pass's scope;
+      noted here rather than folded in blind. **Not done, deliberately
+      scoped out of these six passes** rather than attempted blind: the
+      title, subtask checkboxes, the add-subtask row, the
       complete-with-subtasks confirm — every *individual control* still
       left on a task row/card, per the PRD's per-verb requirement
       (subtasks etc. still need their own keyboard path). Also not
