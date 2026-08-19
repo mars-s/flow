@@ -214,14 +214,29 @@ impl Flow {
     fn write_completed(&mut self, id: String, completed: bool, origin_view: View, cx: &mut Context<Self>) {
         let Some(db) = self.db.clone() else { return };
         cx.spawn(async move |flow, cx| {
+            let write_id = id.clone();
             let Ok(()) = cx
                 .background_executor()
-                .spawn(async move { db.set_completed(id, completed) })
+                .spawn(async move { db.set_completed(write_id, completed) })
                 .await
             else {
                 return;
             };
             let _ = flow.update(cx, |flow, cx| {
+                // Only cleared here, on the write actually landing — not
+                // back in `toggle_completed`'s timer callback where the
+                // collapse animation finishes. Clearing it there left a gap
+                // between the local animation ending and this cache
+                // invalidation actually removing the row: `is_completing`
+                // would already read false while the task's cached
+                // `completed_at` was still unset, so the row flashed back
+                // to a normal, unchecked, full-height row (a fresh mount,
+                // fading itself back in) before vanishing a frame later.
+                // Keeping the id here means the row stays visually
+                // collapsed/checked continuously through that round trip.
+                if completed {
+                    flow.completing_ids.remove(&id);
+                }
                 match origin_view {
                     View::Inbox | View::Someday => flow.invalidate_view(origin_view),
                     View::Today | View::Upcoming | View::Anytime => {
@@ -262,7 +277,8 @@ impl Flow {
         cx.spawn(async move |flow, cx| {
             cx.background_executor().timer(ROW_TRANSITION).await;
             let _ = flow.update(cx, |flow, cx| {
-                flow.completing_ids.remove(&id);
+                // `completing_ids` stays set until `write_completed`'s own
+                // write actually lands — see the comment there.
                 flow.write_completed(id.clone(), true, origin_view, cx);
                 flow.show_undo_toast(id, title, origin_view, UndoKind::Complete, cx);
             });
@@ -756,11 +772,36 @@ impl Flow {
         // up front, render degrades on a miss" pattern `read_view` already
         // follows rather than a second, gated fetch.
         let completed = match self.read_completed(view, cx) {
-            Query::Ready(tasks) => tasks,
+            Query::Ready(tasks) => {
+                self.last_completed.insert(view, tasks.clone());
+                tasks
+            }
+            // Stale-while-revalidate: an empty completed section briefly
+            // reappearing mid-refetch is harmless (it's collapsed by
+            // default and has no animation of its own to glitch), so this
+            // one can stay simple rather than also carrying a last-known
+            // fallback.
             Query::Pending | Query::Missing(_) => Arc::new(Vec::new()),
         };
-        match self.read_view(view, cx) {
-            Query::Ready(tasks) => task_list(
+        let tasks_query = self.read_view(view, cx);
+        let tasks = match tasks_query {
+            Query::Ready(tasks) => {
+                self.last_tasks.insert(view, tasks.clone());
+                Some(tasks)
+            }
+            // Every mutation (complete, delete, schedule, ...) invalidates
+            // the cache outright and refetches, so `Pending`/`Missing` here
+            // usually means "the list you're already looking at, one
+            // round-trip away from confirming itself" rather than "unknown
+            // data." Drawing the stale list instead of a loading skeleton
+            // is what stops every tick/delete/schedule from blanking the
+            // whole view for a frame — the skeleton is reserved for a
+            // view's genuine first load, when there's nothing to fall
+            // back to yet.
+            Query::Pending | Query::Missing(_) => self.last_tasks.get(&view).cloned(),
+        };
+        match tasks {
+            Some(tasks) => task_list(
                 view,
                 tasks,
                 completed,
@@ -777,7 +818,7 @@ impl Flow {
                 cx,
             )
             .into_any_element(),
-            Query::Pending | Query::Missing(_) => loading_skeleton(theme).into_any_element(),
+            None => loading_skeleton(theme).into_any_element(),
         }
     }
 }
@@ -794,7 +835,6 @@ struct SubtaskContext {
     pending_confirm: bool,
 }
 
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn task_list(
     view: View,
@@ -933,7 +973,6 @@ fn group_by_scheduled_date(tasks: &[Task]) -> Vec<(String, Vec<Task>)> {
 /// Google Calendar glance is a later milestone — so this only ever shows
 /// task-bearing days, not the PRD's "empty days with events still show"
 /// case, which has nothing to populate it with yet.
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn render_upcoming_section(
     date: String,

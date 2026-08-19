@@ -371,6 +371,7 @@ impl Flow {
 
         div()
             .id(SharedString::from(format!("mode-{}", segment.label())))
+            .relative()
             .track_focus(&focus)
             .tab_index(0)
             .flex_1()
@@ -383,13 +384,8 @@ impl Flow {
             .cursor_default()
             .text_size(px(12.5))
             .font_weight(gpui::FontWeight::MEDIUM)
-            .when(selected, |row| {
-                row.bg(theme.raised).text_color(theme.text)
-            })
-            .when(!selected, |row| {
-                row.text_color(theme.text_secondary)
-                    .hover(|el| el.bg(theme.overlay))
-            })
+            .text_color(if selected { theme.text } else { theme.text_secondary })
+            .when(!selected, |row| row.hover(|el| el.bg(theme.overlay)))
             .focus_visible(|style| style.border_1().border_color(theme.accent))
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.select_mode(segment, window, cx);
@@ -403,6 +399,29 @@ impl Flow {
                     cx.stop_propagation();
                 }
             }))
+            // The raised fill fades in behind the label rather than
+            // snapping on with the click — a separate layer (not `.bg()`
+            // directly on this row) so it can carry its own opacity
+            // animation independent of the icon/label painted on top of
+            // it. Only rendered on the segment becoming selected: the
+            // losing segment's fill just unmounts (no fade-out id to
+            // reuse — this is a real GPUI "mount" every time, not a
+            // persisted style flip), which reads as the same crossfade
+            // since the entering segment's fade-in is what draws the eye.
+            .when(selected, |row| {
+                row.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .rounded(px(6.0))
+                        .bg(theme.raised)
+                        .with_animation(
+                            SharedString::from(format!("mode-{}-reveal", segment.label())),
+                            Animation::new(motion::TRANSITION).with_easing(ease_out_quint()),
+                            |element, delta| element.opacity(delta),
+                        ),
+                )
+            })
             .child(icon(
                 segment.icon_path(),
                 14.0,

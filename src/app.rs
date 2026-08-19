@@ -7,7 +7,8 @@
 //! ticket for what was removed and why.
 
 use std::array;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use gpui::{AnyElement, App, Context, Entity, FocusHandle, Window, div, prelude::*};
 
@@ -53,6 +54,19 @@ pub struct Flow {
     /// `cx.background_executor().spawn` + `cx.notify()` convention
     /// (`query.rs`'s own doc comment is this exact pattern).
     tasks: QueryCache<View, Vec<Task>>,
+    /// The last `Query::Ready` value seen per view, kept around so a
+    /// mutation's `invalidate_view` (which evicts the cache entry outright)
+    /// doesn't blank the whole list to a loading skeleton for the refetch's
+    /// round trip to the DB thread. `render_task_view` draws this stale
+    /// value instead on a `Pending`/`Missing` read, matching `query.rs`'s
+    /// own doc comment ("`Query::Pending => None, // draw the last known
+    /// value`") — this is that fallback actually being kept, not a new
+    /// pattern. Falls back to the skeleton only on a genuine first load,
+    /// when nothing has ever rendered for that view yet.
+    last_tasks: HashMap<View, Arc<Vec<Task>>>,
+    /// Same stale-while-revalidate fallback as `last_tasks`, for
+    /// `completed_tasks`.
+    last_completed: HashMap<View, Arc<Vec<Task>>>,
     /// Whether the sidebar's Capture row currently shows the text field
     /// instead of the "+ Capture" button. Stays open across submissions so
     /// rapid successive captures don't need to reopen it each time.
@@ -211,6 +225,8 @@ impl Flow {
                 mode_tasks_focus: cx.focus_handle(),
                 db,
                 tasks: QueryCache::new(8),
+                last_tasks: HashMap::new(),
+                last_completed: HashMap::new(),
                 capturing: false,
                 capture_input,
                 capture_error: None,
