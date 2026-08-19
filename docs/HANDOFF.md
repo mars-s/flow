@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `0357579` — check `git status` before
+- Working tree is clean as of commit `30e19e3` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -138,6 +138,22 @@ in practice. A real crash was found and fixed here via a macOS crash
 report (not visually) — see that commit's message for the exact
 mechanism (`sidebar.rs`'s `inbox_count` racing `render_task_view`'s
 list-state creation).
+
+**Added (`30e19e3`): the fixture-backed calendar-glance card in Today**,
+closing a real gap in Milestone 1's own exit scope (PRD §12: "a small
+fixture-backed calendar-glance component only to prove layout" — real
+Google Calendar data is Milestone 3). `components::calendar_glance` — a
+compact card, today's date, three fixture events (time/title/a per-event
+color dot, literal `Hsla` not a theme token, per `DESIGN_DIRECTION.md`'s
+"calendar colors never Flow status colors"), gated to `View::Today` only
+per §6.3's literal text. Asked the user before building rather than
+guessing which shape it should take: `DESIGN_DIRECTION.md` describes a
+persistent 3rd-column "calendar rail" that predates and was never
+reconciled with this session's Tasks/Calendar mode-switch decision — user
+picked the simpler inline-card-in-Today reading over the rail. Skips the
+connected/loading/error states the rail's own required-states table
+lists, since there's no real "connected" concept yet to be in any of
+them — Milestone 3's job.
 
 **Fixed (`85cbc31`, user-reported via screenshot): rows collapsed to a
 narrow shrink-wrapped column** instead of filling the pane. Root cause
