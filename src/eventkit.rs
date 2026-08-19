@@ -50,6 +50,11 @@ impl AuthStatus {
 #[derive(Debug, Clone)]
 pub struct CalendarEvent {
     pub id: String,
+    /// `EKCalendar.calendarIdentifier` — matched against `CalendarInfo::id`
+    /// for the Calendar tab's per-calendar visibility toggles. Empty when
+    /// the event's calendar couldn't be read (rare; means the toggle can't
+    /// hide this event, not a crash).
+    pub calendar_id: String,
     pub calendar_title: String,
     pub title: String,
     pub start: DateTime<Local>,
@@ -149,6 +154,10 @@ pub fn events_between(start: DateTime<Local>, end: DateTime<Local>) -> Vec<Calen
 unsafe fn convert_event(event: &objc2_event_kit::EKEvent) -> CalendarEvent {
     unsafe {
         let calendar = event.calendar();
+        let calendar_id = calendar
+            .as_ref()
+            .map(|calendar| calendar.calendarIdentifier().to_string())
+            .unwrap_or_default();
         let calendar_title = calendar
             .as_ref()
             .map(|calendar| calendar.title().to_string())
@@ -167,6 +176,7 @@ unsafe fn convert_event(event: &objc2_event_kit::EKEvent) -> CalendarEvent {
             .unwrap_or((0.6, 0.6, 0.6, 1.0));
         CalendarEvent {
             id: event.eventIdentifier().map(|id| id.to_string()).unwrap_or_default(),
+            calendar_id,
             calendar_title,
             title: event.title().to_string(),
             start: to_local(&event.startDate()),

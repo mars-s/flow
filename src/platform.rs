@@ -17,6 +17,9 @@ pub enum CalendarAuth {
 #[derive(Debug, Clone)]
 pub struct CalendarEvent {
     pub id: String,
+    /// Matched against `CalendarInfo::id` for the Calendar tab's
+    /// per-calendar visibility toggles.
+    pub calendar_id: String,
     pub calendar_title: String,
     pub title: String,
     pub start: chrono::DateTime<chrono::Local>,
@@ -36,6 +39,18 @@ pub struct CalendarInfo {
     pub title: String,
     pub source_title: String,
     pub color: (f32, f32, f32, f32),
+}
+
+/// Local midnight at the start of `date` — the one non-obvious edge case is
+/// a DST transition landing exactly at midnight, when `and_local_timezone`
+/// can't resolve a single instant; falls back to `Local::now()` rather than
+/// propagating an `Option` through every calendar-range caller for a case
+/// that in practice never actually happens (DST transitions land at 2am/3am
+/// in every zone Flow ships to, not midnight).
+pub fn local_midnight(date: chrono::NaiveDate) -> chrono::DateTime<chrono::Local> {
+    date.and_hms_opt(0, 0, 0)
+        .and_then(|naive| naive.and_local_timezone(chrono::Local).single())
+        .unwrap_or_else(chrono::Local::now)
 }
 
 /// Current calendar permission state without prompting. Safe to call at any
@@ -87,6 +102,7 @@ pub fn calendar_events_between(
         .into_iter()
         .map(|event| CalendarEvent {
             id: event.id,
+            calendar_id: event.calendar_id,
             calendar_title: event.calendar_title,
             title: event.title,
             start: event.start,

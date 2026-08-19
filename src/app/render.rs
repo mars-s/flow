@@ -47,6 +47,7 @@ impl Flow {
         let body = match destination.view() {
             Some(_) => self.render_task_view(destination, theme, cx),
             None if destination == Destination::Settings => self.render_settings(cx),
+            None if destination == Destination::Calendar => self.render_calendar_tab(theme, cx),
             None => placeholder_pane(theme, destination).into_any_element(),
         };
         div()

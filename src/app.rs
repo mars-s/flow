@@ -19,6 +19,7 @@ use crate::query::QueryCache;
 use crate::theme::Theme;
 use crate::{CancelTurn, NewTask, SpaceCapture, ToggleCommandPalette, ToggleInspector};
 
+mod calendar;
 mod command_palette;
 mod components;
 mod inspector;
@@ -295,6 +296,52 @@ pub struct Flow {
     /// convention as every other Flow data fetch, not called fresh on every
     /// frame `render_task_view` draws Today.
     today_calendar_events: Option<Arc<Vec<crate::platform::CalendarEvent>>>,
+    /// The Calendar tab's Day/Week switch — Month/Year are
+    /// `wayfinder/tickets/eventkit-calendar-tab.md`'s own next slice, not
+    /// built yet.
+    calendar_view_mode: CalendarViewMode,
+    /// The day the Calendar tab is centered on — Day mode shows exactly
+    /// this date, Week mode shows the Monday-start week it falls in
+    /// (matches the reference screenshot's own "Mon 17 ... Sun 23" header).
+    /// Navigated by the tab's Today/‹/› controls.
+    calendar_cursor: chrono::NaiveDate,
+    /// Calendar ids toggled off in the tab's own sidebar — visible (shown)
+    /// is the default, matching every calendar being on the first time the
+    /// tab is opened. Not persisted across launches: there's no settings-
+    /// persistence file anywhere in this codebase yet (`theme.rs`'s own
+    /// `ThemePreference` plumbing is unused dead code), so adding one just
+    /// for this would be new infrastructure, not a natural extension of
+    /// existing code — a real, disclosed scope cut
+    /// (`wayfinder/tickets/eventkit-calendar-tab.md`'s own open question).
+    calendar_hidden_ids: HashSet<String>,
+    /// The tab's own sidebar list — fetched once when the tab is first
+    /// opened (calendars don't change with the visible date range, unlike
+    /// `calendar_range_events`), not refetched on every Day/Week/navigate.
+    calendar_list: Option<Arc<Vec<crate::platform::CalendarInfo>>>,
+    /// Events for whatever range the tab is currently showing, refetched on
+    /// every mode switch or navigation — same
+    /// `cx.background_executor().spawn` + `cx.notify()` convention as
+    /// `today_calendar_events`, for the same render-path-I/O reason.
+    calendar_range_events: Option<Arc<Vec<crate::platform::CalendarEvent>>>,
+    /// One focus handle per calendar row in the tab's sidebar, keyed by
+    /// calendar id — same pruned-map pattern as `row_focuses`, pruned
+    /// against `calendar_list` whenever it's refetched.
+    calendar_row_focuses: HashMap<String, FocusHandle>,
+    /// Single stable handles for the tab's own fixed controls (Day/Week
+    /// switch, Today/‹/›) — same reasoning as `undo_toast_focus`: at most
+    /// one Calendar tab is ever visible at a time.
+    calendar_day_focus: FocusHandle,
+    calendar_week_focus: FocusHandle,
+    calendar_today_focus: FocusHandle,
+    calendar_prev_focus: FocusHandle,
+    calendar_next_focus: FocusHandle,
+}
+
+/// The Calendar tab's Day/Week switch (`wayfinder/tickets/eventkit-calendar-tab.md`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CalendarViewMode {
+    Day,
+    Week,
 }
 
 /// What `render_undo_toast` (`app/tasks.rs`) shows and what `Flow::undo`
@@ -435,6 +482,17 @@ impl Flow {
                 calendar_auth: crate::platform::calendar_authorization_status(),
                 calendar_connecting: false,
                 today_calendar_events: None,
+                calendar_view_mode: CalendarViewMode::Week,
+                calendar_cursor: chrono::Local::now().date_naive(),
+                calendar_hidden_ids: HashSet::new(),
+                calendar_list: None,
+                calendar_range_events: None,
+                calendar_row_focuses: HashMap::new(),
+                calendar_day_focus: cx.focus_handle(),
+                calendar_week_focus: cx.focus_handle(),
+                calendar_today_focus: cx.focus_handle(),
+                calendar_prev_focus: cx.focus_handle(),
+                calendar_next_focus: cx.focus_handle(),
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
@@ -951,12 +1009,18 @@ impl Flow {
                 flow.calendar_connecting = false;
                 flow.calendar_auth = status;
                 flow.today_calendar_events = None;
+                flow.calendar_list = None;
+                flow.calendar_range_events = None;
                 // Settings' own destination doesn't change here, so
-                // `set_destination`'s Today-arrival fetch never runs for
-                // this grant — fetch directly if Today is already open
-                // behind Settings (e.g. reopened from a previous session).
+                // `set_destination`'s Today/Calendar-arrival fetches never
+                // run for this grant — fetch directly if either is already
+                // open behind Settings (e.g. reopened from a previous
+                // session).
                 if flow.destination == Destination::Today {
                     flow.refresh_today_calendar_events(cx);
+                }
+                if flow.destination == Destination::Calendar {
+                    flow.refresh_calendar_tab(cx);
                 }
                 cx.notify();
             });
@@ -976,11 +1040,7 @@ impl Flow {
             let events = cx
                 .background_executor()
                 .spawn(async move {
-                    let start = chrono::Local::now()
-                        .date_naive()
-                        .and_hms_opt(0, 0, 0)
-                        .and_then(|naive| naive.and_local_timezone(chrono::Local).single())
-                        .unwrap_or_else(chrono::Local::now);
+                    let start = crate::platform::local_midnight(chrono::Local::now().date_naive());
                     let end = start + chrono::Duration::days(1);
                     crate::platform::calendar_events_between(start, end)
                 })
@@ -991,6 +1051,99 @@ impl Flow {
             });
         })
         .detach();
+    }
+
+    /// The Calendar tab's own date range for its current mode/cursor — Day:
+    /// just `calendar_cursor`; Week: the Monday-start week it falls in,
+    /// matching the reference screenshot's own "Mon 17 ... Sun 23" header
+    /// (chrono's ISO-week default, not a separate convention invented for
+    /// this).
+    pub(super) fn calendar_visible_range(&self) -> (chrono::NaiveDate, chrono::NaiveDate) {
+        match self.calendar_view_mode {
+            CalendarViewMode::Day => (self.calendar_cursor, self.calendar_cursor),
+            CalendarViewMode::Week => {
+                let week = self.calendar_cursor.week(chrono::Weekday::Mon);
+                (week.first_day(), week.last_day())
+            }
+        }
+    }
+
+    /// Fetches the Calendar tab's own sidebar list (once — see
+    /// `calendar_list`'s field doc) and this range's events. Called from
+    /// `set_destination` on arrival at the tab and after every mode switch
+    /// or navigation — never from the tab's own render path, same
+    /// render-path-I/O reasoning as `refresh_today_calendar_events`.
+    pub(super) fn refresh_calendar_tab(&mut self, cx: &mut Context<Self>) {
+        if self.calendar_auth != crate::platform::CalendarAuth::Granted {
+            self.calendar_list = None;
+            self.calendar_range_events = None;
+            return;
+        }
+        let (start_date, end_date) = self.calendar_visible_range();
+        let fetch_list = self.calendar_list.is_none();
+        cx.spawn(async move |flow, cx| {
+            let (list, events) = cx
+                .background_executor()
+                .spawn(async move {
+                    let list = fetch_list.then(crate::platform::calendar_list);
+                    let start = crate::platform::local_midnight(start_date);
+                    let end = crate::platform::local_midnight(end_date) + chrono::Duration::days(1);
+                    let events = crate::platform::calendar_events_between(start, end);
+                    (list, events)
+                })
+                .await;
+            let _ = flow.update(cx, |flow, cx| {
+                if let Some(list) = list {
+                    flow.prune_calendar_row_focuses(&list);
+                    flow.calendar_list = Some(Arc::new(list));
+                }
+                flow.calendar_range_events = Some(Arc::new(events));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The Calendar tab's Day/Week switch.
+    pub(super) fn set_calendar_view_mode(&mut self, mode: CalendarViewMode, cx: &mut Context<Self>) {
+        if self.calendar_view_mode == mode {
+            return;
+        }
+        self.calendar_view_mode = mode;
+        self.refresh_calendar_tab(cx);
+        cx.notify();
+    }
+
+    /// The tab's ‹/Today/› controls. `delta_days` is in whole days for Day
+    /// mode; Week mode's own ‹/› pass ±7 regardless of where in the week
+    /// `calendar_cursor` currently sits, so a week-flip always lands on the
+    /// same weekday rather than drifting.
+    pub(super) fn navigate_calendar(&mut self, delta_days: i64, cx: &mut Context<Self>) {
+        self.calendar_cursor = if delta_days == 0 {
+            chrono::Local::now().date_naive()
+        } else {
+            self.calendar_cursor + chrono::Duration::days(delta_days)
+        };
+        self.refresh_calendar_tab(cx);
+        cx.notify();
+    }
+
+    /// The sidebar's per-calendar visibility toggle.
+    pub(super) fn toggle_calendar_visibility(&mut self, id: String, cx: &mut Context<Self>) {
+        if !self.calendar_hidden_ids.remove(&id) {
+            self.calendar_hidden_ids.insert(id);
+        }
+        cx.notify();
+    }
+
+    /// Gets or creates the keyboard focus handle for one calendar-tab
+    /// sidebar row — same pattern as `Flow::row_focus`.
+    pub(super) fn calendar_row_focus(&mut self, id: &str, cx: &mut Context<Self>) -> FocusHandle {
+        self.calendar_row_focuses.entry(id.to_string()).or_insert_with(|| cx.focus_handle()).clone()
+    }
+
+    fn prune_calendar_row_focuses(&mut self, list: &[crate::platform::CalendarInfo]) {
+        self.calendar_row_focuses.retain(|id, _| list.iter().any(|calendar| &calendar.id == id));
     }
 
     /// Where the window should land keyboard focus on open, so arrow keys
@@ -1013,6 +1166,9 @@ impl Flow {
         window.set_window_title(&window_title(destination));
         if destination == Destination::Today {
             self.refresh_today_calendar_events(cx);
+        }
+        if destination == Destination::Calendar {
+            self.refresh_calendar_tab(cx);
         }
         cx.notify();
     }
