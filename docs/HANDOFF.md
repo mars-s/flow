@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `922abb4` — check `git status` before
+- Working tree is clean as of commit `1900808` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -262,14 +262,17 @@ re-introduce with the next unrelated change nearby.
       giving the checkbox its own tab stop, since that would double tab
       stops across what can be a long list; Space already means "act on
       the task" at the app level (`SpaceCapture`), so extending it once a
-      row has focus is consistent rather than novel. **Not done,
-      deliberately scoped out of these first two passes** rather than
+      row has focus is consistent rather than novel. `1900808` did the
+      Undo toast button and the "Clear completed" button too (both cheap:
+      bounded to a handful of instances — one Undo toast ever, five
+      "Clear" buttons max — so a plain stable-field/small-map handle was
+      enough, no `row_focuses`-style pruning needed). **Not done,
+      deliberately scoped out of these three passes** rather than
       attempted blind: the title, schedule pill, delete button, subtask
-      checkboxes, the add-subtask row, the Undo toast button, "Clear
-      completed", the complete-with-subtasks confirm — every *individual
-      control* besides open/complete, per the PRD's per-verb requirement
-      (delete, schedule, undo, etc. each still need their own keyboard
-      path). Also not done: Completed-
+      checkboxes, the add-subtask row, the complete-with-subtasks confirm
+      — every *individual control* on a task row/card, per the PRD's
+      per-verb requirement (delete, schedule, etc. each still need their
+      own keyboard path). Also not done: Completed-
       section rows, Upcoming's rows (both still pass `None` for `focus` —
       see `render_task_row`'s param doc), and arrow-key navigation between
       rows (tab order is currently the only way to move focus between
