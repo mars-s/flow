@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `d1c3621` — check `git status` before
+- Working tree is clean as of commit `346c2b6` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -171,6 +171,22 @@ that remaining background area is now much thinner than the old target.
 Escape and clicking a different row still fully work. Worth a direct
 look once there's a chance to see it rendered — this is the kind of
 narrowing that's easy to get wrong invisibly.
+
+**Fixed (`346c2b6`, found by self-reviewing the commit above): title
+edits could be silently lost.** The field only saved on Enter — exactly
+the same exposure `note_input` had before `set_expanded_task`'s
+proactive-flush fix earlier this session: GPUI does not blur a focused
+element just because a click lands on something that isn't itself
+`track_focus`'d (the detail card's own completion checkbox, for one), so
+a typed-but-unsubmitted rename could vanish with no save and no warning.
+Fixed the same way: a real `on_title_blur` handler plus a proactive
+`flush_title` call from `set_expanded_task`. Also caught a second bug
+introduced while wiring the first fix: `toggle_expanded` cleared
+`editing_title` *before* calling `set_expanded_task`, so `flush_title`
+always saw a false "nothing was being edited" and no-opped — the exact
+bug being fixed, still present via that one path. Both are fixed now;
+Escape's own path deliberately still skips flushing (discard, not save,
+matching Capture's Escape convention).
 
 **Fixed (`85cbc31`, user-reported via screenshot): rows collapsed to a
 narrow shrink-wrapped column** instead of filling the pane. Root cause
