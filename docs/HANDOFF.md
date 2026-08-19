@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `5967647` — check `git status` before
+- Working tree is clean as of commit `51105df` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -286,6 +286,13 @@ silently overwrite `calendar_range_events` with stale data. New
 `calendar_fetch_generation`, same fix shape as `query.rs`'s own generation
 counter for `tasks`/`subtasks`, just not routed through `QueryCache` since
 a calendar fetch's key (mode + cursor) isn't `View`-shaped.
+
+**Fixed (`51105df`, found via a PRD §7 hit-target audit against last
+cycle's own new code): four Calendar tab controls were under the app's own
+28px minimum** — the sidebar visibility toggle row, ‹/› nav, "Today", and
+the Day/Week/Month/Year mode buttons were 20–24px against a 28px floor the
+rest of the app already respects (`sidebar.rs`'s `ROW_HEIGHT`). Bumped all
+four, extending the hit region rather than the glyph.
 
 **Not done yet**: whether calendar visibility toggles should persist
 across launches (currently don't — no settings-persistence infrastructure
