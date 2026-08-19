@@ -130,7 +130,10 @@ impl Flow {
             .id(gpui::SharedString::from(format!("calendar-toggle-{}", calendar.id)))
             .track_focus(&focus)
             .tab_index(0)
-            .h(px(24.0))
+            // PRD §7: "hit targets at least 28 px desktop" — extends the
+            // row's own hit region rather than growing the 8px color dot
+            // or the text past its natural size.
+            .h(px(28.0))
             .px(px(4.0))
             .rounded(px(5.0))
             .cursor_pointer()
@@ -277,7 +280,8 @@ fn calendar_nav_button(
         .id(id)
         .track_focus(&focus)
         .tab_index(0)
-        .size(px(24.0))
+        // PRD §7's 28px minimum hit target.
+        .size(px(28.0))
         .rounded(px(6.0))
         .cursor_pointer()
         .flex()
@@ -315,7 +319,8 @@ fn calendar_text_button(
         .id(id)
         .track_focus(&focus)
         .tab_index(0)
-        .h(px(24.0))
+        // PRD §7's 28px minimum hit target.
+        .h(px(28.0))
         .px(px(10.0))
         .rounded(px(6.0))
         .cursor_pointer()
@@ -353,7 +358,8 @@ fn calendar_mode_button(
         .id(gpui::SharedString::from(format!("calendar-mode-{label}")))
         .track_focus(&focus)
         .tab_index(0)
-        .h(px(20.0))
+        // PRD §7's 28px minimum hit target.
+        .h(px(28.0))
         .px(px(10.0))
         .rounded(px(4.0))
         .cursor_pointer()
