@@ -129,7 +129,17 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
       content size, and a full `Debug` dump of its style. No menu item —
       same convention as Zed's own inspector. Requested by the user as a
       standing debugging aid, not part of Milestone 1's task-feature scope.
-- Working tree is clean as of commit `7187452` unless the "Milestone 1
+  39. `0b4e4e9` — first motion-polish pass, user-requested ("everything
+      coherent and crafted... add animations to the entire thing"). Fixed
+      the real reported glitch (completion collapse: opacity and height
+      shrank on the same pace, so `overflow_hidden` clipped a still-visible
+      checkbox/title mid-shrink — fade now races ahead of the collapse).
+      Added the two places with zero motion that read as hard cuts against
+      their neighbors: the detail card's mount and the Completed section's
+      reveal-on-expand. Consolidated the two previously-duplicated magic
+      durations into `ui::motion::REVEAL`/`TRANSITION`. **Not** a full
+      pass over every element — see "Not done yet" for what's left.
+- Working tree is clean as of commit `0b4e4e9` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
 - The overnight `/loop` (fixed 5-minute interval, cron job `57c760d9`) that
@@ -552,6 +562,19 @@ landed which line.
 
 **Not done yet, in the order they're planned:**
 
+- [ ] **Motion pass, round 2.** `0b4e4e9` fixed the one reported glitch and
+      the two starkest hard-cuts (detail card mount, Completed reveal);
+      it deliberately did not touch every surface — per Impeccable's
+      `animate`/`polish` guidance ("one authored moment... not scattered
+      effects"), a full sweep needs the user actually looking at the app
+      first (this session has no screen-recording access, so nothing past
+      the fixed rows was visually triaged). Candidates worth a look next,
+      not yet started: the schedule picker's field↔pills swap
+      (`render_process_row`) has no transition; `bulk_action_bar` and the
+      inline complete-with-subtasks confirm banner both mount instantly;
+      the sidebar destination switch has no motion of its own beyond the
+      main pane's cross-fade. Don't add motion to all of these reflexively
+      — triage which ones actually read as abrupt once someone's watching.
 - [ ] **`src/app/tasks.rs` has zero keyboard-accessible controls.** Found
       by audit (not requested), 2026-08-19: `grep -c "track_focus\|
       tab_index\|on_key_down" src/app/tasks.rs` → **0**, against **17**
