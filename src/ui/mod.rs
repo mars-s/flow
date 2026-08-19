@@ -9,6 +9,7 @@ pub mod motion;
 pub mod scrollbar;
 pub mod text_field;
 pub mod tooltip;
+mod virtualized_list;
 
 use crate::theme::Theme;
 

@@ -434,7 +434,6 @@ impl Flow {
             .text_size(px(12.5))
             .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(if selected { theme.text } else { theme.text_secondary })
-            .when(!selected, |row| row.hover(|el| el.bg(theme.overlay)))
             .focus_visible(|style| style.border_1().border_color(theme.accent))
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.select_mode(segment, window, cx);
