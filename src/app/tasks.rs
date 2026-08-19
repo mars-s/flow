@@ -547,8 +547,13 @@ impl Flow {
             self.schedule_picker_open = false;
             self.scheduling = false;
             self.adding_subtask = false;
-            self.editing_title = false;
             self.pending_complete_confirm = None;
+            // Deliberately NOT `self.editing_title = false` here — it has
+            // to still read `true` when `set_expanded_task` runs below,
+            // or `flush_title` (which checks it to decide whether there's
+            // anything to save) sees a false positive "nothing was being
+            // edited" and silently drops a typed-but-unsubmitted rename.
+            // `flush_title` clears the flag itself once it's actually run.
             self.set_expanded_task(None, cx);
             cx.notify();
             return;
@@ -556,10 +561,10 @@ impl Flow {
         self.schedule_picker_open = false;
         self.scheduling = false;
         self.adding_subtask = false;
-        self.editing_title = false;
         self.pending_complete_confirm = None;
-        // Flushes the previous task's note (if any was expanded) before
-        // switching `note_task_id` out from under it.
+        // Flushes the previous task's note and title (if either was being
+        // edited) before switching `note_task_id`/`title_task_id` out from
+        // under them — same ordering reasoning as the branch above.
         self.set_expanded_task(Some(id.clone()), cx);
         self.note_task_id = Some(id);
         self.note_input

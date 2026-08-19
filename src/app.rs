@@ -361,6 +361,11 @@ impl Flow {
             // the task's current title, never empty.
             let title_input = cx.new(|cx| ComposerInput::new(window, cx));
             cx.subscribe(&title_input, Self::on_title_event).detach();
+            // Enter isn't the only way focus can leave this field — see
+            // `on_title_event`'s doc for why a blur handler is also
+            // required, not just belt-and-suspenders.
+            let title_focus_handle = title_input.read(cx).focus();
+            cx.on_blur(&title_focus_handle, window, Self::on_title_blur).detach();
 
             Self {
                 destination: Destination::Inbox,
@@ -676,10 +681,16 @@ impl Flow {
     /// PRD §11's "edit" verb — found missing entirely (no way to rename a
     /// task anywhere in the app) by re-checking the acceptance criteria
     /// against the shipped app, the same way earlier gaps were found.
-    /// Unlike `on_note_blur`, this fires on Submit, not blur: a title is
-    /// single-line (`title_input` has no `.code_editor(None)`, so Enter
-    /// submits rather than inserting a newline), matching
-    /// `on_subtask_event`'s shape more than the note field's.
+    /// Enter-submits, matching `on_subtask_event`'s shape rather than the
+    /// note field's blur-only one — but that alone reintroduced the exact
+    /// bug `set_expanded_task` already fixed for `note_input`: clicking
+    /// anywhere that isn't itself `track_focus`'d (the detail card's own
+    /// completion checkbox, for instance) does not blur the previously
+    /// focused element in GPUI, so a typed-but-unsubmitted title could
+    /// still be silently discarded on collapse/task-switch. Fixed the
+    /// same way notes were: `flush_title` below runs proactively from
+    /// `set_expanded_task`, plus a real blur handler for the cases that
+    /// do land on another focusable control (Tab, or the delete button).
     fn on_title_event(&mut self, _input: Entity<ComposerInput>, event: &ComposerEvent, cx: &mut Context<Self>) {
         let ComposerEvent::Submit(title) = event else {
             return;
@@ -708,6 +719,49 @@ impl Flow {
                 // title, not just the closing detail card, so this
                 // invalidates broadly rather than just the origin view
                 // (same reasoning `delete_task` already uses).
+                flow.invalidate_all_views();
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// `title_input` lost focus: the safety-net save trigger, same role
+    /// `on_note_blur` plays for the note field. See `on_title_event`'s doc
+    /// for why Submit alone wasn't enough.
+    fn on_title_blur(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.flush_title(cx);
+    }
+
+    /// Commits whatever `title_input` currently holds if it's a valid
+    /// nonempty title, and always leaves edit mode either way — called
+    /// proactively from `set_expanded_task` (collapsing or switching
+    /// tasks) and from `on_title_blur`. Deliberately different from
+    /// `on_title_event`'s own Submit handling: Submit leaves an empty
+    /// field open so the user — who is still actively there — can fix
+    /// it, but by the time this runs the user has already moved on
+    /// (clicked away, switched tasks), so there's no field left to leave
+    /// open; an empty result here just abandons the edit and keeps the
+    /// task's existing title, the same "harmless to no-op" reasoning
+    /// `flush_note` already follows.
+    fn flush_title(&mut self, cx: &mut Context<Self>) {
+        let was_editing = self.editing_title;
+        self.editing_title = false;
+        if !was_editing {
+            return;
+        }
+        let Some(id) = self.title_task_id.clone() else { return };
+        let title = self.title_input.read(cx).content().trim().to_string();
+        if title.is_empty() {
+            return; // Abandon: PRD §6.1 forbids saving a blank title.
+        }
+        let Some(db) = self.db.clone() else { return };
+        cx.spawn(async move |flow, cx| {
+            let result = cx.background_executor().spawn(async move { db.set_title(id, title) }).await;
+            if result.is_err() {
+                return;
+            }
+            let _ = flow.update(cx, |flow, cx| {
                 flow.invalidate_all_views();
                 cx.notify();
             });
@@ -851,6 +905,7 @@ impl Flow {
     pub(super) fn set_expanded_task(&mut self, id: Option<String>, cx: &mut Context<Self>) {
         if self.expanded_task_id.is_some() && self.expanded_task_id != id {
             self.flush_note(cx);
+            self.flush_title(cx);
         }
         self.expanded_task_id = id;
     }
