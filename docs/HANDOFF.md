@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `76ed773` — check `git status` before
+- Working tree is clean as of commit `58fc090` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -330,6 +330,21 @@ reopen the render-path-I/O question — see that method's own doc), then
 either completes immediately (no open subtasks, the common case) or
 expands the card into the same confirm banner the detail card already
 has. Reopening is untouched.
+
+**Fixed (`58fc090`, found via a PRD §8/§10 constraints audit): a bare
+parsed time ("8am") wrote invalid data instead of the supported form PRD
+§6.4's own table describes.** `parse.rs`'s `TIME_ONLY` pattern produces
+`date: None, time: Some(_)` by design (a bare time is a listed, supported
+form), but nothing defaulted a date for it, so it silently wrote
+`scheduled_date: NULL, scheduled_time: '15:00'` — invalid per §8, and
+functionally orphaned (a NULL date lands the task in Anytime, which never
+renders a time at all). Fixed at both layers: `Db::schedule` now rejects
+the combination outright (the actual enforcement point, any caller), and
+both call sites that read a parser result (`submit_capture`, the
+schedule-input handler) now default a bare time to today's date before it
+reaches `schedule` — the real fix, not just a rejection, since "8am" alone
+typed into Capture must keep working per the PRD. New test:
+`scheduling_a_time_with_no_date_is_rejected`.
 
 **Fixed (`f4a264f`, found via a PRD §8 data-model constraints audit):
 a completed parent could still accept a new subtask.** §8 says "A
