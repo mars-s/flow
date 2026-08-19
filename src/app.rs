@@ -105,6 +105,17 @@ pub struct Flow {
     /// session. First entry in the `CLAUDE.md`/PRD keyboard-accessibility
     /// gap this project's own audit found — see `docs/HANDOFF.md`.
     row_focuses: HashMap<String, FocusHandle>,
+    /// One keyboard focus handle per view for the collapsed "Completed"
+    /// section's "Clear" button — bounded to the five task views (no
+    /// pruning needed, unlike `row_focuses`), created lazily the same way.
+    completed_clear_focuses: HashMap<View, FocusHandle>,
+    /// The Undo toast's own focus handle. A single stable field (like
+    /// `new_task_focus`) rather than a fresh handle per render, since a
+    /// fresh handle each frame would drop tab focus the instant a render
+    /// happened to land while the toast had it — GPUI's tab order only
+    /// includes handles actually `track_focus`'d in the current frame, so
+    /// this being unused whenever no toast is showing is harmless.
+    undo_toast_focus: FocusHandle,
     /// What `render_task_view` last saw for the expanded task's row —
     /// `(id, schedule_picker_open, scheduling, adding_subtask,
     /// pending_complete_confirm, subtask_count)`. Compared against each
@@ -284,6 +295,8 @@ impl Flow {
             Self {
                 destination: Destination::Inbox,
                 new_task_focus: cx.focus_handle(),
+                completed_clear_focuses: HashMap::new(),
+                undo_toast_focus: cx.focus_handle(),
                 nav_focuses: array::from_fn(|_| cx.focus_handle()),
                 mode_tasks_focus: cx.focus_handle(),
                 mode_thumb: None,

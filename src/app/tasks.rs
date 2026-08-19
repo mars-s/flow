@@ -179,6 +179,13 @@ impl Flow {
             .clone()
     }
 
+    /// Gets or creates the "Clear completed" button's focus handle for one
+    /// view — `Flow::completed_clear_focuses`'s field doc has the full
+    /// reasoning.
+    fn completed_clear_focus(&mut self, view: View, cx: &mut Context<Self>) -> FocusHandle {
+        self.completed_clear_focuses.entry(view).or_insert_with(|| cx.focus_handle()).clone()
+    }
+
     /// Drops focus handles for any task id no longer present in `tasks` —
     /// called from `render_task_view` alongside its other per-list-refetch
     /// bookkeeping (`completing_ids` pruning, `sync_task_list_state`), so
@@ -809,6 +816,8 @@ impl Flow {
                         .child(
                             div()
                                 .id("undo-toast-button")
+                                .track_focus(&self.undo_toast_focus)
+                                .tab_index(0)
                                 .px(px(8.0))
                                 .py(px(3.0))
                                 .rounded(px(5.0))
@@ -817,7 +826,17 @@ impl Flow {
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .text_color(theme.accent)
                                 .hover(|el| el.bg(theme.overlay))
+                                .focus_visible(|style| style.border_1().border_color(theme.accent))
                                 .on_click(cx.listener(|flow, _, _, cx| flow.undo_last_action(cx)))
+                                .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+                                    if event.keystroke.modifiers.modified() {
+                                        return;
+                                    }
+                                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                        flow.undo_last_action(cx);
+                                        cx.stop_propagation();
+                                    }
+                                }))
                                 .child("Undo"),
                         ),
                 )
@@ -989,6 +1008,7 @@ impl Flow {
                 .or_insert_with(crate::ui::scrollbar::ScrollbarState::new)
                 .clone()
         });
+        let completed_clear_focus = self.completed_clear_focus(view, cx);
         match tasks {
             Some(tasks) => task_list(
                 view,
@@ -1005,6 +1025,7 @@ impl Flow {
                 selected,
                 list_state,
                 scrollbar_state,
+                completed_clear_focus,
                 theme,
                 cx,
             )
@@ -1046,6 +1067,7 @@ fn task_list(
     selected: HashSet<String>,
     list_state: Option<ListState>,
     scrollbar_state: Option<Rc<crate::ui::scrollbar::ScrollbarState>>,
+    completed_clear_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1222,6 +1244,7 @@ fn task_list(
                         note_input,
                         schedule_input,
                         subtask_context,
+                        completed_clear_focus,
                         theme,
                         cx,
                     )),
@@ -1328,6 +1351,7 @@ fn completed_section(
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
+    completed_clear_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1417,6 +1441,8 @@ fn completed_section(
                     row.child(
                         div()
                             .id(SharedString::from(format!("completed-clear-{view:?}")))
+                            .track_focus(&completed_clear_focus)
+                            .tab_index(0)
                             .px(px(8.0))
                             .py(px(3.0))
                             .rounded(px(5.0))
@@ -1424,9 +1450,19 @@ fn completed_section(
                             .text_size(px(11.5))
                             .text_color(theme.text_tertiary)
                             .hover(|el| el.bg(theme.overlay).text_color(theme.danger))
+                            .focus_visible(|style| style.border_1().border_color(theme.accent))
                             .on_click(cx.listener(move |flow, _, _, cx| {
                                 flow.clear_completed(view, cx);
                                 cx.stop_propagation();
+                            }))
+                            .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+                                if event.keystroke.modifiers.modified() {
+                                    return;
+                                }
+                                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                    flow.clear_completed(view, cx);
+                                    cx.stop_propagation();
+                                }
                             }))
                             .child("Clear"),
                     )
