@@ -149,11 +149,39 @@ pub fn open_calendar_privacy_pane() {
     use objc2_app_kit::NSWorkspace;
     use objc2_foundation::{NSString, NSURL};
 
-    let url = NSURL::URLWithString(&NSString::from_str(
+    // `x-apple.systempreferences:` is private, undocumented API — Apple's
+    // own DTS guidance is that only documented URL schemes are supported,
+    // and System Settings' internal deep-link format has already changed
+    // once (Ventura's move away from System Preferences). It's still the
+    // only practical way to land on a specific pane on macOS today (no
+    // public AppKit API exists for it), so it stays the first attempt, but
+    // silently doing nothing if it ever breaks on a future macOS version
+    // — `openURL`'s own `bool` result was previously discarded entirely —
+    // would leave the button looking broken with zero feedback. Falls back
+    // to just launching System Settings.app generally (a fully supported
+    // `URLForApplicationWithBundleIdentifier` + `openURL` on a real file
+    // URL), which can't fail the same way, so the button always does
+    // *something* even if the deep link's private format has changed.
+    let workspace = NSWorkspace::sharedWorkspace();
+    let deep_link = NSURL::URLWithString(&NSString::from_str(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
     ));
-    if let Some(url) = url {
-        NSWorkspace::sharedWorkspace().openURL(&url);
+    let opened = deep_link.is_some_and(|url| workspace.openURL(&url));
+    if opened {
+        return;
+    }
+    crate::debug_log!(
+        "open_calendar_privacy_pane: deep link failed, falling back to launching System Settings"
+    );
+    if let Some(app_url) =
+        workspace.URLForApplicationWithBundleIdentifier(&NSString::from_str("com.apple.systempreferences"))
+    {
+        let fallback_opened = workspace.openURL(&app_url);
+        if !fallback_opened {
+            crate::debug_log!("open_calendar_privacy_pane: fallback launch also failed");
+        }
+    } else {
+        crate::debug_log!("open_calendar_privacy_pane: could not resolve System Settings.app");
     }
 }
 
