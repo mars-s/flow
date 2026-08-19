@@ -598,6 +598,18 @@ current honest "fails immediately and obviously." Flag it clearly instead
 so whoever next runs a release isn't surprised by a `flow-daemon` cargo
 error with no context for why.
 
+**A fourth dormant-dead-code find, same sweep**: `scripts/seed-mock-
+sessions.ts` (1019 lines) seeds synthetic `AgentSession`/`sessions`/
+`messages` rows for transcript-performance testing, referencing
+`src/model.rs` and `src/persistence.rs` — neither exists anywhere in this
+repo (confirmed via `test -f`). It's the dev-tooling counterpart to
+`docs/performance.md`'s already-flagged-stale streaming investigation:
+same Waku-era transcript system, same "deleted in Milestone 0" story.
+Dormant like `browser.rs`/`analytics.rs` (nothing in `dev.ts`/`bundle.sh`
+calls it), not actively breaking a real pipeline like the release scripts
+above — but would immediately confuse anyone who tried running it
+expecting it to still work.
+
 **A third, largest, and most clear-cut dead-code candidate**: `apps/web/`
 (99 files, ~21,500 lines, a browser client) and `packages/flow-client/`
 (99 files, ~1,350 lines, its generated protocol client) both exist only to
