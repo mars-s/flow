@@ -202,7 +202,15 @@ impl Flow {
         let db = match Db::open() {
             Ok(db) => Some(db),
             Err(error) => {
+                // `eprintln!` here has never reliably reached anything: a
+                // GUI app launched via macOS's `open -n -W`
+                // (`scripts/dev.ts`) doesn't deliver its own stderr back to
+                // a watching terminal, in a release build there's no
+                // terminal at all. `debug_log!` guarantees at least a
+                // debug-build capture; `eprintln!` stays too since it's
+                // free and might still reach Console.app's unified log.
                 eprintln!("Flow: failed to open the local database: {error:#}");
+                crate::debug_log!("failed to open the local database: {error:#}");
                 None
             }
         };

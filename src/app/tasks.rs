@@ -356,12 +356,14 @@ impl Flow {
             UndoKind::Complete => self.write_completed(toast.task_id, false, toast.origin_view, cx),
             UndoKind::Delete => {
                 let Some(db) = self.db.clone() else { return };
+                let task_id = toast.task_id.clone();
                 cx.spawn(async move |flow, cx| {
                     let result = cx
                         .background_executor()
                         .spawn(async move { db.restore_task(toast.task_id) })
                         .await;
-                    if result.is_err() {
+                    if let Err(error) = result {
+                        crate::debug_log!("task {task_id}: undo (restore) FAILED: {error:#}");
                         return;
                     }
                     let _ = flow.update(cx, |flow, cx| {
@@ -429,6 +431,9 @@ impl Flow {
                                 eprintln!(
                                     "Flow: confirm_complete_with_subtasks failed for subtask {subtask_id}: {error:#}"
                                 );
+                                crate::debug_log!(
+                                    "subtask {subtask_id}: confirm_complete_with_subtasks FAILED: {error:#}"
+                                );
                             }
                         }
                     })
@@ -450,11 +455,13 @@ impl Flow {
     fn toggle_subtask_completed(&mut self, id: String, parent_id: String, completed: bool, cx: &mut Context<Self>) {
         let Some(db) = self.db.clone() else { return };
         cx.spawn(async move |flow, cx| {
+            let write_id = id.clone();
             let Ok(()) = cx
                 .background_executor()
-                .spawn(async move { db.set_completed(id, completed) })
+                .spawn(async move { db.set_completed(write_id, completed) })
                 .await
             else {
+                crate::debug_log!("subtask {id}: write completed={completed} FAILED");
                 return;
             };
             let _ = flow.update(cx, |flow, cx| {
@@ -523,11 +530,13 @@ impl Flow {
         self.set_expanded_task(None, cx);
         self.schedule_picker_open = false;
         cx.spawn(async move |flow, cx| {
+            let write_id = id.clone();
             let result = cx
                 .background_executor()
-                .spawn(async move { db.schedule(id, bucket, None::<String>, None::<String>) })
+                .spawn(async move { db.schedule(write_id, bucket, None::<String>, None::<String>) })
                 .await;
-            if result.is_err() {
+            if let Err(error) = result {
+                crate::debug_log!("task {id}: clear_schedule FAILED: {error:#}");
                 return;
             }
             let _ = flow.update(cx, |flow, cx| {
@@ -550,11 +559,13 @@ impl Flow {
             .then(|| chrono::Local::now().date_naive().to_string());
 
         cx.spawn(async move |flow, cx| {
+            let write_id = id.clone();
             let result = cx
                 .background_executor()
-                .spawn(async move { db.schedule(id, target.bucket(), today, None::<String>) })
+                .spawn(async move { db.schedule(write_id, target.bucket(), today, None::<String>) })
                 .await;
-            if result.is_err() {
+            if let Err(error) = result {
+                crate::debug_log!("task {id}: process_task({target:?}) FAILED: {error:#}");
                 return;
             }
             let _ = flow.update(cx, |flow, cx| {
@@ -614,6 +625,7 @@ impl Flow {
                             // dropping a failure mid-batch, which the
                             // previous `let _ =` did.
                             eprintln!("Flow: bulk_process failed for task {id}: {error:#}");
+                            crate::debug_log!("task {id}: bulk_process FAILED: {error:#}");
                         }
                     }
                 })
@@ -641,6 +653,7 @@ impl Flow {
                     for id in ids {
                         if let Err(error) = db.delete_task(id.clone()) {
                             eprintln!("Flow: bulk_delete failed for task {id}: {error:#}");
+                            crate::debug_log!("task {id}: bulk_delete FAILED: {error:#}");
                         }
                     }
                 })
@@ -677,6 +690,7 @@ impl Flow {
                     for id in ids {
                         if let Err(error) = db.delete_task(id.clone()) {
                             eprintln!("Flow: clear_completed failed for task {id}: {error:#}");
+                            crate::debug_log!("task {id}: clear_completed FAILED: {error:#}");
                         }
                     }
                 })
