@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `75e5a88` — check `git status` before
+- Working tree is clean as of commit `a95a305` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -141,6 +141,23 @@ next time someone's watching the app: the row-level piece of this was
 "fixed" once already (motion pass round 1) and still had a real defect, so
 don't assume any of it is fully clean until someone's actually ticked a
 task and watched it.
+
+That last warning turned out to be justified: `a95a305` (user-reported,
+same session) found that `9810093`'s own two fixes interacted badly —
+clearing `completing_ids` the moment the write succeeded raced against
+`last_tasks`' stale fallback (which still held the pre-write snapshot for
+one more render), so the row flashed back to full height, visible as
+everything below it jumping up. `completing_ids` is no longer cleared
+speculatively in `write_completed`'s success path; it's pruned in
+`render_task_view` itself, only once a genuinely fresh `Query::Ready`
+confirms the task is actually gone. Reopening (checkbox or Undo) still
+clears it immediately and synchronously — a deliberate reversal doesn't
+need a fetch to confirm it, and without that carve-out an Undo landing
+mid-flight would permanently stick the row in its collapsing state. Given
+this exact area has now had a real defect survive two "fixed" rounds in a
+row, treat any future report on it as probably real rather than assuming
+it's a duplicate — this is the kind of interaction that's easy to
+re-introduce with the next unrelated change nearby.
 
 **Known, deliberate scope cuts** (not bugs):
 - The compact task row shows no subtask progress — only fetched once a
