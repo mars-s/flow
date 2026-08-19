@@ -1,8 +1,6 @@
 //! Top-level frame: native window chrome, the fixed sidebar, and the main
 //! pane that cross-fades between destination placeholders.
 
-use std::time::Duration;
-
 use gpui::{
     Animation, AnimationExt, AnyElement, Context, IntoElement, ParentElement, Render,
     SharedString, Styled, Window, div, ease_out_quint, prelude::*,
@@ -11,11 +9,7 @@ use gpui::{
 use super::Flow;
 use super::components::placeholder_pane;
 use crate::theme::Theme;
-
-/// PRD §7: "Navigation cross-fades or slides only the main pane (120–160
-/// ms)". `with_animation` already resolves instantly under
-/// `cx.reduce_motion()` (see the toast fade below, the pattern this reuses).
-const MAIN_PANE_TRANSITION: Duration = Duration::from_millis(140);
+use crate::ui::motion;
 
 impl Render for Flow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -66,7 +60,7 @@ impl Flow {
                     .child(body)
                     .with_animation(
                         SharedString::from(format!("pane-fade-{}", destination.index())),
-                        Animation::new(MAIN_PANE_TRANSITION).with_easing(ease_out_quint()),
+                        Animation::new(motion::REVEAL).with_easing(ease_out_quint()),
                         |element, delta| element.opacity(delta),
                     ),
             )

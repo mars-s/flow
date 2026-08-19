@@ -17,10 +17,12 @@ use crate::db::{Bucket, Task, View};
 use crate::input::ComposerInput;
 use crate::query::Query;
 use crate::theme::Theme;
+use crate::ui::motion;
 
-/// PRD §7's completion-collapse timing; reused here for the row's fade-in
-/// too since nothing in the direction doc distinguishes them.
-const ROW_TRANSITION: Duration = Duration::from_millis(180);
+/// PRD §7's completion-collapse timing; reused here for the row's fade-in,
+/// the completed-section reveal, and the undo toast too, since nothing in
+/// the direction doc distinguishes them — see `crate::ui::motion::TRANSITION`.
+const ROW_TRANSITION: Duration = motion::TRANSITION;
 
 /// How far the expanded "Completed" section grows upward before it scrolls
 /// internally instead of pushing the open-task list any further.
@@ -1041,7 +1043,16 @@ fn completed_section(
                             theme,
                             cx,
                         )
-                    })),
+                    }))
+                    .with_animation(
+                        // Unmounts entirely on collapse (this whole child is
+                        // behind `.when(expanded, ...)`), so every mount is a
+                        // fresh reveal — the disclosure opening rather than
+                        // rows silently appearing.
+                        SharedString::from(format!("completed-reveal-{view:?}")),
+                        Animation::new(motion::TRANSITION).with_easing(ease_out_quint()),
+                        |element, delta| element.opacity(delta),
+                    ),
             )
         })
         .child(
@@ -1283,7 +1294,16 @@ fn render_task_row(
             Animation::new(ROW_TRANSITION).with_easing(ease_out_quint()),
             move |element, delta| {
                 if is_completing {
-                    element.opacity(1.0 - delta).h(px(40.0 * (1.0 - delta)))
+                    // Opacity has to hit 0 well before the collapse finishes,
+                    // or `overflow_hidden` starts hard-clipping a checkbox
+                    // and title that are still half-visible — a chopped
+                    // glyph mid-shrink, not a clean collapse. Racing fade
+                    // ahead of height (out by 45% of the timeline, height
+                    // still running the full duration) means there's nothing
+                    // left to clip by the time the row is short enough for
+                    // it to show.
+                    let fade = (delta / 0.45).min(1.0);
+                    element.opacity(1.0 - fade).h(px(40.0 * (1.0 - delta)))
                 } else {
                     element.opacity(delta)
                 }
@@ -1489,6 +1509,16 @@ fn render_detail_card(
                 cx,
             ))
         })
+        .with_animation(
+            // The row unmounts entirely when collapsed (`render_task_row`'s
+            // `is_expanded` branch), so a stable id per task is enough —
+            // every mount is a fresh appearance, unlike the row's own
+            // fade/collapse which needs two ids to distinguish in-place
+            // states on an element that never leaves the tree.
+            gpui::SharedString::from(format!("task-{}-detail-reveal", task.id)),
+            Animation::new(motion::REVEAL).with_easing(ease_out_quint()),
+            |element, delta| element.opacity(delta),
+        )
         .into_any_element()
 }
 

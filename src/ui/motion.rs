@@ -198,6 +198,19 @@ impl RenderOnce for Pulse {
     }
 }
 
+/// PRD §7: "Navigation cross-fades or slides only the main pane (120–160
+/// ms)". Shared by anything that reads as *a new place appearing* rather
+/// than an existing row changing in place — the main pane's own cross-fade
+/// and the task detail card's mount.
+pub const REVEAL: Duration = Duration::from_millis(140);
+
+/// A routine state change acknowledging an action in place: a row fading in
+/// on mount or collapsing out on completion, a toast fading in, a disclosure
+/// section's rows appearing. Distinct from [`REVEAL`] even though the two
+/// currently sit close together, so list-row motion can drift independently
+/// of whole-surface motion once real content calls for it.
+pub const TRANSITION: Duration = Duration::from_millis(180);
+
 /// How long a side panel takes to slide open or shut. Zeron's panel
 /// transition (`crates/ui/src/motion.rs` `RESIZE`) is 200ms — long enough to
 /// read as travel rather than a jump cut, short enough that the layout is
