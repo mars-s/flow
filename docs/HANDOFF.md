@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `7af22a4` — check `git status` before
+- Working tree is clean as of commit `359411c` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -330,6 +330,18 @@ reopen the render-path-I/O question — see that method's own doc), then
 either completes immediately (no open subtasks, the common case) or
 expands the card into the same confirm banner the detail card already
 has. Reopening is untouched.
+
+**Flagged, not fixed (`359411c`, same doc-staleness sweep):
+`docs/DESIGN_DIRECTION.md`'s hero mockup and "Calendar rail" section
+describe the pre-mode-switch 3-column IA** (already superseded per this
+doc's own "Decisions made" §4, and now further out of date given tonight's
+full Day/Week/Month/Year Calendar tab). Added a banner rather than
+rewriting the mockup/component spec myself — that's real design-visual
+work this session deliberately left for a dedicated pass (possibly
+`impeccable document`), not a mechanical text fix. Spot-checked before
+claiming the rest of the doc still matches: theme.rs's dark-mode token
+hex values, `SIDEBAR_WIDTH` (252px), task row height (40px), corner radius
+(10px) all genuinely check out.
 
 **Fixed (`7af22a4`, found via a doc-staleness sweep): `docs/performance.md`
 and two spots in `AGENTS.md` still described the Waku coding-agent
