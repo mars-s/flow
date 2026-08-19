@@ -2310,6 +2310,19 @@ impl Render for ComposerInput {
             .key_context("ComposerInput")
             .id("composer-field")
             .track_focus(&self.focus_handle(cx))
+            // `track_focus` alone leaves the element out of the Tab
+            // cycle — `FocusHandle::new()` defaults `tab_stop` to false,
+            // and only `.tab_index()` flips it (per its own doc: "this
+            // will default the element to being a tab stop"). Every
+            // ComposerInput in the app (Capture, notes, the schedule
+            // field, subtask-add) is currently focused only by an
+            // explicit `window.focus(...)` call when its section opens —
+            // that still works unchanged — but there was no way back in
+            // via Tab once focus left it. No `.focus_visible()` added
+            // alongside this: the caret and selection already carry the
+            // focused state visually for a text field, unlike a button
+            // that needs a ring to show it at all.
+            .tab_index(0)
             .cursor(CursorStyle::IBeam)
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::delete))
