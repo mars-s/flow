@@ -94,7 +94,10 @@ pub(super) fn calendar_glance(theme: Theme) -> AnyElement {
                 .text_size(px(11.0))
                 .font_weight(gpui::FontWeight::MEDIUM)
                 .text_color(theme.text_tertiary)
-                .child(chrono::Local::now().format("%A, %-d %b").to_string()),
+                // `%b %-d` (not `%-d %b`) to match `tasks.rs::day_label`'s
+                // established short-date word order ("Aug 23") elsewhere
+                // in the app, rather than a second convention.
+                .child(chrono::Local::now().format("%A, %b %-d").to_string()),
         )
         .children(events.into_iter().map(|event| {
             div()
