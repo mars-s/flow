@@ -100,11 +100,33 @@ pub async fn request_access() -> AuthStatus {
         }
     });
     let store = unsafe { EKEventStore::init(EKEventStore::alloc()) };
-    // Safety: `completion` outlives the call — it's held on this stack
+    // `requestFullAccessToEventsWithCompletion:` only exists since macOS 14
+    // (Sonoma) — but `resources/Info.plist`'s own `LSMinimumSystemVersion`
+    // claims 13.0 support. Calling a selector that doesn't exist raises an
+    // Objective-C `unrecognized selector` exception (a real crash, not a
+    // graceful failure) on 13.x, found via re-examining this exact claim
+    // rather than testing it (this development machine is macOS 26, well
+    // past the gap, so it could never surface here). `respondsToSelector`
+    // is the same runtime-introspection pattern `browser.rs` already uses
+    // for an analogous "does this selector exist" question, checking the
+    // real API surface instead of parsing an OS version number.
+    use objc2::runtime::NSObjectProtocol;
+    let supports_full_access =
+        store.respondsToSelector(objc2::sel!(requestFullAccessToEventsWithCompletion:));
+    // Safety: `completion` outlives either call — it's held on this stack
     // frame across the `.await` below, and the block's own retain count
     // keeps it alive for EventKit's async callback regardless.
     unsafe {
-        store.requestFullAccessToEventsWithCompletion(RcBlock::as_ptr(&completion) as *mut _);
+        if supports_full_access {
+            store.requestFullAccessToEventsWithCompletion(RcBlock::as_ptr(&completion) as *mut _);
+        } else {
+            // The pre-14 API — deprecated but the only option that exists
+            // on those systems, hence the deliberate #[allow]. Same
+            // completion-handler shape, so the same block and channel
+            // serve both branches.
+            #[allow(deprecated)]
+            store.requestAccessToEntityType_completion(EKEntityType::Event, RcBlock::as_ptr(&completion) as *mut _);
+        }
     }
     match rx.await {
         Ok(true) => AuthStatus::Granted,
