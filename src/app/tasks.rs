@@ -466,6 +466,52 @@ impl Flow {
         self.toggle_completed(id, title, true, origin_view, cx);
     }
 
+    /// The compact row's checkbox / Space key, completing (not reopening) a
+    /// task: unlike `render_detail_card`, the compact row never loads
+    /// subtasks (a deliberate scope cut — see the `focus` parameter's doc —
+    /// to avoid an N+1 fetch on every visible row every frame). But that
+    /// scope cut was letting the row's own checkbox complete a parent with
+    /// open children with no confirmation at all, silently violating PRD
+    /// §11 ("A parent cannot be completed without explicitly completing its
+    /// open children") — the detail card's checkbox was the only path that
+    /// actually enforced it. A checkbox click is a one-shot user action, not
+    /// a render path, so a background fetch here is the documented
+    /// CLAUDE.md carve-out ("freshness matters more than latency"), not a
+    /// repeat of the same mistake. Expands the card and reuses
+    /// `request_complete`'s existing confirm banner when there's an open
+    /// subtask, so the user lands on the same flow the detail card already
+    /// has, rather than a new one; completes immediately (no extra latency)
+    /// for the common case of a task with no subtasks at all.
+    fn request_complete_from_row(
+        &mut self,
+        id: String,
+        title: String,
+        note: Option<String>,
+        origin_view: View,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(db) = self.db.clone() else { return };
+        cx.spawn(async move |flow, cx| {
+            let check_id = id.clone();
+            let subtasks = cx
+                .background_executor()
+                .spawn(async move { db.list_subtasks(check_id) })
+                .await
+                .unwrap_or_default();
+            let has_open_subtasks = subtasks.iter().any(|t| t.completed_at.is_none());
+            let _ = flow.update(cx, |flow, cx| {
+                if has_open_subtasks {
+                    flow.selected_task_ids.clear();
+                    flow.toggle_expanded(id.clone(), note, cx);
+                    flow.request_complete(id, title, true, origin_view, cx);
+                } else {
+                    flow.toggle_completed(id, title, true, origin_view, cx);
+                }
+            });
+        })
+        .detach();
+    }
+
     /// The inline confirm's "Cancel" — leaves the parent and its subtasks
     /// untouched.
     fn cancel_complete_confirm(&mut self, cx: &mut Context<Self>) {
@@ -1776,6 +1822,7 @@ fn render_task_row(
     let checked = completed || is_completing;
     let id_for_click = task.id.clone();
     let title_for_click = task.title.clone();
+    let note_for_click_complete = task.note.clone();
     let title_for_row_key = task.title.clone();
     // The schedule metadata is a fact about the task, not the view it's
     // being read from — a scheduled Inbox task (PRD §14) shows its date the
@@ -1841,13 +1888,23 @@ fn render_task_row(
                             // repeated Space must not restart the
                             // collapse animation mid-flight.
                             if !is_completing {
-                                flow.toggle_completed(
-                                    id_for_row_key.clone(),
-                                    title_for_row_key.clone(),
-                                    !completed,
-                                    origin_view,
-                                    cx,
-                                );
+                                if completed {
+                                    flow.toggle_completed(
+                                        id_for_row_key.clone(),
+                                        title_for_row_key.clone(),
+                                        false,
+                                        origin_view,
+                                        cx,
+                                    );
+                                } else {
+                                    flow.request_complete_from_row(
+                                        id_for_row_key.clone(),
+                                        title_for_row_key.clone(),
+                                        note_for_row_key.clone(),
+                                        origin_view,
+                                        cx,
+                                    );
+                                }
                             }
                             cx.stop_propagation();
                         }
@@ -1881,7 +1938,17 @@ fn render_task_row(
                     if is_completing {
                         return; // Already animating out from an earlier click.
                     }
-                    flow.toggle_completed(id_for_click.clone(), title_for_click.clone(), !completed, origin_view, cx);
+                    if completed {
+                        flow.toggle_completed(id_for_click.clone(), title_for_click.clone(), false, origin_view, cx);
+                    } else {
+                        flow.request_complete_from_row(
+                            id_for_click.clone(),
+                            title_for_click.clone(),
+                            note_for_click_complete.clone(),
+                            origin_view,
+                            cx,
+                        );
+                    }
                     cx.stop_propagation();
                 }))
                 .when(checked, |circle| {
