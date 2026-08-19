@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `346c2b6` — check `git status` before
+- Working tree is clean as of commit `f7e45bb` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -196,6 +196,24 @@ that remaining background area is now much thinner than the old target.
 Escape and clicking a different row still fully work. Worth a direct
 look once there's a chance to see it rendered — this is the kind of
 narrowing that's easy to get wrong invisibly.
+
+**Fixed (`f7e45bb`, found via a §10 privacy audit, not a user report):
+task titles were leaking into the debug log and inspector panel.** PRD
+§10: "Treat task titles and calendar event titles as private data in
+UI, logs, and telemetry." A handful of `debug_log!` calls and
+`debug_snapshot()`'s Undo-toast line — all added earlier this
+session — embedded raw task titles into the persistent plain-text
+debug log file and the Cmd-Option-I inspector panel, exactly the
+"logs and telemetry" case the requirement names (and this session's
+own `flow-debug` skill tells agents to go read that log file, so it
+was actively being surfaced, not just theoretically at risk). Fixed
+four call sites, keeping the task id (already enough to find the
+event) and dropping the title: `tasks.rs::delete_task`'s log line,
+both of `app.rs`'s capture success/failure log lines, and
+`debug_snapshot()`'s Undo-toast line (now shows `toast.task_id`
+instead of `toast.title`). Every other `debug_log!` site was checked
+and already only logs ids/error messages. `cargo check`/`cargo test`
+clean (180 passing); rebuilt via the dev watcher, no new crash report.
 
 **Fixed (`346c2b6`, found by self-reviewing the commit above): title
 edits could be silently lost.** The field only saved on Enter — exactly
