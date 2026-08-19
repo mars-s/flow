@@ -430,13 +430,23 @@ impl Flow {
             .child(segment.label())
     }
 
-    /// Live Inbox count for the badge. `0` while the first load is still in
-    /// flight or the database is unavailable — an undercount is a better
-    /// default than blocking the row on a fetch.
+    /// Live Inbox count for the badge. Reads the same `last_tasks`
+    /// stale-while-revalidate fallback `render_task_view` uses — without
+    /// it, completing/deleting/processing any Inbox task (which invalidates
+    /// this same cache entry) flashed the badge to 0 and back for the
+    /// refetch's round trip. `0` only when nothing has ever loaded yet, or
+    /// the database is unavailable.
     fn inbox_count(&mut self, cx: &mut Context<Self>) -> usize {
-        match self.read_view(crate::db::View::Inbox, cx) {
-            crate::query::Query::Ready(tasks) => tasks.len(),
-            crate::query::Query::Pending | crate::query::Query::Missing(_) => 0,
+        use crate::db::View;
+        use crate::query::Query;
+        match self.read_view(View::Inbox, cx) {
+            Query::Ready(tasks) => {
+                self.last_tasks.insert(View::Inbox, tasks.clone());
+                tasks.len()
+            }
+            Query::Pending | Query::Missing(_) => {
+                self.last_tasks.get(&View::Inbox).map_or(0, |tasks| tasks.len())
+            }
         }
     }
 
