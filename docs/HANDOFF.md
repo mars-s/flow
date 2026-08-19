@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `e8e910c` — check `git status` before
+- Working tree is clean as of commit `c9e6d74` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -270,11 +270,21 @@ hour grid with time-of-day positioning and overlap resolution — see that
 commit's message for the full reasoning. A multi-day event files under its
 start date's column only.
 
-**Not done yet, next up**: Month and Year views, and whether calendar
-visibility toggles should persist across launches (currently don't — no
-settings-persistence infrastructure exists anywhere in this codebase yet).
-See `wayfinder/tickets/eventkit-calendar-tab.md` for the tracked scope and
-open questions.
+**Added (`c9e6d74`): the Calendar tab's Month and Year views**, completing
+the Day/Week/Month/Year scope `wayfinder/tickets/eventkit-calendar-tab.md`
+set out. Month is a traditional expanded-to-full-weeks grid (3 events per
+cell then "+N more"); Year is twelve small month grids with an event dot
+per day and click-to-drill-down into Month mode. `Flow::navigate_calendar`
+now takes a `-1/0/1` step and decides the actual jump size (day/week/
+month/year) per mode internally, rather than each caller computing it.
+
+**Not done yet**: whether calendar visibility toggles should persist
+across launches (currently don't — no settings-persistence infrastructure
+exists anywhere in this codebase yet, a real gap worth its own ticket if
+felt in practice rather than bolted on here). The true pixel-accurate
+hour-grid positioning for Day/Week (vs. the current agenda-per-day layout)
+is also still open, disclosed as a simplification in `e8e910c`'s message.
+See `wayfinder/tickets/eventkit-calendar-tab.md` for both.
 
 **Fixed (`64b0f36`, found via a PRD §11 acceptance-criteria audit): the
 compact row's own checkbox (and Space) could complete a parent with
