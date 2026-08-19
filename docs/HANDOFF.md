@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `64b0f36` — check `git status` before
+- Working tree is clean as of commit `b76195e` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -214,6 +214,55 @@ both of `app.rs`'s capture success/failure log lines, and
 instead of `toast.title`). Every other `debug_log!` site was checked
 and already only logs ids/error messages. `cargo check`/`cargo test`
 clean (180 passing); rebuilt via the dev watcher, no new crash report.
+
+**In progress (`b76195e`), redirected by explicit user decision the night
+of 2026-08-19: calendar integration is macOS EventKit, not Google OAuth.**
+User showed a reference screenshot of Apple Calendar's own
+Day/Week/Month/Year layout and asked for that shape on the Calendar tab,
+plus the Today glance hidden until a calendar is connected via Settings.
+PRD §6.5/Milestone 3 rewritten to match (see that commit's own message for
+the full rationale — same "avoid backend code" reasoning that picked Turso
+over Convex). Landed so far:
+- `src/eventkit.rs` (new, macOS-only): the objc2-event-kit bridge —
+  `authorization_status`/`request_access`/`events_between`/`list_calendars`,
+  converting every EKEvent/EKCalendar into plain Rust structs.
+- `src/platform.rs`: the macOS/non-macOS split wrapping it
+  (`calendar_authorization_status`, `calendar_request_access`,
+  `calendar_events_between`, `calendar_list`, `open_calendar_privacy_pane`),
+  matching this file's own existing convention.
+- `src/app/settings.rs`: Settings' first real content — a calendar section
+  with the read-only disclosure, a "Connect Calendar" button, and the
+  denied-state System-Settings deep link. Also fixed a real routing gap
+  found in the process: `render_settings` existed but `render_main_pane`
+  never called it, so Settings always fell through to the generic
+  placeholder pane.
+- Today's `calendar_glance` now reads real `Flow::today_calendar_events`
+  (fetched once per Today-view mount, not from the render path) and the
+  whole card is hidden unless `calendar_auth == Granted`, per §6.5's
+  "hidden entirely rather than showing an empty or disconnected state."
+- Cargo.toml/`resources/Info.plist`: the exact objc2-event-kit feature set
+  and `NSCalendarsFullAccessUsageDescription`/`NSCalendarsUsageDescription`
+  this needs.
+
+**Investigated, not caused by this work**: two SIGABRT crashes
+(`panic_bounds_check` in `task_list`'s virtualized-list closure,
+`tasks[ix]` out of bounds) appeared on this session's first post-change
+relaunch. Bisected against the pre-calendar baseline (`352af5c`) through
+the identical launch path — it didn't crash there either — then confirmed
+clean on five more relaunches of the actual current code. The crash's own
+stack is GPUI's list-item prepaint, nothing calendar-related, and Inbox
+(not Today) is the default landing destination — points at the exact
+undiffed-resplice race `task_list_states`'s own field doc already
+discloses as a known limitation, just newly observed as an actual crash
+rather than only a scroll-position quirk. **Worth root-causing properly**
+if it recurs — see that field's doc for the minimal-diff-splice follow-up
+already named there as the fix shape.
+
+**Not done yet, next up**: the actual Calendar tab (Day/Week/Month/Year,
+modeled on the user's Apple Calendar reference) — `platform::calendar_list`
+exists but nothing renders it yet, `Destination::Calendar` still shows the
+generic placeholder. See `wayfinder/tickets/eventkit-calendar-tab.md` for
+the tracked scope.
 
 **Fixed (`64b0f36`, found via a PRD §11 acceptance-criteria audit): the
 compact row's own checkbox (and Space) could complete a parent with

@@ -31,7 +31,11 @@ GPL-3.0 obligations are accepted.
     self-hosted Convex after the interaction model is proven.
 - [Choose Flow's first calendar source](tickets/choose-calendar-source.md)
   - Add read-only Google Calendar only after the local task and NLP experience
-    is proper; calendar is contextual and never writable.
+    is proper; calendar is contextual and never writable. **Superseded
+    2026-08-19**: reads local macOS Calendar via EventKit instead — see the
+    ticket's own supersede note and
+    [Add the EventKit Calendar tab](tickets/eventkit-calendar-tab.md) (open)
+    for the in-progress work.
 
 ## Milestone 0 — done
 
