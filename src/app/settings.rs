@@ -95,38 +95,69 @@ impl Flow {
                                  relaunch Flow.",
                             ),
                     )
-                    .child(open_system_settings_button(theme, cx))
+                    .child(open_system_settings_button(
+                        theme,
+                        self.settings_open_privacy_focus.clone(),
+                        cx,
+                    ))
                     .into_any_element(),
                 CalendarAuth::Unavailable => div()
                     .text_size(px(12.0))
                     .text_color(theme.text_ghost)
                     .child("Calendar access isn't available on this platform yet.")
                     .into_any_element(),
-                CalendarAuth::NotDetermined => {
-                    connect_calendar_button(theme, connecting, cx).into_any_element()
-                }
+                CalendarAuth::NotDetermined => connect_calendar_button(
+                    theme,
+                    connecting,
+                    self.settings_connect_calendar_focus.clone(),
+                    cx,
+                )
+                .into_any_element(),
             })
             .into_any_element()
     }
 }
 
-fn connect_calendar_button(theme: Theme, connecting: bool, cx: &mut Context<Flow>) -> impl IntoElement {
+fn connect_calendar_button(
+    theme: Theme,
+    connecting: bool,
+    focus: gpui::FocusHandle,
+    cx: &mut Context<Flow>,
+) -> impl IntoElement {
     div()
         .id("connect-calendar")
         .flex_none()
+        // PRD §7's 28px minimum hit target — explicit rather than relying
+        // on padding-plus-line-height to clear it by chance.
+        .h(px(28.0))
         .px(px(12.0))
-        .py(px(6.0))
         .rounded(px(6.0))
         .bg(theme.accent)
+        .flex()
+        .items_center()
         .text_size(px(12.5))
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(theme.canvas)
-        .when(!connecting, |button| button.cursor_pointer().hover(|el| el.opacity(0.9)))
+        .when(!connecting, |button| {
+            button
+                .cursor_pointer()
+                .hover(|el| el.opacity(0.9))
+                .track_focus(&focus)
+                .tab_index(0)
+                .focus_visible(|style| style.border_2().border_color(theme.text))
+                .on_click(cx.listener(|flow, _, _, cx| flow.connect_calendar(cx)))
+                .on_key_down(cx.listener(|flow, event: &gpui::KeyDownEvent, _, cx| {
+                    if event.keystroke.modifiers.modified() {
+                        return;
+                    }
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                        flow.connect_calendar(cx);
+                        cx.stop_propagation();
+                    }
+                }))
+        })
         .when(connecting, |button| button.opacity(0.6))
         .child(if connecting { "Connecting…" } else { "Connect Calendar" })
-        .when(!connecting, |button| {
-            button.on_click(cx.listener(|flow, _, _, cx| flow.connect_calendar(cx)))
-        })
 }
 
 /// PRD §6.5: "a way to reach macOS's own System Settings → Privacy &
@@ -134,19 +165,38 @@ fn connect_calendar_button(theme: Theme, connecting: bool, cx: &mut Context<Flow
 /// permission grant programmatically." `platform::open_calendar_privacy_pane`
 /// is the macOS/non-macOS split for that deep link, matching this file's own
 /// `calendar_authorization_status`-shaped pattern.
-fn open_system_settings_button(theme: Theme, cx: &mut Context<Flow>) -> impl IntoElement {
+fn open_system_settings_button(
+    theme: Theme,
+    focus: gpui::FocusHandle,
+    cx: &mut Context<Flow>,
+) -> impl IntoElement {
     div()
         .id("open-calendar-privacy-settings")
         .flex_none()
+        // PRD §7's 28px minimum hit target.
+        .h(px(28.0))
         .px(px(12.0))
-        .py(px(6.0))
         .rounded(px(6.0))
+        .flex()
+        .items_center()
         .border_1()
         .border_color(theme.border_strong)
         .cursor_pointer()
         .hover(|el| el.border_color(theme.accent))
+        .track_focus(&focus)
+        .tab_index(0)
+        .focus_visible(|style| style.border_color(theme.accent))
         .text_size(px(12.5))
         .text_color(theme.text)
         .child("Open System Settings")
         .on_click(cx.listener(|_flow, _, _, _cx| crate::platform::open_calendar_privacy_pane()))
+        .on_key_down(cx.listener(|_flow, event: &gpui::KeyDownEvent, _, cx| {
+            if event.keystroke.modifiers.modified() {
+                return;
+            }
+            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                crate::platform::open_calendar_privacy_pane();
+                cx.stop_propagation();
+            }
+        }))
 }

@@ -348,6 +348,11 @@ pub struct Flow {
     calendar_today_focus: FocusHandle,
     calendar_prev_focus: FocusHandle,
     calendar_next_focus: FocusHandle,
+    /// Settings' calendar section — "Connect Calendar" and the denied-state
+    /// "Open System Settings" link, single stable handles since only one is
+    /// ever shown at a time (mutually exclusive on `calendar_auth`).
+    settings_connect_calendar_focus: FocusHandle,
+    settings_open_privacy_focus: FocusHandle,
 }
 
 /// The Calendar tab's Day/Week switch (`wayfinder/tickets/eventkit-calendar-tab.md`).
@@ -511,6 +516,8 @@ impl Flow {
                 calendar_today_focus: cx.focus_handle(),
                 calendar_prev_focus: cx.focus_handle(),
                 calendar_next_focus: cx.focus_handle(),
+                settings_connect_calendar_focus: cx.focus_handle(),
+                settings_open_privacy_focus: cx.focus_handle(),
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
