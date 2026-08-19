@@ -330,6 +330,20 @@ mod tests {
             "icons/rotate-cw.svg",
             "icons/package.svg",
             "icons/trash.svg",
+            // Milestone 1's sidebar destinations and mode segments
+            // (`app/sidebar.rs`'s `Destination`/`Mode::icon_path`) — added
+            // after `icons/inbox.svg` shipped referenced but never listed
+            // above, so the icon silently loaded as nothing (no crash, no
+            // test failure, just a blank glyph). This list is a fixed
+            // manual set, not a scan of every `"icons/*.svg"` literal in
+            // the codebase, so it only catches a regression here if the
+            // icon is added to it — worth doing for any new icon-bearing
+            // surface, not just relying on this list being exhaustive.
+            "icons/inbox.svg",
+            "icons/home.svg",
+            "icons/calendar.svg",
+            "icons/layers.svg",
+            "icons/archive.svg",
         ];
         for path in paths {
             assert!(
