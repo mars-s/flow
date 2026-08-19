@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `2a37a88` — check `git status` before
+- Working tree is clean as of commit `01156dc` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -244,26 +244,33 @@ re-introduce with the next unrelated change nearby.
       instant selection feedback, which matches native macOS convention
       (Mail, Finder) rather than being a gap. Not yet visually verified —
       this session has no screen-recording access; worth an actual look.
-- [ ] **`src/app/tasks.rs` has zero keyboard-accessible controls.** Found
-      by audit (not requested), 2026-08-19: 0 matches for `track_focus|
-      tab_index|on_key_down` against 17 `.on_click(` sites (task rows, the
-      completion checkbox, title, schedule pill, process/quick-pick pills,
-      delete, subtask checkboxes, the add-subtask row, the Undo toast
-      button, "Clear completed", the complete-with-subtasks confirm) —
-      every one mouse-only. Contradicts `CLAUDE.md`'s "every mouse-
-      reachable control must be keyboard-reachable," the PRD's "complete
-      keyboard operation" goal, and §11's acceptance criterion naming a
-      task's full lifecycle "without leaving the keyboard."
-      `src/app/sidebar.rs` already has the working pattern to copy
-      (`render_mode_switch`: `track_focus(&handle)`, `tab_index(N)`,
-      `focus_visible(...)`, `on_key_down` matching `"enter" | "space"`).
-      **Deliberately not attempted blind**: task rows are a *dynamic* list
-      (unlike the sidebar's fixed seven), so this needs a real decision
-      about where per-row `FocusHandle`s live (likely a
-      `HashMap<String, FocusHandle>` on `Flow`) and probably arrow-key
-      navigation between rows — a structural choice that deserves visual
-      verification of tab order and focus rings, which this session's
-      terminal cannot currently do (no screen-recording permission).
+- [ ] **`src/app/tasks.rs` keyboard accessibility — first slice done
+      (`01156dc`), most of the surface still mouse-only.** Original audit
+      (2026-08-19): 0 matches for `track_focus|tab_index|on_key_down`
+      against 17 `.on_click(` sites. Contradicts `CLAUDE.md`'s "every
+      mouse-reachable control must be keyboard-reachable," the PRD's
+      "complete keyboard operation" goal, and §11's acceptance criterion
+      naming a task's full lifecycle "without leaving the keyboard."
+      **Done**: the flat views' (Inbox/Today/Anytime/Someday) compact task
+      row — `Flow::row_focuses` (a `HashMap<String, FocusHandle>`, created
+      lazily per visible row inside the virtualized `list()`'s own
+      closure so it stays O(visible) not O(total tasks), pruned alongside
+      `completing_ids` on every refetch), `track_focus`/`tab_index(0)`/
+      `focus_visible`/`on_key_down` on the row mirroring
+      `sidebar.rs::render_nav_row` exactly. **Not done, deliberately
+      scoped out of the first pass** rather than attempted blind: the
+      completion checkbox, title, schedule pill, delete button, subtask
+      checkboxes, the add-subtask row, the Undo toast button, "Clear
+      completed", the complete-with-subtasks confirm — every *individual
+      control*, not just the row shell, per the PRD's per-verb
+      requirement (complete, delete, schedule, etc. each need their own
+      keyboard path, not just "open the row"). Also not done: Completed-
+      section rows, Upcoming's rows (both still pass `None` for `focus` —
+      see `render_task_row`'s param doc), and arrow-key navigation between
+      rows (tab order is currently the only way to move focus between
+      tasks). Each of these is a real, separately-scoped follow-up, not
+      a single remaining task — tackle them individually rather than as
+      one big remaining sweep.
 
 ## Where to find things
 
