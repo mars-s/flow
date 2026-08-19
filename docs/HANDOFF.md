@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `ff5529a` — check `git status` before
+- Working tree is clean as of commit `5e80435` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -611,6 +611,19 @@ surgery on the daemon-specific bundling logic itself with no way to
 actually test it. Fixing it blind risks a release script that looks
 corrected but silently fails somewhere in the codesign/notarize chain,
 worse than the current honest "fails immediately and obviously."
+
+**Fixed (`5e80435`, found via a repo-wide `git grep -i waku` sweep after
+the `release.yml` fix): two more files with the same class of bug.**
+`.env.example` (the local dev template for `scripts/release.ts`) had the
+identical `WAKU_*` env var mismatch just fixed in `release.yml` — a
+developer copying it to `.env` would have their signing identity silently
+never read. `SECURITY.md`'s vulnerability-reporting link pointed at
+`github.com/egoist/waku/security/advisories/new` — Waku's own upstream
+repo, not Flow's (fixed to the confirmed real `origin`,
+`github.com/mars-s/flow`). Left the `hi@egoist.dev` email fallback as a
+marked TODO rather than guessing a replacement — publishing a real
+person's email as this project's security contact isn't a call to make
+blind.
 
 **Fixed (`ff5529a`, three separate confirmed mismatches, found by reading
 `release.ts`/`bundle-linux.sh`'s own source rather than guessing): `.github/
