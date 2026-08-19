@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `1d73565` — check `git status` before
+- Working tree is clean as of commit `7e9987e` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -244,63 +244,49 @@ re-introduce with the next unrelated change nearby.
       instant selection feedback, which matches native macOS convention
       (Mail, Finder) rather than being a gap. Not yet visually verified —
       this session has no screen-recording access; worth an actual look.
-- [ ] **`src/app/tasks.rs` keyboard accessibility — first slice done
-      (`01156dc`), most of the surface still mouse-only.** Original audit
-      (2026-08-19): 0 matches for `track_focus|tab_index|on_key_down`
-      against 17 `.on_click(` sites. Contradicts `CLAUDE.md`'s "every
-      mouse-reachable control must be keyboard-reachable," the PRD's
-      "complete keyboard operation" goal, and §11's acceptance criterion
-      naming a task's full lifecycle "without leaving the keyboard."
-      **Done**: the flat views' (Inbox/Today/Anytime/Someday) compact task
-      row — `Flow::row_focuses` (a `HashMap<String, FocusHandle>`, created
-      lazily per visible row inside the virtualized `list()`'s own
-      closure so it stays O(visible) not O(total tasks), pruned alongside
-      `completing_ids` on every refetch), `track_focus`/`tab_index(0)`/
-      `focus_visible`/`on_key_down` on the row mirroring
-      `sidebar.rs::render_nav_row`. Enter opens the row (matches a click);
-      Space toggles completion (`922abb4`) — a deliberate choice over
-      giving the checkbox its own tab stop, since that would double tab
-      stops across what can be a long list; Space already means "act on
-      the task" at the app level (`SpaceCapture`), so extending it once a
-      row has focus is consistent rather than novel. `1900808` did the
-      Undo toast button and the "Clear completed" button too (both cheap:
-      bounded to a handful of instances — one Undo toast ever, five
-      "Clear" buttons max — so a plain stable-field/small-map handle was
-      enough, no `row_focuses`-style pruning needed). `8d251d4` did the
-      expanded detail card's delete button — same single-stable-handle
-      reasoning (only one task can be expanded at a time), but threaded
-      through all three places a row can render (the virtualized list,
-      Upcoming, Completed section) since unlike `row_focuses` this one
-      isn't scoped to just the virtualized path — whichever task happens
-      to be expanded needs it, regardless of which view its row lives in.
-      `59c5398` did the schedule pill the same way — opening the picker
-      is now keyboard-reachable. `262afce` did the picker's
-      Today/Anytime/Someday/Clear quick-pick pills too (`[FocusHandle; 3]`
-      named fields, not a map, since `ProcessTarget` is a small fixed
-      enum) — six function signatures touched to thread it from
-      `render_task_view` down to `render_process_row`, the deepest hop
-      yet in this pass but the same mechanical pattern. **Found, not
-      fixed**: the picker's NLP free-text field itself has `track_focus`
-      internally (`input.rs`) but no `.tab_index()` call, so it may not
-      currently be in the Tab order at all — this affects every composer
-      field app-wide (Capture, notes, this field, subtask-add), not just
-      task rows, so it's a separate, broader fix than this pass's scope;
-      noted here rather than folded in blind. `1d73565` did the
-      "Complete parent and all subtasks?" confirm banner's Cancel/
-      Complete-all buttons too, same pattern — this closes out every
-      individually-tracked control on the detail card except the subtask
-      section itself. **Not done, deliberately scoped out of these seven
-      passes** rather than attempted blind: the row title (not an
-      actionable control, may not need this at all), subtask checkboxes,
-      the add-subtask row — the last real individual controls left, per
-      the PRD's per-verb requirement. Also not
-      done: Completed-
-      section rows, Upcoming's rows (both still pass `None` for `focus` —
-      see `render_task_row`'s param doc), and arrow-key navigation between
-      rows (tab order is currently the only way to move focus between
-      tasks). Each of these is a real, separately-scoped follow-up, not
-      a single remaining task — tackle them individually rather than as
-      one big remaining sweep.
+- [x] **`src/app/tasks.rs` keyboard accessibility — every individually-
+      tracked control done, across eight commits** (`01156dc` through
+      `7e9987e`). Original audit (2026-08-19): 0 matches for
+      `track_focus|tab_index|on_key_down` against 17 `.on_click(` sites,
+      contradicting `CLAUDE.md`'s "every mouse-reachable control must be
+      keyboard-reachable," the PRD's "complete keyboard operation" goal,
+      and §11's acceptance criterion naming a task's full lifecycle
+      "without leaving the keyboard." All fixed now: the compact row
+      (Enter opens, Space completes — a deliberate choice over a second
+      tab stop for the checkbox, extending the app's existing "bare Space
+      acts on the task" convention rather than doubling tab stops across
+      a long list), the Undo toast button, "Clear completed", the detail
+      card's delete button, schedule pill, the picker's
+      Today/Anytime/Someday/Clear quick-picks, the "Complete parent and
+      all subtasks?" confirm's two buttons, subtask checkboxes (same
+      Space-toggles convention, no Enter since a subtask has no card of
+      its own under the one-level ceiling), and the "+ Add subtask" row.
+      Two focus-handle shapes used depending on cardinality: single
+      stable fields for anything bounded to "one at a time" (delete
+      button, schedule pill, confirm banner — only one card expanded
+      ever), pruned `HashMap<String, FocusHandle>`s for genuinely dynamic
+      per-task sets (`row_focuses` for top-level rows, a *separate*
+      `subtask_focuses` map for subtask rows — deliberately not shared,
+      since `row_focuses`' pruning runs against the flat top-level list
+      and would delete every subtask handle on the next unrelated
+      refetch; documented in both fields' doc comments so it isn't
+      "simplified" back together later).
+      **Genuinely out of scope, not silently dropped:**
+      - Completed-section rows and Upcoming's rows still pass `None` for
+        `focus` (`render_task_row`'s param doc) — mouse-only.
+      - Arrow-key navigation between rows — Tab order is currently the
+        only way to move focus between tasks; no listbox-style arrow
+        handling.
+      - **Found but not fixed, flagged as a separate broader item**: the
+        schedule/note/capture/subtask composer fields (`input.rs`) call
+        `track_focus` but never `.tab_index()`, so they may not be in the
+        Tab order at all — this is an `input.rs`-wide question (every
+        `ComposerInput` in the app), not something scoped to task rows,
+        and deserves its own look rather than a blind fix folded into
+        this pass.
+      Not yet visually verified — this session has no screen-recording
+      access; worth an actual Tab/Enter/Space walkthrough of a real task
+      list before trusting the feel of it.
 
 ## Where to find things
 
