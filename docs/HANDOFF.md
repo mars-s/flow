@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `3bceebb` — check `git status` before
+- Working tree is clean as of commit `af12d82` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -536,6 +536,19 @@ re-introduce with the next unrelated change nearby.
 - PRD §6.3's "empty days with events still show" in Upcoming isn't
   implemented — there's no calendar-events data yet to populate an empty
   day with (Google Calendar glance is a later milestone).
+
+**Fixed (`af12d82`, found via a self-review against the `impeccable`
+craft-floor checklist): two banned patterns in the Calendar tab.**
+`render_calendar_event_card` used a 2px colored left border — explicitly
+banned ("A colored border-left or border-right above 1px on cards, list
+items, callouts, or alerts") — replaced with the same filled-dot indicator
+already used elsewhere in the tab. `calendar_nav_button` rendered "‹"/"›"
+as literal text glyphs — banned ("Unicode glyphs or emoji standing in for
+an icon system") — replaced with `icons/arrow-left.svg`/`arrow-right.svg`,
+both already-embedded assets. Built without loading the checklist first,
+same lesson this project already learned once before
+(`flow-ui-craft-discipline` memory) — this pass ran it against my own work
+rather than assuming it was clean.
 
 **Real cleanup candidate, flagged rather than acted on unilaterally**
 (found while auditing for dead code after tonight's EventKit work):
