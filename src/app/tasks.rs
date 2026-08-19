@@ -1555,6 +1555,7 @@ fn render_task_row(
     let checked = completed || is_completing;
     let id_for_click = task.id.clone();
     let title_for_click = task.title.clone();
+    let title_for_row_key = task.title.clone();
     // The schedule metadata is a fact about the task, not the view it's
     // being read from — a scheduled Inbox task (PRD §14) shows its date the
     // same as a scheduled Today/Upcoming one.
@@ -1583,11 +1584,18 @@ fn render_task_row(
         .hover(|el| el.bg(theme.overlay))
         .when(is_selected, |row| row.bg(theme.sidebar_item_background))
         // First entry in the keyboard-accessibility pass this codebase's
-        // own audit flagged (`docs/HANDOFF.md`) — tab reaches the row,
-        // enter/space opens it, matching a plain click. Scoped to just
-        // this activation for now; cmd+select and arrow-key list
-        // navigation between rows are deliberately not attempted here —
-        // see the `focus` parameter's doc for the exact boundary.
+        // own audit flagged (`docs/HANDOFF.md`) — tab reaches the row.
+        // Enter opens it, matching a plain click on the row body. Space
+        // toggles completion instead of also opening the row: this app
+        // already treats bare Space as "act on the task" at the app level
+        // (`SpaceCapture` opens Capture when nothing's focused), and giving
+        // the checkbox its own tab stop here would double the tab stops
+        // per row across what can be a long list — a real cost, not just
+        // a style choice, given this file's own performance discipline
+        // around per-row work. Scoped to just these two activations for
+        // now; cmd+select and arrow-key navigation between rows are
+        // deliberately not attempted here — see the `focus` parameter's
+        // doc for the exact boundary.
         .when_some(focus, |row, handle| {
             row.track_focus(&handle)
                 .tab_index(0)
@@ -1596,10 +1604,33 @@ fn render_task_row(
                     if event.keystroke.modifiers.modified() {
                         return;
                     }
-                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                        flow.selected_task_ids.clear();
-                        flow.toggle_expanded(id_for_row_key.clone(), note_for_row_key.clone(), cx);
-                        cx.stop_propagation();
+                    match event.keystroke.key.as_str() {
+                        "enter" => {
+                            flow.selected_task_ids.clear();
+                            flow.toggle_expanded(
+                                id_for_row_key.clone(),
+                                note_for_row_key.clone(),
+                                cx,
+                            );
+                            cx.stop_propagation();
+                        }
+                        "space" => {
+                            // Same `is_completing` re-click guard the
+                            // checkbox's own `on_click` uses — a held or
+                            // repeated Space must not restart the
+                            // collapse animation mid-flight.
+                            if !is_completing {
+                                flow.toggle_completed(
+                                    id_for_row_key.clone(),
+                                    title_for_row_key.clone(),
+                                    !completed,
+                                    origin_view,
+                                    cx,
+                                );
+                            }
+                            cx.stop_propagation();
+                        }
+                        _ => {}
                     }
                 }))
         })
