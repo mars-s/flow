@@ -110,7 +110,11 @@ impl Flow {
     /// move a task between any of the five, and the write is a one-shot
     /// user action rather than a per-frame cost, so invalidating all five
     /// beats threading the exact affected set through every call site.
-    fn invalidate_all_views(&mut self) {
+    /// `pub(super)` (not private) so `app.rs`'s `on_title_event` can reuse
+    /// it too — a rename can touch a task in any of the five views, same
+    /// reasoning as delete/schedule, so it needs the same broad
+    /// invalidation rather than `submit_capture`'s narrower one.
+    pub(super) fn invalidate_all_views(&mut self) {
         // Routes through `invalidate_view` (not a direct `self.tasks`
         // touch) specifically so this also clears `completed_tasks` — a
         // delete or bulk-delete can remove a row from either cache, and
@@ -543,6 +547,7 @@ impl Flow {
             self.schedule_picker_open = false;
             self.scheduling = false;
             self.adding_subtask = false;
+            self.editing_title = false;
             self.pending_complete_confirm = None;
             self.set_expanded_task(None, cx);
             cx.notify();
@@ -551,6 +556,7 @@ impl Flow {
         self.schedule_picker_open = false;
         self.scheduling = false;
         self.adding_subtask = false;
+        self.editing_title = false;
         self.pending_complete_confirm = None;
         // Flushes the previous task's note (if any was expanded) before
         // switching `note_task_id` out from under it.
@@ -871,6 +877,8 @@ impl Flow {
         let scheduling = self.scheduling;
         let schedule_input = self.schedule_input.clone();
         let note_input = self.note_input.clone();
+        let editing_title = self.editing_title;
+        let title_input = self.title_input.clone();
         let selected = self.selected_task_ids.clone();
         let completed_expanded = self.completed_expanded.contains(&view);
         // Only the expanded task's card ever reads this — fetched here
@@ -1027,6 +1035,7 @@ impl Flow {
         });
         let completed_clear_focus = self.completed_clear_focus(view, cx);
         let detail_delete_focus = self.detail_delete_focus.clone();
+        let title_focus = self.title_focus.clone();
         let schedule_pill_focus = self.schedule_pill_focus.clone();
         let process_pill_focuses = self.process_pill_focuses.clone();
         let process_clear_focus = self.process_clear_focus.clone();
@@ -1044,6 +1053,9 @@ impl Flow {
                 schedule_picker_open,
                 scheduling,
                 note_input,
+                editing_title,
+                title_input,
+                title_focus,
                 schedule_input,
                 subtask_context,
                 selected,
@@ -1096,6 +1108,9 @@ fn task_list(
     schedule_picker_open: bool,
     scheduling: bool,
     note_input: Entity<ComposerInput>,
+    editing_title: bool,
+    title_input: Entity<ComposerInput>,
+    title_focus: FocusHandle,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     selected: HashSet<String>,
@@ -1169,6 +1184,9 @@ fn task_list(
                                 schedule_picker_open,
                                 scheduling,
                                 note_input.clone(),
+                                editing_title,
+                                title_input.clone(),
+                                title_focus.clone(),
                                 schedule_input.clone(),
                                 subtask_context.clone(),
                                 detail_delete_focus.clone(),
@@ -1193,6 +1211,8 @@ fn task_list(
                 // for `completed_section`, which this closure — built once
                 // but called on every visible row — must not consume.
                 let list_note_input = note_input.clone();
+                let list_title_input = title_input.clone();
+                let list_title_focus = title_focus.clone();
                 let list_schedule_input = schedule_input.clone();
                 let list_subtask_context = subtask_context.clone();
                 let list_expanded = expanded.clone();
@@ -1274,6 +1294,9 @@ fn task_list(
                                             schedule_picker_open,
                                             scheduling,
                                             list_note_input.clone(),
+                                            editing_title,
+                                            list_title_input.clone(),
+                                            list_title_focus.clone(),
                                             list_schedule_input.clone(),
                                             list_subtask_context.clone(),
                                             focus,
@@ -1319,6 +1342,9 @@ fn task_list(
                         schedule_picker_open,
                         scheduling,
                         note_input,
+                        editing_title,
+                        title_input,
+                        title_focus,
                         schedule_input,
                         subtask_context,
                         completed_clear_focus,
@@ -1370,6 +1396,9 @@ fn render_upcoming_section(
     schedule_picker_open: bool,
     scheduling: bool,
     note_input: Entity<ComposerInput>,
+    editing_title: bool,
+    title_input: Entity<ComposerInput>,
+    title_focus: FocusHandle,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     detail_delete_focus: FocusHandle,
@@ -1416,6 +1445,9 @@ fn render_upcoming_section(
                 schedule_picker_open,
                 scheduling,
                 note_input.clone(),
+                editing_title,
+                title_input.clone(),
+                title_focus.clone(),
                 schedule_input.clone(),
                 subtask_context.clone(),
                 // Upcoming's rows aren't in this first keyboard-access
@@ -1447,6 +1479,9 @@ fn completed_section(
     schedule_picker_open: bool,
     scheduling: bool,
     note_input: Entity<ComposerInput>,
+    editing_title: bool,
+    title_input: Entity<ComposerInput>,
+    title_focus: FocusHandle,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     completed_clear_focus: FocusHandle,
@@ -1488,6 +1523,9 @@ fn completed_section(
                             schedule_picker_open,
                             scheduling,
                             note_input.clone(),
+                            editing_title,
+                            title_input.clone(),
+                            title_focus.clone(),
                             schedule_input.clone(),
                             subtask_context.clone(),
                             // Completed-section rows aren't in this first
@@ -1658,6 +1696,9 @@ fn render_task_row(
     schedule_picker_open: bool,
     scheduling: bool,
     note_input: Entity<ComposerInput>,
+    editing_title: bool,
+    title_input: Entity<ComposerInput>,
+    title_focus: FocusHandle,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     // `Some` only from the virtualized flat-list path (Inbox/Today/
@@ -1700,6 +1741,9 @@ fn render_task_row(
             schedule_picker_open,
             scheduling,
             note_input,
+            editing_title,
+            title_input,
+            title_focus,
             schedule_input,
             subtask_context,
             detail_delete_focus,
@@ -1896,6 +1940,9 @@ fn render_detail_card(
     schedule_picker_open: bool,
     scheduling: bool,
     note_input: Entity<ComposerInput>,
+    editing_title: bool,
+    title_input: Entity<ComposerInput>,
+    title_focus: FocusHandle,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     detail_delete_focus: FocusHandle,
@@ -1930,6 +1977,10 @@ fn render_detail_card(
     let title_for_delete_key = task.title.clone();
     let id_for_collapse = task.id.clone();
     let note_for_collapse = task.note.clone();
+    let id_for_edit = task.id.clone();
+    let title_for_edit = task.title.clone();
+    let id_for_edit_key = task.id.clone();
+    let title_for_edit_key = task.title.clone();
     let placement = placement_label(task);
 
     div()
@@ -1946,6 +1997,20 @@ fn render_detail_card(
         .gap(px(10.0))
         .child(
             div()
+                .id(gpui::SharedString::from(format!("task-{}-detail-header", task.id)))
+                .cursor_pointer()
+                // The title's own click now starts editing it rather than
+                // collapsing the card (an editable title needs its own
+                // activation — see the title child's own comment), so the
+                // header row itself keeps the previous "click to collapse"
+                // behavior on whatever background space isn't the
+                // checkbox or the title text — both of those already
+                // `stop_propagation()` their own clicks, so this only
+                // fires on genuine background clicks, the same area that
+                // already read as "the title" before it became editable.
+                .on_click(cx.listener(move |flow, _, _, cx| {
+                    flow.toggle_expanded(id_for_collapse.clone(), note_for_collapse.clone(), cx);
+                }))
                 .flex()
                 .items_center()
                 .gap(px(10.0))
@@ -1981,19 +2046,56 @@ fn render_detail_card(
                             cx.stop_propagation();
                         })),
                 )
-                .child(
+                .child(if editing_title {
+                    // PRD §11's "edit" verb, previously missing entirely
+                    // (found by re-checking the acceptance criteria
+                    // against the shipped app). `title_input` is
+                    // pre-filled and focused by `start_editing_title`
+                    // before this ever renders — see that method's doc.
+                    div()
+                        .id(gpui::SharedString::from(format!("task-{}-detail-title-edit", task.id)))
+                        .flex_1()
+                        .min_w_0()
+                        .child(title_input)
+                        .into_any_element()
+                } else {
                     div()
                         .id(gpui::SharedString::from(format!("task-{}-detail-title", task.id)))
+                        .track_focus(&title_focus)
+                        .tab_index(0)
                         .flex_1()
                         .min_w_0()
                         .cursor_pointer()
                         .text_size(px(15.0))
                         .text_color(theme.text)
-                        .on_click(cx.listener(move |flow, _, _, cx| {
-                            flow.toggle_expanded(id_for_collapse.clone(), note_for_collapse.clone(), cx);
+                        .focus_visible(|style| style.border_1().border_color(theme.accent))
+                        // A dedicated click target for editing, taking
+                        // over from the old "click the title to collapse
+                        // the card" behavior the header row's blank space
+                        // still has — an editable title needs its own
+                        // activation, and "click text to edit it" is the
+                        // more expected reading once it's editable at all.
+                        .on_click(cx.listener(move |flow, _, window, cx| {
+                            flow.start_editing_title(id_for_edit.clone(), title_for_edit.clone(), window, cx);
+                            cx.stop_propagation();
                         }))
-                        .child(task.title.clone()),
-                ),
+                        .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, window, cx| {
+                            if event.keystroke.modifiers.modified() {
+                                return;
+                            }
+                            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                flow.start_editing_title(
+                                    id_for_edit_key.clone(),
+                                    title_for_edit_key.clone(),
+                                    window,
+                                    cx,
+                                );
+                                cx.stop_propagation();
+                            }
+                        }))
+                        .child(task.title.clone())
+                        .into_any_element()
+                }),
         )
         .child(note_input)
         .when(subtask_context.pending_confirm, |card| {

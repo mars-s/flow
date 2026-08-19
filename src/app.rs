@@ -137,6 +137,13 @@ pub struct Flow {
     /// across every task avoids needing a `row_focuses`-style per-task map
     /// for something that's never actually rendered more than once.
     detail_delete_focus: FocusHandle,
+    /// The expanded detail card's static title heading, when not being
+    /// edited — same single-stable-handle reasoning as
+    /// `detail_delete_focus`. Enter/Space starts editing (see
+    /// `editing_title`); `title_input` itself gets its own Tab
+    /// reachability for free once editing starts, from every
+    /// `ComposerInput`'s `.tab_index(0)`.
+    title_focus: FocusHandle,
     /// The expanded detail card's schedule pill — same single-stable-
     /// handle reasoning as `detail_delete_focus`.
     schedule_pill_focus: FocusHandle,
@@ -194,6 +201,23 @@ pub struct Flow {
     /// A single long-lived composer for the detail card's note field, same
     /// reuse-not-recreate reasoning as `capture_input`.
     note_input: Entity<ComposerInput>,
+    /// Whether the detail card's title is currently showing `title_input`
+    /// instead of the static heading — PRD §11's "edit" verb had no path
+    /// at all until this (found by re-checking the acceptance criteria
+    /// against the shipped app, the same way the delete-Undo-toast and
+    /// Capture-failure gaps were found earlier). A toggle, like
+    /// `scheduling`, rather than always-editable like `note_input`: the
+    /// title reads as a heading until deliberately clicked/activated,
+    /// matching the schedule pill's own click-to-edit convention already
+    /// established in this card, instead of inventing a second "always
+    /// looks like a text field" treatment.
+    editing_title: bool,
+    /// Which task `title_input`'s content belongs to — same reasoning as
+    /// `note_task_id`.
+    title_task_id: Option<String>,
+    /// A single long-lived composer for the detail card's title field,
+    /// same reuse-not-recreate reasoning as `capture_input`.
+    title_input: Entity<ComposerInput>,
     /// Whether the expanded card's schedule pill has opened the
     /// Today/Anytime/Someday/"Schedule…" quick-picker.
     schedule_picker_open: bool,
@@ -331,12 +355,20 @@ impl Flow {
             });
             cx.subscribe(&subtask_input, Self::on_subtask_event).detach();
 
+            // Single-line, Enter-submits — same shape as `subtask_input`,
+            // not `note_input`'s multi-line/blur-saves code-editor mode.
+            // No placeholder text: it's only ever shown pre-filled with
+            // the task's current title, never empty.
+            let title_input = cx.new(|cx| ComposerInput::new(window, cx));
+            cx.subscribe(&title_input, Self::on_title_event).detach();
+
             Self {
                 destination: Destination::Inbox,
                 new_task_focus: cx.focus_handle(),
                 completed_clear_focuses: HashMap::new(),
                 undo_toast_focus: cx.focus_handle(),
                 detail_delete_focus: cx.focus_handle(),
+                title_focus: cx.focus_handle(),
                 schedule_pill_focus: cx.focus_handle(),
                 process_pill_focuses: array::from_fn(|_| cx.focus_handle()),
                 process_clear_focus: cx.focus_handle(),
@@ -362,6 +394,9 @@ impl Flow {
                 expanded_task_id: None,
                 note_task_id: None,
                 note_input,
+                editing_title: false,
+                title_task_id: None,
+                title_input,
                 schedule_picker_open: false,
                 scheduling: false,
                 schedule_input,
@@ -619,6 +654,67 @@ impl Flow {
         cx.notify();
     }
 
+    /// The detail card's title heading, once clicked or activated (Enter/
+    /// Space via `title_focus`): swaps in `title_input`, pre-filled and
+    /// focused, for the task already in `expanded_task_id` — same
+    /// swap-in-place idiom as `open_add_subtask`/`focus_schedule_field`.
+    pub(super) fn start_editing_title(
+        &mut self,
+        id: String,
+        title: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.editing_title = true;
+        self.title_task_id = Some(id);
+        self.title_input.update(cx, |input, cx| input.set_content(title, cx));
+        let focus = self.title_input.read(cx).focus();
+        window.focus(&focus, cx);
+        cx.notify();
+    }
+
+    /// PRD §11's "edit" verb — found missing entirely (no way to rename a
+    /// task anywhere in the app) by re-checking the acceptance criteria
+    /// against the shipped app, the same way earlier gaps were found.
+    /// Unlike `on_note_blur`, this fires on Submit, not blur: a title is
+    /// single-line (`title_input` has no `.code_editor(None)`, so Enter
+    /// submits rather than inserting a newline), matching
+    /// `on_subtask_event`'s shape more than the note field's.
+    fn on_title_event(&mut self, _input: Entity<ComposerInput>, event: &ComposerEvent, cx: &mut Context<Self>) {
+        let ComposerEvent::Submit(title) = event else {
+            return;
+        };
+        let Some(id) = self.title_task_id.clone() else {
+            return;
+        };
+        let title = title.trim().to_string();
+        if title.is_empty() {
+            // PRD §6.1: a task needs a nonempty title. Reject rather than
+            // save blank — leaves editing_title on so the user sees their
+            // (empty) field and can fix it, instead of silently reverting
+            // to the old title with no explanation.
+            return;
+        }
+        let Some(db) = self.db.clone() else { return };
+        self.editing_title = false;
+        cx.spawn(async move |flow, cx| {
+            let result = cx.background_executor().spawn(async move { db.set_title(id, title) }).await;
+            if result.is_err() {
+                return;
+            }
+            let _ = flow.update(cx, |flow, cx| {
+                // A rename changes what every row already shows, unlike a
+                // note edit — every view's cache needs to see the new
+                // title, not just the closing detail card, so this
+                // invalidates broadly rather than just the origin view
+                // (same reasoning `delete_task` already uses).
+                flow.invalidate_all_views();
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn on_subtask_event(
         &mut self,
         _input: Entity<ComposerInput>,
@@ -700,10 +796,12 @@ impl Flow {
             self.scheduling = false;
             self.schedule_picker_open = false;
             self.adding_subtask = false;
+            self.editing_title = false;
             self.pending_complete_confirm = None;
             self.set_expanded_task(None, cx);
             self.schedule_input.update(cx, |input, cx| input.clear(cx));
             self.subtask_input.update(cx, |input, cx| input.clear(cx));
+            self.title_input.update(cx, |input, cx| input.clear(cx));
             cx.notify();
             return;
         }

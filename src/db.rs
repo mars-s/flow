@@ -161,6 +161,11 @@ enum Command {
         note: Option<String>,
         reply: mpsc::Sender<Result<()>>,
     },
+    SetTitle {
+        id: String,
+        title: String,
+        reply: mpsc::Sender<Result<()>>,
+    },
     DeleteTask {
         id: String,
         reply: mpsc::Sender<Result<()>>,
@@ -312,6 +317,21 @@ impl Db {
         rx.recv().context("database thread dropped the reply")?
     }
 
+    /// Renames a task. PRD §6.1's "required nonempty title" is enforced by
+    /// the caller (the composer field this backs never submits blank), not
+    /// re-checked here — matches `create_task`'s own division of labor.
+    pub fn set_title(&self, id: impl Into<String>, title: impl Into<String>) -> Result<()> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::SetTitle {
+                id: id.into(),
+                title: title.into(),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
     /// Soft-deletes a task by stamping `deleted_at`. Every `list_view`/
     /// `list_bucket` query already filters `deleted_at IS NULL`, so a
     /// deleted task disappears from every view without a separate query
@@ -452,6 +472,9 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             }
             Command::SetNote { id, note, reply } => {
                 let _ = reply.send(runtime.block_on(set_note(&conn, id, note)));
+            }
+            Command::SetTitle { id, title, reply } => {
+                let _ = reply.send(runtime.block_on(set_title(&conn, id, title)));
             }
             Command::DeleteTask { id, reply } => {
                 let _ = reply.send(runtime.block_on(delete_task(&conn, id)));
@@ -713,6 +736,17 @@ async fn set_note(conn: &turso::Connection, id: String, note: Option<String>) ->
     Ok(())
 }
 
+async fn set_title(conn: &turso::Connection, id: String, title: String) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE tasks SET title = ?1, updated_at = ?2 WHERE id = ?3",
+        (title, now, id),
+    )
+    .await
+    .context("updating title")?;
+    Ok(())
+}
+
 async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
@@ -937,6 +971,16 @@ mod tests {
             .expect("clearing the note should succeed");
         let inbox = db.list_view(View::Inbox).expect("list");
         assert!(inbox[0].note.is_none());
+    }
+
+    #[test]
+    fn set_title_renames_a_task() {
+        let db = open_test_db();
+        let task = db.create_task("Wrte notes").expect("create");
+
+        db.set_title(&task.id, "Write notes").expect("set_title should succeed");
+        let inbox = db.list_view(View::Inbox).expect("list");
+        assert_eq!(inbox[0].title, "Write notes");
     }
 
     #[test]
