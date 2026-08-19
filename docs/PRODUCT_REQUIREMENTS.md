@@ -415,7 +415,15 @@ microservice in v1.
 - Keep a daily durable backup of backend data plus calendar cache. Restore must
   be tested before calling k3s production-ready.
 - Local optimistic writes must be idempotent using a client mutation ID; retries
-  cannot create duplicate tasks.
+  cannot create duplicate tasks. Not yet built, and not a live v1 gap: this
+  guards against a *network* retry landing twice while the client can't tell
+  whether the first attempt actually succeeded — a Milestone 2 (Turso Sync)
+  concern. `Db::create_task`'s current write is a direct, synchronous local
+  SQLite call with no ambiguous-outcome retry path to protect against yet
+  (a failure is a definite failure, so Capture's own manual Retry button
+  can't double-create); building client mutation IDs now would be
+  speculative infrastructure for a race that doesn't exist until there's an
+  actual network boundary. Revisit when Milestone 2 adds one.
 
 ## 11. Acceptance criteria
 
