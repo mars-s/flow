@@ -236,6 +236,18 @@ impl Flow {
                 .spawn(async move { db.set_completed(write_id, completed) })
                 .await
             else {
+                crate::debug_log!("task {id}: write completed={completed} FAILED");
+                if completed {
+                    // Without this, a failed completing-write leaves the
+                    // row permanently stuck showing as collapsed/checked —
+                    // the pruning in render_task_view only clears
+                    // completing_ids once a fresh fetch confirms the write
+                    // landed, which never happens if it didn't.
+                    let _ = flow.update(cx, |flow, cx| {
+                        flow.completing_ids.remove(&id);
+                        cx.notify();
+                    });
+                }
                 return;
             };
             let _ = flow.update(cx, |flow, cx| {
@@ -566,7 +578,10 @@ impl Flow {
                 .background_executor()
                 .spawn(async move { db.delete_task(id.clone()).map(|()| id) })
                 .await;
-            let Ok(id) = result else { return };
+            let Ok(id) = result else {
+                crate::debug_log!("task delete FAILED (origin {origin_view:?})");
+                return;
+            };
             let _ = flow.update(cx, |flow, cx| {
                 flow.invalidate_all_views();
                 flow.show_undo_toast(id, title, origin_view, UndoKind::Delete, cx);
