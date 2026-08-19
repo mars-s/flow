@@ -612,6 +612,14 @@ impl Flow {
         } else {
             (parsed.cleaned_title, parsed.date, parsed.time)
         };
+        // PRD §6.4's own table lists a bare time ("8am") as a supported
+        // form on its own, but §8's schema constraint requires
+        // scheduled_time to carry a scheduled_date — the only sensible
+        // reading of "a time with no date phrase" is today, the day it was
+        // captured. Without this, a time-only parse silently produced
+        // `date: None, time: Some(_)`, which `Db::schedule`'s own new
+        // guard now rejects outright rather than writing invalid data.
+        let date = date.or_else(|| time.is_some().then(|| chrono::Local::now().date_naive()));
 
         let has_schedule = date.is_some() || time.is_some();
         cx.spawn(async move |flow, cx| {
@@ -716,11 +724,15 @@ impl Flow {
         let Some(db) = self.db.clone() else { return };
 
         let parsed = crate::parse::parse(text, chrono::Local::now().date_naive());
-        // Nothing recognized: leave the field open so the user can correct
-        // it, same as Capture leaves an unrecognized phrase in the title
-        // rather than guessing.
-        let Some(date) = parsed.date else { return };
         let time = parsed.time;
+        // Same defaulting as `submit_capture`: a bare time ("8am") is a
+        // supported form on its own (PRD §6.4's table), read as today.
+        // Nothing recognized at all: leave the field open so the user can
+        // correct it, same as Capture leaves an unrecognized phrase in the
+        // title rather than guessing.
+        let Some(date) = parsed.date.or_else(|| time.is_some().then(|| chrono::Local::now().date_naive())) else {
+            return;
+        };
 
         self.scheduling = false;
         self.schedule_picker_open = false;

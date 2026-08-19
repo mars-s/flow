@@ -714,6 +714,19 @@ async fn schedule(
     scheduled_date: Option<String>,
     scheduled_time: Option<String>,
 ) -> Result<()> {
+    // PRD §8: "scheduled_time requires scheduled_date." Real, not
+    // theoretical — parse.rs's TIME_ONLY pattern ("call mom at 3pm", no
+    // date phrase) produces exactly `date: None, time: Some(_)`, and
+    // Capture's own submit path passes that straight through with no
+    // guard before this fix. Rejecting it here (not just at the call
+    // site) covers every path that reaches `schedule`, present or future
+    // — the same "root cause, not symptom" reasoning `create_subtask`'s
+    // own parent-relationship checks already follow.
+    if scheduled_time.is_some() && scheduled_date.is_none() {
+        return Err(anyhow!(
+            "a scheduled time requires a scheduled date (PRD §8)"
+        ));
+    }
     let now = Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE tasks SET bucket = ?1, scheduled_date = ?2, scheduled_time = ?3, \
@@ -924,6 +937,18 @@ mod tests {
         assert_eq!(db.list_view(View::Anytime).expect("list").len(), 1);
         assert_eq!(db.list_view(View::Upcoming).expect("list").len(), 0);
         assert!(db.list_view(View::Anytime).expect("list")[0].scheduled_date.is_none());
+    }
+
+    #[test]
+    fn scheduling_a_time_with_no_date_is_rejected() {
+        // PRD §8: "scheduled_time requires scheduled_date." Real path, not
+        // theoretical: parse.rs's TIME_ONLY pattern ("call mom at 3pm", no
+        // date phrase) used to produce exactly this combination with no
+        // guard anywhere before it reached the database.
+        let db = open_test_db();
+        let task = db.create_task("Call mom").expect("create");
+        let result = db.schedule(&task.id, Bucket::Active, None::<String>, Some("15:00"));
+        assert!(result.is_err(), "a time with no date should be rejected");
     }
 
     #[test]
