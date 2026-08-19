@@ -577,6 +577,27 @@ same lesson this project already learned once before
 (`flow-ui-craft-discipline` memory) — this pass ran it against my own work
 rather than assuming it was clean.
 
+**Active blocker, not just dormant dead code — found in the same sweep,
+worth fixing before the next real release attempt**: `scripts/release.ts`
+(12 references) and `scripts/bundle-linux.sh` (its entire `cargo build`
+line) both still bundle/codesign a `flow-daemon` binary that Milestone 0
+deleted from the Cargo workspace — `bundle-linux.sh` would fail
+immediately with a cargo "package not found" error, and `release.ts`'s
+daemon-locate/codesign/notarize steps would fail partway through a real
+release. This has caused zero visible problems all session because the
+only script actually exercised every night, `scripts/bundle.sh` (macOS
+debug bundling, what `dev.ts` calls), never references the daemon at all
+— confirmed clean via grep. **Not fixed here**: unlike the dead-code
+flags above, this needs surgery on a 691-line release script (codesigning,
+notarization, DMG mounting) I have no way to actually test — no Apple
+signing credentials visible in this environment, and this session's own
+constraint is text-only verification with no way to run a real release.
+Fixing it blind risks a release script that looks corrected but silently
+fails somewhere in the codesign/notarize chain, which is worse than the
+current honest "fails immediately and obviously." Flag it clearly instead
+so whoever next runs a release isn't surprised by a `flow-daemon` cargo
+error with no context for why.
+
 **A third, largest, and most clear-cut dead-code candidate**: `apps/web/`
 (99 files, ~21,500 lines, a browser client) and `packages/flow-client/`
 (99 files, ~1,350 lines, its generated protocol client) both exist only to
