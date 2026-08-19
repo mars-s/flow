@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `5e80435` — check `git status` before
+- Working tree is clean as of commit `91b883a` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -611,6 +611,14 @@ surgery on the daemon-specific bundling logic itself with no way to
 actually test it. Fixing it blind risks a release script that looks
 corrected but silently fails somewhere in the codesign/notarize chain,
 worse than the current honest "fails immediately and obviously."
+
+**Fixed (`91b883a`, same sweep): `CHANGELOG.md`'s `[unreleased]` section
+read "Fork from Flow as Flow"** — nonsensical, almost certainly an
+over-eager Waku→Flow find-replace during the original rebrand catching
+the one sentence where "Waku" was supposed to stay as the origin name.
+User-facing, not just hygiene: this exact section is what
+`scripts/release.ts` extracts for the in-app Sparkle updater's release
+notes. Fixed to "Fork from Waku as Flow."
 
 **Fixed (`5e80435`, found via a repo-wide `git grep -i waku` sweep after
 the `release.yml` fix): two more files with the same class of bug.**
