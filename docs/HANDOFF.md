@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `80485d5` — check `git status` before
+- Working tree is clean as of commit `1d4fa7b` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -386,6 +386,15 @@ button after selecting several rows. `UndoToast.task_id: String` became
 plain-count display); `undo_last_action`'s Delete branch now restores every
 id in a loop; `bulk_delete` only shows the toast for ids that actually
 succeeded.
+
+**Hardened (`1d4fa7b`, found via self-review of the cascade fix below): the
+subtask delete/restore cascade wasn't itself transactional.** Same
+non-atomicity shape as `create_task_scheduled`'s own fix — two sequential
+UPDATEs (parent, then subtask cascade) with nothing wrapping them, so a
+failure between them could still produce the exact orphaning bug the
+cascade exists to prevent, just less likely to trigger. Both now use a
+real `BEGIN`/`COMMIT`/`ROLLBACK`, matching `create_task_scheduled`'s
+pattern.
 
 **Fixed (`57c2b1d`, found via a data-integrity audit): deleting a parent
 task orphaned its subtasks instead of deleting them.** `delete_task` only
