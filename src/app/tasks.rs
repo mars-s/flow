@@ -1233,6 +1233,14 @@ fn task_list(
                             // the first row whenever the bulk bar shows.
                             .when(selected_count < 2, |wrapper| wrapper.pt(px(40.0)))
                             .pb(px(20.0))
+                            // PRD §6.3: "A compact calendar-glance card
+                            // precedes the tasks" in Today specifically —
+                            // fixture-backed per Milestone 1's exit scope
+                            // (§12), see `components::calendar_glance`'s
+                            // own doc for the full reasoning.
+                            .when(view == View::Today, |wrapper| {
+                                wrapper.child(super::components::calendar_glance(theme))
+                            })
                             .child(
                                 list(list_state.clone(), move |ix, _window, cx| {
                                     let task = tasks[ix].clone();
