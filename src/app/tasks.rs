@@ -1488,6 +1488,16 @@ fn render_task_row(
 
     div()
         .id(gpui::SharedString::from(format!("task-{}", task.id)))
+        // `gpui::list()` lays each row out as the root of its own layout
+        // tree (`layout_as_root`) rather than as a flex child of a
+        // stretch-by-default container the way the old plain `.children()`
+        // list did — so unlike every other row-shaped element in this
+        // file, this one has to claim its own width explicitly or it
+        // shrinks to its content's natural width instead of filling the
+        // list's viewport (a real regression this virtualization
+        // introduced, caught from a screenshot: rows collapsed to a narrow
+        // column).
+        .w_full()
         .h(px(40.0))
         .flex()
         .items_center()
@@ -1621,6 +1631,10 @@ fn render_detail_card(
     let placement = placement_label(task);
 
     div()
+        // Same `gpui::list()` per-item-root reasoning as the compact row
+        // above — this is the other of the two shapes `render_task_row`
+        // can return, so it needs the same explicit width.
+        .w_full()
         .my(px(1.0))
         .p(px(12.0))
         .rounded(px(10.0))
