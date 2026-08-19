@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `f550713` — check `git status` before
+- Working tree is clean as of commit `d1c3621` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -154,6 +154,23 @@ picked the simpler inline-card-in-Today reading over the rail. Skips the
 connected/loading/error states the rail's own required-states table
 lists, since there's no real "connected" concept yet to be in any of
 them — Milestone 3's job.
+
+**Added (`d1c3621`): task title editing** — PRD §11's "edit" verb, found
+completely missing by re-checking the acceptance criteria against the
+shipped app (same audit technique that found the delete-Undo-toast and
+Capture-failure gaps earlier). Click the detail card's title (or Tab to
+it, Enter/Space) to edit it inline; Enter saves, an empty submit is
+rejected rather than silently discarded. `Db::set_title` mirrors
+`set_note`'s shape; `Flow::editing_title`/`title_input` mirror
+`subtask_input`'s single-line/Enter-submits shape, not `note_input`'s
+blur-saves one. **Real, disclosed behavior change**: the title's own
+click now starts editing instead of collapsing the card, so a
+collapse-by-click path was added to the header row's own background
+instead — but since the title used to occupy nearly the full row width,
+that remaining background area is now much thinner than the old target.
+Escape and clicking a different row still fully work. Worth a direct
+look once there's a chance to see it rendered — this is the kind of
+narrowing that's easy to get wrong invisibly.
 
 **Fixed (`85cbc31`, user-reported via screenshot): rows collapsed to a
 narrow shrink-wrapped column** instead of filling the pane. Root cause
