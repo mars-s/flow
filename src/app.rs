@@ -67,6 +67,11 @@ pub struct Flow {
     /// Same stale-while-revalidate fallback as `last_tasks`, for
     /// `completed_tasks`.
     last_completed: HashMap<View, Arc<Vec<Task>>>,
+    /// Same stale-while-revalidate fallback as `last_tasks`, keyed by
+    /// parent task id — without it, ticking a subtask flickers its own
+    /// count ("Subtasks (1/3)" → "Subtasks" → back) and its indented list
+    /// briefly disappears on the same invalidate-then-refetch gap.
+    last_subtasks: HashMap<String, Arc<Vec<Task>>>,
     /// Whether the sidebar's Capture row currently shows the text field
     /// instead of the "+ Capture" button. Stays open across submissions so
     /// rapid successive captures don't need to reopen it each time.
@@ -227,6 +232,7 @@ impl Flow {
                 tasks: QueryCache::new(8),
                 last_tasks: HashMap::new(),
                 last_completed: HashMap::new(),
+                last_subtasks: HashMap::new(),
                 capturing: false,
                 capture_input,
                 capture_error: None,

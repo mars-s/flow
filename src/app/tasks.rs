@@ -757,8 +757,18 @@ impl Flow {
         // same reasoning `note_input` already follows.
         let subtask_context = expanded.as_ref().map(|id| {
             let subtasks = match self.read_subtasks(id, cx) {
-                Query::Ready(subtasks) => subtasks,
-                Query::Pending | Query::Missing(_) => Arc::new(Vec::new()),
+                Query::Ready(subtasks) => {
+                    self.last_subtasks.insert(id.clone(), subtasks.clone());
+                    subtasks
+                }
+                // Same stale-while-revalidate reasoning as `read_view`
+                // above: every subtask completion invalidates this cache
+                // entry, so a bare empty fallback here flickered the
+                // "Subtasks (N/M)" count and indented list away on every
+                // toggle. Empty only for a genuinely un-fetched parent.
+                Query::Pending | Query::Missing(_) => {
+                    self.last_subtasks.get(id).cloned().unwrap_or_default()
+                }
             };
             SubtaskContext {
                 subtasks,
