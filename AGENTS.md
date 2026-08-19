@@ -1,10 +1,12 @@
 # Flow development guidance
 
 Flow is a calm, keyboard-first personal task manager (Inbox, Today, Upcoming,
-Anytime, Someday, and a read-only Google Calendar glance), built on a fork of
-Waku's native Rust/GPUI desktop shell, since detached into its own git
-history (see `wayfinder/flow-map.md`). It is not a coding-agent tool; the
-guidance below is about developing the app itself and still applies.
+Anytime, Someday, and a read-only glance at the user's own macOS Calendar via
+EventKit — see `docs/PRODUCT_REQUIREMENTS.md` §6.5's 2026-08-19 revision),
+built on a fork of Waku's native Rust/GPUI desktop shell, since detached into
+its own git history (see `wayfinder/flow-map.md`). It is not a coding-agent
+tool; the guidance below is about developing the app itself and still
+applies.
 
 ## Product, design, and planning docs
 
@@ -19,7 +21,7 @@ the code should be fixed, not treated as ambiguity to guess through:
   system (tokens, spacing, component anatomy, motion). `src/theme.rs` must
   match it token-for-token.
 - [docs/turso.md](docs/turso.md) — Turso/SQLite persistence reference (crate
-  names, API, sync setup), once the local task store is being built.
+  names, API, sync setup) backing `src/db.rs`'s local task store.
 - [CONTEXT.md](CONTEXT.md) — domain glossary.
 - `wayfinder/flow-map.md` and `wayfinder/tickets/*.md` — planning history
   and closed decision tickets.
@@ -65,12 +67,19 @@ colored left border on a list row) before they ship instead of after.
 - Keep per-frame work proportional to what is on screen. Long collections are
   virtualized with `list()`, and a row builder must not rebuild whole-session
   state; hoist that to a cache refreshed once per frame.
-- Streaming CPU is governed by two cadences — stream commits at ≤ ~8.3 Hz and
-  pulse-clock ticks at ≤ ~30 Hz — and by what one frame can see. Read
-  [docs/performance.md](docs/performance.md) before touching the event pump,
-  the pulse clock (`src/ui/motion.rs`), veils, overlay scrollbars, pane
-  caching, or anything else a streaming frame reaches; it also records the
-  counter-based measurement playbook that actually finds regressions.
+- [docs/performance.md](docs/performance.md) documents a *streaming*
+  transcript performance model (commit cadence, the pulse clock, reasoning
+  veils, pane caching under a provider stream) inherited from Waku, the
+  coding-agent product Flow was stripped from — Flow has no streaming, no
+  provider, no transcript, and nothing calls `src/ui/motion.rs`'s pulse-clock
+  functions today (`pulse_lease_slow`/`pulse_phase`/`spin_with_stride` are all
+  dead code). Read it as historical record of *how to measure* (the
+  counter-based playbook in its own "Measuring" section still applies to any
+  performance investigation), not as Flow's current governing model — its
+  specific cadence numbers and streaming-only mechanisms (the event pump,
+  veils) don't exist here. `ui::scrollbar.rs`'s overlay scrollbar is the one
+  piece still live in Flow's own task lists; everything else in that doc is
+  Waku-era.
 
 ## Accessibility
 

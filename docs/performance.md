@@ -1,4 +1,29 @@
-# Streaming render performance
+# Streaming render performance (Waku-era, inherited — not Flow's current model)
+
+**Found stale during a 2026-08-19 doc audit.** This document describes the
+Waku coding-agent product's streaming-transcript performance work — provider
+chunks, a reasoning veil, pane caching under a stream — from before Flow's
+Milestone 0 strip deleted all of it. Flow has no streaming, no provider, no
+transcript view, and no live consumer of `src/ui/motion.rs`'s pulse-clock
+functions (`pulse_lease_slow`/`pulse_phase`/`Pulse::every`/`spin_with_stride`
+are all dead code as of this audit — confirmed via `cargo clippy`). None of
+the specific cadence numbers or streaming-only mechanisms below (the event
+pump, `StreamFrame`, the reasoning veil) apply to anything Flow currently
+does.
+
+**What's still genuinely useful here**: the "Measuring" section's
+counter-based playbook (per-second `AtomicU32`s flushed from render, `sample
+<pid>`, CPU-trace polling) is real, reusable investigation technique for
+*any* GPUI performance question, not specific to streaming. The overlay
+scrollbar's hold/pulse-clock interaction is also structurally the same
+component `ui::scrollbar.rs` still uses in Flow's own task lists, even though
+the pulse clock itself is otherwise unused. Everything else below is kept as
+historical record of a real investigation, not current guidance — see
+`AGENTS.md`'s own Performance section for what actually governs Flow today
+(the render-path I/O rule, `list()` virtualization, one-shot vs. per-frame
+work).
+
+---
 
 How Flow keeps CPU flat while a provider streams, what each piece of the
 pipeline is allowed to cost, and how to measure before changing any of it.
