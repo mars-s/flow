@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `c9e6d74` — check `git status` before
+- Working tree is clean as of commit `5967647` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -277,6 +277,15 @@ cell then "+N more"); Year is twelve small month grids with an event dot
 per day and click-to-drill-down into Month mode. `Flow::navigate_calendar`
 now takes a `-1/0/1` step and decides the actual jump size (day/week/
 month/year) per mode internally, rather than each caller computing it.
+
+**Fixed (`5967647`, found via self-review, not a user report): the Calendar
+tab's fetch could apply a superseded result.** `refresh_calendar_tab` had
+no generation guard — rapid navigation/mode-switching could let a slower
+earlier fetch (e.g. a full-year query) land after a faster later one and
+silently overwrite `calendar_range_events` with stale data. New
+`calendar_fetch_generation`, same fix shape as `query.rs`'s own generation
+counter for `tasks`/`subtasks`, just not routed through `QueryCache` since
+a calendar fetch's key (mode + cursor) isn't `View`-shaped.
 
 **Not done yet**: whether calendar visibility toggles should persist
 across launches (currently don't — no settings-persistence infrastructure
