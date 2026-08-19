@@ -6,9 +6,9 @@ keeps your tasks on your machine.
 
 Flow gives every open task one clear home — Inbox, Today, Upcoming, Anytime,
 or Someday — and turns natural time language ("take out laundry 8 am
-tomorrow") into an explicit, editable schedule. A read-only Google Calendar
-glance sits alongside your tasks for context; Flow never creates or edits
-calendar events.
+tomorrow") into an explicit, editable schedule. A read-only glance at your
+Mac's own Calendar app sits alongside your tasks for context; Flow never
+creates or edits calendar events.
 
 ## Highlights
 

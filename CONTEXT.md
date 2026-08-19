@@ -36,8 +36,14 @@ active work with no Schedule.
 
 ### Calendar connection
 
-The read-only authorization that allows Flow to cache a User's calendar
-events from an external provider.
+**Revised 2026-08-19** (was originally a Google OAuth grant cached
+server-side — see `docs/PRODUCT_REQUIREMENTS.md` §6.5's own revision note
+and `wayfinder/tickets/choose-calendar-source.md` for the full decision):
+the read-only macOS EventKit permission that lets Flow read a User's local
+Calendar app. A system permission grant, not a per-provider authorization —
+whatever calendar accounts (iCloud, Google, Exchange, ...) are already
+configured in Apple Calendar become visible through it at once. Nothing is
+cached locally; every read queries EventKit live.
 
 ### Calendar event
 
