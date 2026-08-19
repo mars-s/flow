@@ -485,7 +485,7 @@ fn render_calendar_day_column(day: chrono::NaiveDate, events: Vec<&CalendarEvent
                         div()
                             .text_size(px(11.0))
                             .text_color(theme.text_ghost)
-                            .child(""),
+                            .child("No events"),
                     )
                 })
                 .children(events.into_iter().map(|event| render_calendar_event_card(event, theme))),
