@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `1b72d08` — check `git status` before
+- Working tree is clean as of commit `4bab460` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -536,6 +536,14 @@ re-introduce with the next unrelated change nearby.
 - PRD §6.3's "empty days with events still show" in Upcoming isn't
   implemented — there's no calendar-events data yet to populate an empty
   day with (Google Calendar glance is a later milestone).
+
+**Hardened (`4bab460`, found via web research into my own earlier work):
+the System Settings deep link silently discarded its own failure signal.**
+`x-apple.systempreferences:...?Privacy_Calendars` is private, undocumented
+API — confirmed via Apple DTS forum guidance, and System Settings' own
+deep-link format has already changed once (Ventura). `open_calendar_
+privacy_pane` now falls back to launching System Settings.app generally
+(a fully supported API) if the deep link fails, and logs which path ran.
 
 **Fixed (`1b72d08`, same craft-floor self-review, continued further): a
 day column's empty state rendered no text at all** — `render_calendar_body`'s
