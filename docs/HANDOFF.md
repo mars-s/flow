@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `a95a305` — check `git status` before
+- Working tree is clean as of commit `d8d1206` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -118,7 +118,13 @@ button on the expanded Completed section, a hidden dev inspector
 `DivInspectorState`, no menu item, same convention as Zed's), and
 Capture's failed-save handling (`d33f22e`, PRD §6.1: restores the typed
 title and shows an inline error + Retry instead of silently discarding it
-on a write failure), and an animated Tasks/Calendar mode pill.
+on a write failure), a Tasks/Calendar mode pill with a real sliding thumb
+(`00377d3` — the first attempt was a per-segment opacity fade that read as
+no animation at all per user feedback), and a debug event log + "Flow
+state" inspector panel (`d8d1206` — `src/debug_log.rs`,
+`crate::debug_log!(...)`, `Flow::debug_snapshot()`; see the
+`.claude/skills/flow-debug` skill, gitignored like the other project-local
+skills, for how to use both).
 
 **Fixed (`9810093`, user-reported): the completion checkbox's flicker.**
 Two real, separate causes, both now fixed — see that commit's message for
