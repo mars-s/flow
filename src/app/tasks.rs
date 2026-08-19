@@ -891,11 +891,31 @@ impl Flow {
                     self.last_subtasks.get(id).cloned().unwrap_or_default()
                 }
             };
+            // A dedicated map, not `row_focuses` — that one's pruned
+            // against the flat top-level task list on every refetch
+            // (`prune_row_focuses`), which never contains subtask ids
+            // (they're filtered out of every top-level view query), so
+            // reusing it would have every subtask handle deleted the
+            // very next prune after being created. Fetched here (not in
+            // `render_subtask_row`, which has no `&mut Flow` access) for
+            // the same reason `subtasks` itself is: only reachable from
+            // `render_task_view`'s own `&mut self` scope.
+            self.subtask_focuses.retain(|id, _| subtasks.iter().any(|subtask| &subtask.id == id));
+            let subtask_focuses = subtasks
+                .iter()
+                .map(|subtask| {
+                    self.subtask_focuses
+                        .entry(subtask.id.clone())
+                        .or_insert_with(|| cx.focus_handle())
+                        .clone()
+                })
+                .collect();
             SubtaskContext {
                 adding: self.adding_subtask,
                 input: self.subtask_input.clone(),
                 pending_confirm: self.pending_complete_confirm.as_deref() == Some(id.as_str()),
                 subtask_count: subtasks.len(),
+                subtask_focuses,
                 subtasks,
             }
         });
@@ -1015,6 +1035,7 @@ impl Flow {
         let process_clear_focus = self.process_clear_focus.clone();
         let confirm_cancel_focus = self.confirm_cancel_focus.clone();
         let confirm_yes_focus = self.confirm_yes_focus.clone();
+        let add_subtask_focus = self.add_subtask_focus.clone();
         match tasks {
             Some(tasks) => task_list(
                 view,
@@ -1038,6 +1059,7 @@ impl Flow {
                 process_clear_focus,
                 confirm_cancel_focus,
                 confirm_yes_focus,
+                add_subtask_focus,
                 theme,
                 cx,
             )
@@ -1061,6 +1083,9 @@ struct SubtaskContext {
     /// it into the expanded row's remeasure signature without cloning the
     /// whole `Arc<Vec<Task>>` just to read a length.
     subtask_count: usize,
+    /// One focus handle per entry in `subtasks`, same order — see
+    /// `Flow::subtask_focuses`'s field doc.
+    subtask_focuses: Vec<FocusHandle>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1086,6 +1111,7 @@ fn task_list(
     process_clear_focus: FocusHandle,
     confirm_cancel_focus: FocusHandle,
     confirm_yes_focus: FocusHandle,
+    add_subtask_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1154,6 +1180,7 @@ fn task_list(
                                 process_clear_focus.clone(),
                                 confirm_cancel_focus.clone(),
                                 confirm_yes_focus.clone(),
+                                add_subtask_focus.clone(),
                                 theme,
                                 cx,
                             )
@@ -1178,6 +1205,7 @@ fn task_list(
                 let list_process_clear_focus = process_clear_focus.clone();
                 let list_confirm_cancel_focus = confirm_cancel_focus.clone();
                 let list_confirm_yes_focus = confirm_yes_focus.clone();
+                let list_add_subtask_focus = add_subtask_focus.clone();
                 div()
                     .id("task-list-open")
                     .relative()
@@ -1250,6 +1278,7 @@ fn task_list(
                                             list_process_clear_focus.clone(),
                                             list_confirm_cancel_focus.clone(),
                                             list_confirm_yes_focus.clone(),
+                                            list_add_subtask_focus.clone(),
                                             theme,
                                             cx,
                                         )
@@ -1294,6 +1323,7 @@ fn task_list(
                         process_clear_focus,
                         confirm_cancel_focus,
                         confirm_yes_focus,
+                        add_subtask_focus,
                         theme,
                         cx,
                     )),
@@ -1343,6 +1373,7 @@ fn render_upcoming_section(
     process_clear_focus: FocusHandle,
     confirm_cancel_focus: FocusHandle,
     confirm_yes_focus: FocusHandle,
+    add_subtask_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1391,6 +1422,7 @@ fn render_upcoming_section(
                 process_clear_focus.clone(),
                 confirm_cancel_focus.clone(),
                 confirm_yes_focus.clone(),
+                add_subtask_focus.clone(),
                 theme,
                 cx,
             )
@@ -1419,6 +1451,7 @@ fn completed_section(
     process_clear_focus: FocusHandle,
     confirm_cancel_focus: FocusHandle,
     confirm_yes_focus: FocusHandle,
+    add_subtask_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1462,6 +1495,7 @@ fn completed_section(
                             process_clear_focus.clone(),
                             confirm_cancel_focus.clone(),
                             confirm_yes_focus.clone(),
+                            add_subtask_focus.clone(),
                             theme,
                             cx,
                         )
@@ -1641,6 +1675,7 @@ fn render_task_row(
     process_clear_focus: FocusHandle,
     confirm_cancel_focus: FocusHandle,
     confirm_yes_focus: FocusHandle,
+    add_subtask_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1668,6 +1703,7 @@ fn render_task_row(
             process_clear_focus,
             confirm_cancel_focus,
             confirm_yes_focus,
+            add_subtask_focus,
             theme,
             cx,
         );
@@ -1863,6 +1899,7 @@ fn render_detail_card(
     process_clear_focus: FocusHandle,
     confirm_cancel_focus: FocusHandle,
     confirm_yes_focus: FocusHandle,
+    add_subtask_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -2064,7 +2101,13 @@ fn render_detail_card(
             )
         })
         .when(task.parent_id.is_none(), |card| {
-            card.child(render_subtasks_section(task.id.clone(), &subtask_context, theme, cx))
+            card.child(render_subtasks_section(
+                task.id.clone(),
+                &subtask_context,
+                add_subtask_focus,
+                theme,
+                cx,
+            ))
         })
         .child(
             div()
@@ -2143,6 +2186,7 @@ fn render_detail_card(
 fn render_subtasks_section(
     parent_id: String,
     context: &SubtaskContext,
+    add_subtask_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -2172,9 +2216,11 @@ fn render_subtasks_section(
                     .pl(px(10.0))
                     .border_l_1()
                     .border_color(theme.border)
-                    .children(context.subtasks.iter().cloned().map(|subtask| {
-                        render_subtask_row(subtask, parent_id.clone(), theme, cx)
-                    })),
+                    .children(
+                        context.subtasks.iter().cloned().zip(context.subtask_focuses.iter().cloned()).map(
+                            |(subtask, focus)| render_subtask_row(subtask, parent_id.clone(), focus, theme, cx),
+                        ),
+                    ),
             )
         })
         .child(if context.adding {
@@ -2182,6 +2228,8 @@ fn render_subtasks_section(
         } else {
             div()
                 .id(SharedString::from(format!("add-subtask-{parent_id}")))
+                .track_focus(&add_subtask_focus)
+                .tab_index(0)
                 .pl(px(10.0))
                 .h(px(22.0))
                 .flex()
@@ -2191,9 +2239,19 @@ fn render_subtasks_section(
                 .text_size(px(11.5))
                 .text_color(theme.text_tertiary)
                 .hover(|el| el.text_color(theme.text_secondary))
+                .focus_visible(|style| style.border_1().border_color(theme.accent))
                 .on_click(cx.listener(move |flow, _, window, cx| {
                     flow.open_add_subtask(window, cx);
                     cx.stop_propagation();
+                }))
+                .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, window, cx| {
+                    if event.keystroke.modifiers.modified() {
+                        return;
+                    }
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                        flow.open_add_subtask(window, cx);
+                        cx.stop_propagation();
+                    }
                 }))
                 .child(crate::ui::icon("icons/plus.svg", 11.0, theme.text_tertiary))
                 .child("Add subtask")
@@ -2206,15 +2264,39 @@ fn render_subtasks_section(
 /// metadata (subtasks don't show one — PRD §6.2: "a child inherits no
 /// schedule automatically" — and no click-to-expand, since a subtask has
 /// no detail card of its own under the one-level ceiling).
-fn render_subtask_row(subtask: Task, parent_id: String, theme: Theme, cx: &mut Context<Flow>) -> AnyElement {
+fn render_subtask_row(
+    subtask: Task,
+    parent_id: String,
+    focus: FocusHandle,
+    theme: Theme,
+    cx: &mut Context<Flow>,
+) -> AnyElement {
     let checked = subtask.completed_at.is_some();
     let id = subtask.id.clone();
+    let id_for_key = subtask.id.clone();
+    let parent_id_for_key = parent_id.clone();
 
     div()
         .h(px(24.0))
         .flex()
         .items_center()
         .gap(px(8.0))
+        // Same Space-toggles-completion convention as the top-level task
+        // row (`render_task_row`) — no Enter action here since a subtask
+        // has no detail card of its own to open under the one-level
+        // ceiling, so the row's only keyboard verb is completion.
+        .track_focus(&focus)
+        .tab_index(0)
+        .focus_visible(|style| style.border_1().border_color(theme.accent))
+        .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+            if event.keystroke.modifiers.modified() {
+                return;
+            }
+            if event.keystroke.key == "space" {
+                flow.toggle_subtask_completed(id_for_key.clone(), parent_id_for_key.clone(), !checked, cx);
+                cx.stop_propagation();
+            }
+        }))
         .child(
             div()
                 .id(SharedString::from(format!("subtask-{}-complete", subtask.id)))

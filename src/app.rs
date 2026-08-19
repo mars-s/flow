@@ -105,6 +105,20 @@ pub struct Flow {
     /// session. First entry in the `CLAUDE.md`/PRD keyboard-accessibility
     /// gap this project's own audit found — see `docs/HANDOFF.md`.
     row_focuses: HashMap<String, FocusHandle>,
+    /// Per-subtask keyboard focus handles, keyed by subtask id — a
+    /// separate map from `row_focuses` even though both hold task-id-
+    /// keyed `FocusHandle`s, since `row_focuses`' pruning runs against
+    /// the flat top-level task list, which never contains a subtask id
+    /// (every view query filters `parent_id IS NULL`); reusing that map
+    /// would delete every subtask handle on the next unrelated refetch.
+    /// Pruned instead in `render_task_view` against whichever task's
+    /// subtasks are actually loaded, alongside `SubtaskContext`'s own
+    /// construction.
+    subtask_focuses: HashMap<String, FocusHandle>,
+    /// The expanded card's "+ Add subtask" row — same single-stable-
+    /// handle reasoning as `detail_delete_focus` (only one card, so only
+    /// one add-subtask row, at a time).
+    add_subtask_focus: FocusHandle,
     /// One keyboard focus handle per view for the collapsed "Completed"
     /// section's "Clear" button — bounded to the five task views (no
     /// pruning needed, unlike `row_focuses`), created lazily the same way.
@@ -337,6 +351,8 @@ impl Flow {
                 task_list_states: HashMap::new(),
                 task_list_scrollbars: HashMap::new(),
                 row_focuses: HashMap::new(),
+                subtask_focuses: HashMap::new(),
+                add_subtask_focus: cx.focus_handle(),
                 last_expanded_signature: None,
                 last_completed: HashMap::new(),
                 last_subtasks: HashMap::new(),
