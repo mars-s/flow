@@ -122,23 +122,27 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   37. `2aec602` — removed two pre-existing unused imports
       (`render.rs`/`ui/mod.rs`), caught during the same audit. No behavior
       change.
-- Working tree is clean as of commit `2aec602` unless the "Milestone 1
+  38. `7187452` — hidden dev inspector overlay, Cmd-Option-I, debug builds
+      only: wires GPUI's own `Inspector`/`DivInspectorState` (already in
+      the pinned fork, same primitive Zed's `inspector_ui` builds on) up
+      to a panel showing the picked element's source location, bounds,
+      content size, and a full `Debug` dump of its style. No menu item —
+      same convention as Zed's own inspector. Requested by the user as a
+      standing debugging aid, not part of Milestone 1's task-feature scope.
+- Working tree is clean as of commit `7187452` unless the "Milestone 1
   progress" section below says otherwise — check there for what's currently
   in flight before assuming everything is committed.
-- **A `/loop` (self-paced, 5-minute interval, cron job `57c760d9`) is
-  running as of 2026-08-19**, started when the user was heading to sleep
-  and asked to keep working through the Milestone 1 backlog
-  autonomously. It auto-expires after 7 days. This session's terminal has
-  no screen-recording permission (see the blank-main-pane incident
-  above) — every increment during the loop is verified by
-  `cargo check`/`cargo test` and the watcher's successful rebuild, not by
-  an actual look at the running app; say so plainly rather than claiming
-  visual verification that didn't happen.
-- The `/loop` (self-paced autonomous mode) that was running earlier in this
-  session was stopped once the user started actively steering with live
-  feedback (reference screenshots, specific complaints) — direct
-  conversation, not autonomous looping, is the current mode. A `/loop` can
-  be restarted later if the user wants to hand off to autonomous work again.
+- The overnight `/loop` (fixed 5-minute interval, cron job `57c760d9`) that
+  ran 2026-08-19 has finished and been stopped (`CronDelete`) — its backlog
+  (Upcoming grouping, subtasks, the notes bug, four user-reported fixes,
+  the delete-Undo toast, PRD doc-drift) is fully done, see the numbered
+  commit list above. Every increment during that loop was verified by
+  `cargo check`/`cargo test` and the watcher's successful rebuild only —
+  this session's terminal has no screen-recording permission (see the
+  blank-main-pane incident above), so none of it had an actual look at the
+  running app. Say so plainly if asked, rather than claiming visual
+  verification that didn't happen. Direct conversation resumed once the
+  user was back; a `/loop` can be restarted later if useful.
 
 ## What's built (Milestone 0 — done)
 
