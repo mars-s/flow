@@ -853,57 +853,93 @@ async fn set_title(conn: &turso::Connection, id: String, title: String) -> Resul
 
 async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
     let now = Utc::now().to_rfc3339();
-    conn.execute(
-        "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
-        (now.clone(), now.clone(), id.clone()),
-    )
-    .await
-    .context("deleting task")?;
-    // Cascades to subtasks — without this, a parent with open subtasks
-    // just vanished from every view (list_view always filters `parent_id
-    // IS NULL`, so a subtask never appears independently) while its
-    // subtask rows stayed `deleted_at IS NULL` in the database forever:
-    // not shown anywhere, not actually deleted, unreachable by any UI
-    // path (the only way to see a subtask is through its parent's own
-    // detail card, which can never open again once the parent's gone).
-    // Found via a data-integrity audit, not a user report.
-    conn.execute(
-        "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 \
-         WHERE parent_id = ?3 AND deleted_at IS NULL",
-        (now.clone(), now, id),
-    )
-    .await
-    .context("deleting subtasks")?;
-    Ok(())
+    // Both statements are one transaction — same reasoning as
+    // create_task_scheduled's own atomicity fix a few commits ago: without
+    // it, the parent's own UPDATE landing while the subtask-cascade UPDATE
+    // fails would recreate exactly the orphaning bug this cascade exists to
+    // fix, just narrowed to a rarer failure window (two same-connection
+    // UPDATEs back to back, not a whole created-task validation). Found
+    // via a self-review of that exact fix, not a new report.
+    conn.execute("BEGIN", ()).await.context("beginning delete transaction")?;
+    let result = async {
+        conn.execute(
+            "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
+            (now.clone(), now.clone(), id.clone()),
+        )
+        .await
+        .context("deleting task")?;
+        // Cascades to subtasks — without this, a parent with open subtasks
+        // just vanished from every view (list_view always filters
+        // `parent_id IS NULL`, so a subtask never appears independently)
+        // while its subtask rows stayed `deleted_at IS NULL` in the
+        // database forever: not shown anywhere, not actually deleted,
+        // unreachable by any UI path (the only way to see a subtask is
+        // through its parent's own detail card, which can never open
+        // again once the parent's gone). Found via a data-integrity
+        // audit, not a user report.
+        conn.execute(
+            "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 \
+             WHERE parent_id = ?3 AND deleted_at IS NULL",
+            (now.clone(), now, id),
+        )
+        .await
+        .context("deleting subtasks")
+    }
+    .await;
+    match result {
+        Ok(_) => {
+            conn.execute("COMMIT", ()).await.context("committing delete transaction")?;
+            Ok(())
+        }
+        Err(error) => {
+            let _ = conn.execute("ROLLBACK", ()).await;
+            Err(error)
+        }
+    }
 }
 
 async fn restore_task(conn: &turso::Connection, id: String) -> Result<()> {
     let now = Utc::now().to_rfc3339();
-    conn.execute(
-        "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE id = ?2",
-        (now.clone(), id.clone()),
-    )
-    .await
-    .context("restoring task")?;
-    // Symmetric with delete_task's own cascade: Undo on a parent that had
-    // subtasks must bring the whole family back, not just the parent —
-    // otherwise the subtasks a moment ago would come back as gone-but-not-
-    // deleted zombies the instant Undo's own 10-second window expired,
-    // an inconsistent state relative to what the user just clicked Undo
-    // to reverse. Unconditional (no deleted_at-timestamp match against the
-    // parent's own delete) is safe only because there is currently no UI
-    // path to delete a single subtask independently of its parent — every
-    // non-NULL subtask deleted_at was set by this exact cascade. If an
-    // independent subtask-delete is ever added, this needs to stop being
-    // unconditional or it will incorrectly resurrect an unrelated
-    // deletion.
-    conn.execute(
-        "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE parent_id = ?2",
-        (now, id),
-    )
-    .await
-    .context("restoring subtasks")?;
-    Ok(())
+    // Same transaction-wrapping reasoning as delete_task's own cascade.
+    conn.execute("BEGIN", ()).await.context("beginning restore transaction")?;
+    let result = async {
+        conn.execute(
+            "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE id = ?2",
+            (now.clone(), id.clone()),
+        )
+        .await
+        .context("restoring task")?;
+        // Symmetric with delete_task's own cascade: Undo on a parent that
+        // had subtasks must bring the whole family back, not just the
+        // parent — otherwise the subtasks a moment ago would come back as
+        // gone-but-not-deleted zombies the instant Undo's own 10-second
+        // window expired, an inconsistent state relative to what the user
+        // just clicked Undo to reverse. Unconditional (no deleted_at-
+        // timestamp match against the parent's own delete) is safe only
+        // because there is currently no UI path to delete a single
+        // subtask independently of its parent — every non-NULL subtask
+        // deleted_at was set by this exact cascade. If an independent
+        // subtask-delete is ever added, this needs to stop being
+        // unconditional or it will incorrectly resurrect an unrelated
+        // deletion.
+        conn.execute(
+            "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE parent_id = ?2",
+            (now, id),
+        )
+        .await
+        .context("restoring subtasks")
+    }
+    .await;
+    match result {
+        Ok(_) => {
+            conn.execute("COMMIT", ()).await.context("committing restore transaction")?;
+            Ok(())
+        }
+        Err(error) => {
+            let _ = conn.execute("ROLLBACK", ()).await;
+            Err(error)
+        }
+    }
 }
 
 async fn create_subtask(conn: &turso::Connection, parent_id: String, title: String) -> Result<Task> {
