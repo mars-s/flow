@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `8d251d4` — check `git status` before
+- Working tree is clean as of commit `59c5398` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -273,12 +273,17 @@ re-introduce with the next unrelated change nearby.
       Upcoming, Completed section) since unlike `row_focuses` this one
       isn't scoped to just the virtualized path — whichever task happens
       to be expanded needs it, regardless of which view its row lives in.
-      **Not done, deliberately scoped out of these four passes** rather
-      than attempted blind: the title, schedule pill, subtask checkboxes,
-      the add-subtask row, the complete-with-subtasks confirm — every
-      *individual control* still left on a task row/card, per the PRD's
-      per-verb requirement (schedule, subtasks, etc. each still need
-      their own keyboard path). Also not done: Completed-
+      `59c5398` did the schedule pill the same way — opening the picker
+      is now keyboard-reachable; the picker's own contents once open (the
+      NLP field, the Today/Anytime/Someday/Clear quick-picks) are still
+      mouse-only, an honest boundary rather than a claimed full path.
+      **Not done, deliberately scoped out of these five passes** rather
+      than attempted blind: the title, the schedule picker's own
+      contents, subtask checkboxes, the add-subtask row, the
+      complete-with-subtasks confirm — every *individual control* still
+      left on a task row/card, per the PRD's per-verb requirement
+      (subtasks etc. still need their own keyboard path). Also not
+      done: Completed-
       section rows, Upcoming's rows (both still pass `None` for `focus` —
       see `render_task_row`'s param doc), and arrow-key navigation between
       rows (tab order is currently the only way to move focus between
