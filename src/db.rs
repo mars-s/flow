@@ -136,6 +136,12 @@ enum Command {
         title: String,
         reply: mpsc::Sender<Result<Task>>,
     },
+    CreateTaskScheduled {
+        title: String,
+        scheduled_date: Option<String>,
+        scheduled_time: Option<String>,
+        reply: mpsc::Sender<Result<Task>>,
+    },
     ListView {
         view: View,
         reply: mpsc::Sender<Result<Vec<Task>>>,
@@ -239,6 +245,28 @@ impl Db {
         self.commands
             .send(Command::CreateTask {
                 title: title.into(),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    /// Create a task and schedule it in one atomic step — Capture's own
+    /// write path when a phrase parses a date/time. See
+    /// `create_task_scheduled`'s own doc for why this needs to be atomic
+    /// rather than two separate `create_task`/`schedule` calls.
+    pub fn create_task_scheduled(
+        &self,
+        title: impl Into<String>,
+        scheduled_date: Option<impl Into<String>>,
+        scheduled_time: Option<impl Into<String>>,
+    ) -> Result<Task> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::CreateTaskScheduled {
+                title: title.into(),
+                scheduled_date: scheduled_date.map(Into::into),
+                scheduled_time: scheduled_time.map(Into::into),
                 reply,
             })
             .context("database thread is gone")?;
@@ -442,6 +470,14 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             Command::CreateTask { title, reply } => {
                 let _ = reply.send(runtime.block_on(create_task(&conn, title)));
             }
+            Command::CreateTaskScheduled { title, scheduled_date, scheduled_time, reply } => {
+                let _ = reply.send(runtime.block_on(create_task_scheduled(
+                    &conn,
+                    title,
+                    scheduled_date,
+                    scheduled_time,
+                )));
+            }
             Command::ListView { view, reply } => {
                 let _ = reply.send(runtime.block_on(list_view(&conn, view)));
             }
@@ -573,6 +609,61 @@ async fn create_task(conn: &turso::Connection, title: String) -> Result<Task> {
         created_at: now.clone(),
         updated_at: now,
     })
+}
+
+/// Create-then-schedule as one transaction — Capture's own write path.
+/// Without this, a title that parses a schedule (`create_task` succeeds,
+/// the follow-up `schedule` call fails for any reason) left a real,
+/// already-committed task sitting unscheduled in Inbox while the caller
+/// still reported the whole capture as failed. The UI's own failure path
+/// restores the typed title and offers Retry — which would then create a
+/// second, genuinely duplicate task on top of the first one nobody knew
+/// existed. `BEGIN`/`COMMIT`/`ROLLBACK` make the two writes atomic: a
+/// `schedule` failure now rolls the `create_task` back too, so a reported
+/// failure means nothing was saved, matching what the UI already tells
+/// the user. Found via a PRD §10 idempotency audit, not a user report —
+/// this is the actual live duplicate-creation path that audit was
+/// initially (wrongly) dismissed as not existing yet; see
+/// `docs/HANDOFF.md` for the full story.
+async fn create_task_scheduled(
+    conn: &turso::Connection,
+    title: String,
+    scheduled_date: Option<String>,
+    scheduled_time: Option<String>,
+) -> Result<Task> {
+    let has_schedule = scheduled_date.is_some() || scheduled_time.is_some();
+    if !has_schedule {
+        // Nothing to make atomic with — skip the transaction wrapper
+        // entirely for the common unscheduled-capture case.
+        return create_task(conn, title).await;
+    }
+    conn.execute("BEGIN", ()).await.context("beginning capture transaction")?;
+    let result = async {
+        let task = create_task(conn, title).await?;
+        schedule(
+            conn,
+            task.id.clone(),
+            Bucket::Active,
+            scheduled_date.clone(),
+            scheduled_time.clone(),
+        )
+        .await?;
+        Ok(Task { bucket: Bucket::Active, scheduled_date, scheduled_time, ..task })
+    }
+    .await;
+    match result {
+        Ok(task) => {
+            conn.execute("COMMIT", ()).await.context("committing capture transaction")?;
+            Ok(task)
+        }
+        Err(error) => {
+            // Best-effort: if the rollback itself fails there is nothing
+            // more this function can do about it, and reporting the
+            // original error is more useful than a rollback-failure one.
+            let _ = conn.execute("ROLLBACK", ()).await;
+            Err(error)
+        }
+    }
 }
 
 /// Open, undeleted, uncompleted tasks in one bucket, ordered by position.
@@ -982,6 +1073,45 @@ mod tests {
         let task = db.create_task("Call mom").expect("create");
         let result = db.schedule(&task.id, Bucket::Active, None::<String>, Some("15:00"));
         assert!(result.is_err(), "a time with no date should be rejected");
+    }
+
+    #[test]
+    fn create_task_scheduled_is_atomic() {
+        // Found via a PRD §10 idempotency audit: submit_capture used to do
+        // create_task then schedule as two separate calls. If schedule
+        // failed after create_task already landed, the caller reported the
+        // whole capture as failed (and restored the typed title for
+        // Retry) while a real, already-committed task sat unscheduled in
+        // Inbox — invisible to the user, and duplicated on the next Retry.
+        // create_task_scheduled wraps both in a transaction so a schedule
+        // failure rolls the create back too: a reported failure now
+        // really means nothing was saved.
+        let db = open_test_db();
+        let before = db.list_view(View::Inbox).expect("list").len();
+
+        // A time with no date is a guaranteed schedule() failure (see the
+        // test above) — the exact combination that used to leak a task.
+        let result = db.create_task_scheduled("Call mom", None::<String>, Some("15:00"));
+        assert!(result.is_err(), "the whole operation should fail");
+
+        let after = db.list_view(View::Inbox).expect("list").len();
+        assert_eq!(before, after, "a failed schedule should not leave an orphaned task behind");
+    }
+
+    #[test]
+    fn create_task_scheduled_activates_the_task_when_it_succeeds() {
+        let db = open_test_db();
+        let today = chrono::Local::now().date_naive().to_string();
+        let task = db
+            .create_task_scheduled("Take out laundry", Some(today.clone()), Some("08:00"))
+            .expect("create_task_scheduled should succeed");
+        assert_eq!(task.bucket, Bucket::Active);
+        assert_eq!(task.scheduled_date.as_deref(), Some(today.as_str()));
+        assert_eq!(task.scheduled_time.as_deref(), Some("08:00"));
+
+        let today_view = db.list_view(View::Today).expect("list");
+        assert_eq!(today_view.len(), 1);
+        assert_eq!(today_view[0].id, task.id);
     }
 
     #[test]

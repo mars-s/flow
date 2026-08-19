@@ -632,26 +632,26 @@ impl Flow {
         // guard now rejects outright rather than writing invalid data.
         let date = date.or_else(|| time.is_some().then(|| chrono::Local::now().date_naive()));
 
-        let has_schedule = date.is_some() || time.is_some();
         cx.spawn(async move |flow, cx| {
             let created = cx
                 .background_executor()
                 .spawn(async move {
-                    let task = db.create_task(title)?;
                     // A parsed date activates the task immediately — it
                     // moves straight to Today/Upcoming instead of sitting
                     // in Inbox with a schedule attached. Explicit product
                     // decision overriding this project's earlier PRD §14
                     // reading ("a parsed date does not activate the task").
-                    if has_schedule {
-                        db.schedule(
-                            &task.id,
-                            Bucket::Active,
-                            date.map(|d| d.to_string()),
-                            time.map(|t| t.format("%H:%M").to_string()),
-                        )?;
-                    }
-                    anyhow::Ok(())
+                    // create_task_scheduled does the create+schedule as one
+                    // atomic step — see its own doc for why that matters:
+                    // a create that lands but a schedule that fails used to
+                    // report the whole capture as failed while a real task
+                    // sat unscheduled in Inbox, and Retry then duplicated
+                    // it.
+                    db.create_task_scheduled(
+                        title,
+                        date.map(|d| d.to_string()),
+                        time.map(|t| t.format("%H:%M").to_string()),
+                    )
                 })
                 .await;
             if let Err(error) = &created {
