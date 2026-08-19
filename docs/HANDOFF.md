@@ -577,6 +577,22 @@ same lesson this project already learned once before
 (`flow-ui-craft-discipline` memory) — this pass ran it against my own work
 rather than assuming it was clean.
 
+**A third, largest, and most clear-cut dead-code candidate**: `apps/web/`
+(99 files, ~21,500 lines, a browser client) and `packages/flow-client/`
+(99 files, ~1,350 lines, its generated protocol client) both exist only to
+talk to a `flow-daemon` binary that Milestone 0's own
+`strip-daemon-and-runtime` ticket deleted — `apps/web`'s own README still
+instructs `cargo run -p flow-daemon --bin flow-daemon`, which no longer
+exists anywhere in the repo. Unlike `browser.rs`/`analytics.rs` (unused
+but still functional), these two are **broken**, not just unused — no
+amount of wiring brings them back without rebuilding the daemon they were
+deliberately deleted to remove. Not causing active harm (no script or CI
+workflow touches either), so this is dormant weight, not a live failure.
+See `wayfinder/tickets/orphaned-web-apps.md` for the full writeup and what
+to check before deciding (whether `apps/web`'s own UI is worth salvaging
+for a future web surface, confirmed `website/` has no dependency on
+`flow-client` before it's touched).
+
 **A second, more clear-cut dead-code candidate**: `src/analytics.rs` (366
 lines, a complete Umami-based product-analytics subsystem — background
 worker, its own tokio runtime, event queue) is also completely unreferenced
