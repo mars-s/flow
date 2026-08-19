@@ -764,10 +764,25 @@ async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
-        (now.clone(), now, id),
+        (now.clone(), now.clone(), id.clone()),
     )
     .await
     .context("deleting task")?;
+    // Cascades to subtasks — without this, a parent with open subtasks
+    // just vanished from every view (list_view always filters `parent_id
+    // IS NULL`, so a subtask never appears independently) while its
+    // subtask rows stayed `deleted_at IS NULL` in the database forever:
+    // not shown anywhere, not actually deleted, unreachable by any UI
+    // path (the only way to see a subtask is through its parent's own
+    // detail card, which can never open again once the parent's gone).
+    // Found via a data-integrity audit, not a user report.
+    conn.execute(
+        "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 \
+         WHERE parent_id = ?3 AND deleted_at IS NULL",
+        (now.clone(), now, id),
+    )
+    .await
+    .context("deleting subtasks")?;
     Ok(())
 }
 
@@ -775,10 +790,28 @@ async fn restore_task(conn: &turso::Connection, id: String) -> Result<()> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE id = ?2",
-        (now, id),
+        (now.clone(), id.clone()),
     )
     .await
     .context("restoring task")?;
+    // Symmetric with delete_task's own cascade: Undo on a parent that had
+    // subtasks must bring the whole family back, not just the parent —
+    // otherwise the subtasks a moment ago would come back as gone-but-not-
+    // deleted zombies the instant Undo's own 10-second window expired,
+    // an inconsistent state relative to what the user just clicked Undo
+    // to reverse. Unconditional (no deleted_at-timestamp match against the
+    // parent's own delete) is safe only because there is currently no UI
+    // path to delete a single subtask independently of its parent — every
+    // non-NULL subtask deleted_at was set by this exact cascade. If an
+    // independent subtask-delete is ever added, this needs to stop being
+    // unconditional or it will incorrectly resurrect an unrelated
+    // deletion.
+    conn.execute(
+        "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE parent_id = ?2",
+        (now, id),
+    )
+    .await
+    .context("restoring subtasks")?;
     Ok(())
 }
 
@@ -1050,6 +1083,43 @@ mod tests {
         let inbox = db.list_view(View::Inbox).expect("list");
         assert_eq!(inbox.len(), 1);
         assert_eq!(inbox[0].id, task.id);
+    }
+
+    #[test]
+    fn deleting_a_parent_cascades_to_its_subtasks() {
+        // Found via a data-integrity audit: delete_task only ever touched
+        // the one row by id, orphaning subtasks as invisible-but-not-
+        // deleted zombies — a subtask never appears in any top-level view
+        // (list_view always filters parent_id IS NULL), and the only path
+        // to see one is through the parent's own detail card, which can
+        // never open again once the parent's gone.
+        let db = open_test_db();
+        let parent = db.create_task("Plan trip").expect("create");
+        let child = db.create_subtask(&parent.id, "Book flights").expect("create_subtask");
+
+        db.delete_task(&parent.id).expect("delete should succeed");
+
+        let subtasks = db.list_subtasks(&parent.id).expect("list_subtasks");
+        assert!(
+            subtasks.iter().all(|task| task.id != child.id),
+            "the subtask should be deleted along with its parent"
+        );
+    }
+
+    #[test]
+    fn undoing_a_parent_delete_restores_its_subtasks_too() {
+        let db = open_test_db();
+        let parent = db.create_task("Plan trip").expect("create");
+        let child = db.create_subtask(&parent.id, "Book flights").expect("create_subtask");
+
+        db.delete_task(&parent.id).expect("delete should succeed");
+        db.restore_task(&parent.id).expect("restore should succeed");
+
+        let subtasks = db.list_subtasks(&parent.id).expect("list_subtasks");
+        assert!(
+            subtasks.iter().any(|task| task.id == child.id),
+            "undoing the parent's delete should bring its subtask back too"
+        );
     }
 
     #[test]
