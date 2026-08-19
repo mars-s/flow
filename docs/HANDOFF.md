@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `4bab460` — check `git status` before
+- Working tree is clean as of commit `70325bc` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -536,6 +536,18 @@ re-introduce with the next unrelated change nearby.
 - PRD §6.3's "empty days with events still show" in Upcoming isn't
   implemented — there's no calendar-events data yet to populate an empty
   day with (Google Calendar glance is a later milestone).
+
+**Fixed (`70325bc`, found via re-examining my own earlier work, not
+testable on this machine): a real macOS-13 crash in the EventKit
+permission request.** `request_access` unconditionally called
+`requestFullAccessToEventsWithCompletion:`, which only exists since macOS
+14 — but `Info.plist`'s own `LSMinimumSystemVersion` claims 13.0 support,
+and its own comment already (wrongly) asserted a fallback existed before
+any code did. Calling a nonexistent selector raises a real Objective-C
+crash. Fixed with the same `respondsToSelector` pattern `browser.rs`
+already uses, falling back to the deprecated pre-14 API when the modern
+one isn't there. Inert on this development machine (macOS 26 always takes
+the modern branch) but structurally correct.
 
 **Hardened (`4bab460`, found via web research into my own earlier work):
 the System Settings deep link silently discarded its own failure signal.**
