@@ -15,10 +15,11 @@ use crate::db::{Bucket, Db, Task, View};
 use crate::input::{ComposerEvent, ComposerInput};
 use crate::query::QueryCache;
 use crate::theme::Theme;
-use crate::{CancelTurn, NewTask, SpaceCapture, ToggleCommandPalette};
+use crate::{CancelTurn, NewTask, SpaceCapture, ToggleCommandPalette, ToggleInspector};
 
 mod command_palette;
 mod components;
+mod inspector;
 mod render;
 mod settings;
 mod sidebar;
@@ -26,6 +27,8 @@ mod tasks;
 #[cfg(test)]
 mod tests;
 mod window_chrome;
+
+pub use inspector::init as init_inspector;
 
 pub use command_palette::init as init_command_palette;
 pub use settings::init as init_settings_keys;
@@ -479,6 +482,22 @@ impl Flow {
             return;
         }
         self.open_capture(window, cx);
+    }
+
+    /// Hidden dev shortcut (Cmd-Option-I), no menu item. GPUI's element
+    /// inspector only compiles under `debug_assertions`
+    /// (`gpui::Window::toggle_inspector`), so the release build keeps the
+    /// keybinding wired but no-ops rather than forking the keymap — see
+    /// `lib.rs`'s binding comment.
+    #[allow(unused_variables)]
+    fn handle_toggle_inspector_action(
+        &mut self,
+        _: &ToggleInspector,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        #[cfg(debug_assertions)]
+        window.toggle_inspector(cx);
     }
 
     fn handle_cancel_turn_action(&mut self, _: &CancelTurn, window: &mut Window, cx: &mut Context<Self>) {

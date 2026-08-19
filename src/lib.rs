@@ -63,6 +63,7 @@ actions!(
         ToggleRightPanel,
         ToggleCommandPalette,
         ToggleFpsCounter,
+        ToggleInspector,
         NavigateBack,
         NavigateForward,
         FocusComposer,
@@ -151,6 +152,7 @@ pub fn run() {
             crate::app::init_settings_keys(cx);
             crate::app::init_command_palette(cx);
             crate::app::init_sidebar_keys(cx);
+            crate::app::init_inspector(cx);
             crate::theme::init(cx);
             crate::platform::init_reduce_motion(cx);
 
@@ -178,6 +180,12 @@ pub fn run() {
                 KeyBinding::new("secondary-shift-b", ToggleRightPanel, None),
                 KeyBinding::new("secondary-k", ToggleCommandPalette, None),
                 KeyBinding::new("secondary-alt-shift-f", ToggleFpsCounter, None),
+                // Hidden on purpose: no menu item, like Ghostty/Zed's own
+                // element inspector. GPUI's inspector only compiles in debug
+                // builds (`cfg(debug_assertions)`); the handler in app.rs
+                // no-ops in release rather than omitting the binding, so the
+                // keymap doesn't fork between build kinds.
+                KeyBinding::new("secondary-alt-i", ToggleInspector, None),
                 KeyBinding::new("secondary-[", NavigateBack, Some("Flow")),
                 KeyBinding::new("secondary-]", NavigateForward, Some("Flow")),
                 KeyBinding::new("secondary-l", FocusComposer, None),
