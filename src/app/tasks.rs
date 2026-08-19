@@ -212,6 +212,18 @@ impl Flow {
     /// than guessed from the task's bucket, since Today and Upcoming both
     /// read `Bucket::Active` and either could be the row the click came from.
     fn write_completed(&mut self, id: String, completed: bool, origin_view: View, cx: &mut Context<Self>) {
+        // Reopening — whether from the checkbox or the Undo toast — is
+        // always an immediate, deliberate reversal, so it clears
+        // `completing_ids` synchronously here rather than waiting for
+        // `render_task_view`'s fresh-fetch pruning to notice. That pruning
+        // alone isn't enough for this path: if Undo lands before the
+        // completing write's own refetch has resolved, a fresh `Ready`
+        // will show the task present again (reopened) — which the pruning
+        // reads as "still there, keep waiting" — and the row would be
+        // stuck showing its collapsed/checked state forever.
+        if !completed {
+            self.completing_ids.remove(&id);
+        }
         let Some(db) = self.db.clone() else { return };
         cx.spawn(async move |flow, cx| {
             let write_id = id.clone();
@@ -223,20 +235,21 @@ impl Flow {
                 return;
             };
             let _ = flow.update(cx, |flow, cx| {
-                // Only cleared here, on the write actually landing — not
-                // back in `toggle_completed`'s timer callback where the
-                // collapse animation finishes. Clearing it there left a gap
-                // between the local animation ending and this cache
-                // invalidation actually removing the row: `is_completing`
-                // would already read false while the task's cached
-                // `completed_at` was still unset, so the row flashed back
-                // to a normal, unchecked, full-height row (a fresh mount,
-                // fading itself back in) before vanishing a frame later.
-                // Keeping the id here means the row stays visually
-                // collapsed/checked continuously through that round trip.
-                if completed {
-                    flow.completing_ids.remove(&id);
-                }
+                // Deliberately NOT cleared here. `invalidate_view` below
+                // evicts the cache entry, but the replacement fetch is
+                // async — for at least one more render, `render_task_view`
+                // falls back to `last_tasks`' stale snapshot, which was
+                // captured *before* this write and still has the task
+                // un-completed. Clearing `completing_ids` here (a version
+                // of this fix tried exactly that) meant `is_completing`
+                // went false one frame before the stale fallback's data
+                // caught up, so the row flashed back to a normal, unchecked,
+                // full-height row — a fresh mount fading itself back in —
+                // for that gap. The single source of truth for "is this row
+                // actually gone yet" is a fresh `Query::Ready` that no
+                // longer contains the id, pruned in `render_task_view`
+                // itself once that arrives, not a guess made here about
+                // how long the round trip will take.
                 match origin_view {
                     View::Inbox | View::Someday => flow.invalidate_view(origin_view),
                     View::Today | View::Upcoming | View::Anytime => {
@@ -751,7 +764,6 @@ impl Flow {
         let note_input = self.note_input.clone();
         let selected = self.selected_task_ids.clone();
         let completed_expanded = self.completed_expanded.contains(&view);
-        let completing_ids = self.completing_ids.clone();
         // Only the expanded task's card ever reads this — fetched here
         // (not per row) since only one task can be expanded at a time, the
         // same reasoning `note_input` already follows.
@@ -797,6 +809,14 @@ impl Flow {
         let tasks = match tasks_query {
             Query::Ready(tasks) => {
                 self.last_tasks.insert(view, tasks.clone());
+                // The single source of truth for "is this row actually
+                // gone yet" — see `write_completed`'s comment on why it
+                // deliberately doesn't clear this itself. Once a fresh
+                // fetch confirms an id isn't in the view anymore, drop it;
+                // until then `is_completing` keeps the row visually
+                // collapsed/checked, covering the whole write+refetch round
+                // trip with no gap for it to flash back into view.
+                self.completing_ids.retain(|id| tasks.iter().any(|task| &task.id == id));
                 Some(tasks)
             }
             // Every mutation (complete, delete, schedule, ...) invalidates
@@ -810,6 +830,10 @@ impl Flow {
             // back to yet.
             Query::Pending | Query::Missing(_) => self.last_tasks.get(&view).cloned(),
         };
+        // Captured after the prune above, not before it — otherwise this
+        // render would still carry an id the fresh fetch just confirmed
+        // gone, for one extra frame.
+        let completing_ids = self.completing_ids.clone();
         match tasks {
             Some(tasks) => task_list(
                 view,
