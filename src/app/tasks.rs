@@ -1164,6 +1164,14 @@ fn bulk_action_bar(count: usize, theme: Theme, cx: &mut Context<Flow>) -> AnyEle
                         .child("Delete"),
                 ),
         )
+        .with_animation(
+            // Mounted via `.when(selected_count >= 2, ...)` — unmounts once
+            // the selection drops back below 2, so a stable id is enough;
+            // every appearance is a fresh mount.
+            "bulk-action-bar-reveal",
+            Animation::new(motion::TRANSITION).with_easing(ease_out_quint()),
+            |element, delta| element.opacity(delta),
+        )
         .into_any_element()
 }
 
@@ -1474,6 +1482,15 @@ fn render_detail_card(
                                     }))
                                     .child("Complete all"),
                             ),
+                    )
+                    .with_animation(
+                        // Mounted via `.when(pending_confirm, ...)` —
+                        // unmounts once cancelled or confirmed, so a
+                        // per-task id is enough; every appearance is a
+                        // fresh mount.
+                        gpui::SharedString::from(format!("complete-confirm-{}-reveal", task.id)),
+                        Animation::new(motion::TRANSITION).with_easing(ease_out_quint()),
+                        |element, delta| element.opacity(delta),
                     ),
             )
         })
@@ -1736,6 +1753,15 @@ fn render_process_row(
                             .child("Clear"),
                     )
                 }),
+        )
+        .with_animation(
+            // Mounted via `.when(schedule_picker_open, ...)` — unmounts
+            // entirely on close, so a stable id per task is enough; every
+            // mount is a fresh reveal, matching the detail card's own
+            // pattern.
+            gpui::SharedString::from(format!("process-{task_id}-reveal")),
+            Animation::new(motion::TRANSITION).with_easing(ease_out_quint()),
+            |element, delta| element.opacity(delta),
         )
         .into_any_element()
 }
