@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `59825d7` — check `git status` before
+- Working tree is clean as of commit `85cbc31` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -138,6 +138,20 @@ in practice. A real crash was found and fixed here via a macOS crash
 report (not visually) — see that commit's message for the exact
 mechanism (`sidebar.rs`'s `inbox_count` racing `render_task_view`'s
 list-state creation).
+
+**Fixed (`85cbc31`, user-reported via screenshot): rows collapsed to a
+narrow shrink-wrapped column** instead of filling the pane. Root cause
+(confirmed by reading `gpui::list()`'s own source, not guessed): each
+visible row is laid out via `element.layout_as_root(...)` — the root of
+its own fresh layout tree, not a flex child of the stretch-by-default
+container the previous plain `.children()` list gave it implicitly. Both
+shapes `render_task_row` returns (the compact row, the expanded detail
+card) needed an explicit `.w_full()` they'd never needed before. The same
+screenshot also showed a task titled "deleting doesnt work" — plausibly
+the same root cause (the shrink-wrapped detail card likely misaligned its
+delete button's hit target from what was visible), but **not
+independently confirmed** — worth the user re-testing delete specifically
+now that this is fixed, rather than assuming it's resolved.
 
 **Fixed (`dea6184`, found while adding the log above): a stuck-UI bug.**
 `write_completed`/`delete_task` silently swallowed a failed DB write with
