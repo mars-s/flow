@@ -472,6 +472,20 @@ re-introduce with the next unrelated change nearby.
   implemented — there's no calendar-events data yet to populate an empty
   day with (Google Calendar glance is a later milestone).
 
+**Known, genuinely undisclosed gap, flagged rather than built blind**
+(found via the same data-integrity audit sweep that found tonight's
+subtask-cascade bug): §8's `task_audit` table ("v1 storage, no UI") has no
+implementation anywhere in `src/db.rs` — no `CREATE TABLE`, no insert on
+any mutation path. Unlike `calendar_connections`/the mutation-ID bullet
+(both correctly Milestone-2-deferred and now annotated as such in the
+PRD), nothing marks this one as deferred, so it reads as a v1 gap, not a
+later-milestone item. Not built tonight — it's a real feature (a write
+hook on every mutation path, with real open questions about capture
+granularity for bulk operations) rather than an obvious bug fix, and
+building it hastily overnight risked an incomplete hook set worse than no
+table at all. See `wayfinder/tickets/task-audit-log.md` for the open
+questions.
+
 **Not done yet, in the order they're planned:**
 
 - [x] **Motion pass — done, both rounds.** Round 1 (`0b4e4e9`) fixed the
