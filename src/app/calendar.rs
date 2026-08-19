@@ -227,13 +227,13 @@ impl Flow {
                     .flex()
                     .items_center()
                     .gap(px(10.0))
-                    .child(calendar_nav_button("‹", "calendar-prev", prev_focus, theme, cx, |flow, cx| {
+                    .child(calendar_nav_button("icons/arrow-left.svg", "calendar-prev", prev_focus, theme, cx, |flow, cx| {
                         flow.navigate_calendar(-1, cx);
                     }))
                     .child(calendar_text_button("Today", "calendar-today", today_focus, theme, cx, |flow, cx| {
                         flow.navigate_calendar(0, cx);
                     }))
-                    .child(calendar_nav_button("›", "calendar-next", next_focus, theme, cx, |flow, cx| {
+                    .child(calendar_nav_button("icons/arrow-right.svg", "calendar-next", next_focus, theme, cx, |flow, cx| {
                         flow.navigate_calendar(1, cx);
                     }))
                     .child(
@@ -281,7 +281,7 @@ impl Flow {
 }
 
 fn calendar_nav_button(
-    label: &'static str,
+    icon_path: &'static str,
     id: &'static str,
     focus: FocusHandle,
     theme: Theme,
@@ -301,8 +301,6 @@ fn calendar_nav_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(14.0))
-        .text_color(theme.text_secondary)
         .hover(|el| el.bg(theme.overlay))
         .focus_visible(|style| style.border_1().border_color(theme.accent))
         .on_click(cx.listener(move |flow, _, _, cx| for_click(flow, cx)))
@@ -315,7 +313,10 @@ fn calendar_nav_button(
                 cx.stop_propagation();
             }
         }))
-        .child(label)
+        // A drawn icon, not a "‹"/"›" text glyph standing in for one — the
+        // craft-floor ban on unicode glyphs as icons (found via a
+        // self-review of this exact file, not a user report).
+        .child(crate::ui::icon(icon_path, 12.0, theme.text_secondary))
         .into_any_element()
 }
 
@@ -500,18 +501,30 @@ fn render_calendar_event_card(event: &CalendarEvent, theme: Theme) -> AnyElement
         .p(px(6.0))
         .rounded(px(5.0))
         .bg(theme.raised)
-        .border_l_2()
-        .border_color(color)
         .flex()
         .flex_col()
         .gap(px(2.0))
         .child(
+            // A dot, not a colored left border — the same calendar-color
+            // indicator the sidebar toggle and month/year grid cells
+            // already use, and a colored border-left above 1px on a card
+            // is an explicit craft-floor ban (found via a self-review of
+            // this exact file, not a user report).
             div()
-                .text_size(px(11.5))
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(theme.text)
-                .truncate()
-                .child(event.title.clone()),
+                .flex()
+                .items_center()
+                .gap(px(5.0))
+                .child(div().flex_none().size(px(6.0)).rounded_full().bg(color))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(px(11.5))
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(theme.text)
+                        .truncate()
+                        .child(event.title.clone()),
+                ),
         )
         .when(!event.all_day, |card| {
             card.child(
