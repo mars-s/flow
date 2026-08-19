@@ -577,6 +577,22 @@ same lesson this project already learned once before
 (`flow-ui-craft-discipline` memory) — this pass ran it against my own work
 rather than assuming it was clean.
 
+**A second, more clear-cut dead-code candidate**: `src/analytics.rs` (366
+lines, a complete Umami-based product-analytics subsystem — background
+worker, its own tokio runtime, event queue) is also completely unreferenced
+anywhere (`grep -rn "analytics::" src/` — nothing outside the module
+itself). Unlike `browser.rs`, this one has **no documented justification
+at all** — it's never mentioned in any Milestone-0 strip ticket (unlike
+`browser.rs`'s explicit "kept for a future Calendar OAuth flow" reasoning),
+and analytics/telemetry is never named as a planned Flow feature anywhere
+in the PRD or `PRODUCT.md` (whose own privacy-first principles — "must not
+send task titles to an LLM," never sent to error reporting by default —
+sit uneasily next to a Waku-era usage-analytics module with no product
+decision behind keeping it). This reads as a genuine strip oversight, not
+a deliberate keep, unlike `browser.rs`. Still not deleted here, for the
+same reason: a 366-line removal of previously-functioning code deserves an
+explicit call, even one with higher confidence than `browser.rs`'s.
+
 **Real cleanup candidate, flagged rather than acted on unilaterally**
 (found while auditing for dead code after tonight's EventKit work):
 `src/browser.rs` (1640 lines, a generic WKWebView wrapper) has zero
