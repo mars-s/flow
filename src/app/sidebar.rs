@@ -16,13 +16,14 @@
 //! `enter`/`space` select whatever row currently has focus.
 
 use gpui::{
-    AnyElement, App, Context, Div, IntoElement, KeyDownEvent, SharedString, Stateful, Window,
-    div, prelude::*, px,
+    Animation, AnimationExt, AnyElement, App, Context, Div, IntoElement, KeyDownEvent,
+    SharedString, Stateful, Window, div, ease_out_quint, prelude::*, px,
 };
 
 use super::Flow;
 use crate::theme::Theme;
 use crate::ui::icon;
+use crate::ui::motion;
 
 /// No global keybindings: the rail's arrow/enter handling is scoped to its
 /// own rows via `on_key_down`, not registered as app-wide actions.
@@ -243,12 +244,61 @@ impl Flow {
     /// anywhere — see `Flow::open_capture` in `app.rs`).
     fn render_capture_row(&mut self, theme: Theme, cx: &mut Context<Self>) -> AnyElement {
         if self.capturing {
+            let error = self.capture_error.clone();
             return div()
-                .h(px(ROW_HEIGHT))
-                .px(px(4.0))
                 .flex()
-                .items_center()
-                .child(self.capture_input.clone())
+                .flex_col()
+                .child(
+                    div()
+                        .h(px(ROW_HEIGHT))
+                        .px(px(4.0))
+                        .flex()
+                        .items_center()
+                        .child(self.capture_input.clone()),
+                )
+                // PRD §6.1: "show a non-blocking error with Retry on
+                // failure" — `Flow::submit_capture` sets this on a failed
+                // `Db::create_task`/`schedule` and restores the typed text
+                // rather than losing it.
+                .when_some(error, |row, message| {
+                    row.child(
+                        div()
+                            .px(px(8.0))
+                            .pb(px(4.0))
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(6.0))
+                            .child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .text_color(theme.danger)
+                                    .child(message),
+                            )
+                            .child(
+                                div()
+                                    .id("capture-retry")
+                                    .px(px(6.0))
+                                    .py(px(2.0))
+                                    .rounded(px(4.0))
+                                    .cursor_pointer()
+                                    .text_size(px(11.0))
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(theme.accent)
+                                    .hover(|el| el.bg(theme.overlay))
+                                    .on_click(cx.listener(|flow, _, _, cx| flow.retry_capture(cx)))
+                                    .child("Retry"),
+                            )
+                            .with_animation(
+                                // Mounts fresh each failure (unmounts when
+                                // `capture_error` clears), matching the rest
+                                // of the app's reveal-on-mount vocabulary.
+                                "capture-error-reveal",
+                                Animation::new(motion::TRANSITION).with_easing(ease_out_quint()),
+                                |element, delta| element.opacity(delta),
+                            ),
+                    )
+                })
                 .into_any_element();
         }
 

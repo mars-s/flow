@@ -62,6 +62,12 @@ pub struct Flow {
     /// state stable. PRD §6.1's title-only capture; note/schedule/parent
     /// fields are a later Milestone 1 step (see docs/HANDOFF.md).
     capture_input: Entity<ComposerInput>,
+    /// Set when `Db::create_task`/`schedule` fails on submit. PRD §6.1:
+    /// "show a non-blocking error with Retry on failure, and never discard
+    /// typed content" — the failed title is restored into `capture_input`
+    /// (see `on_capture_event`) rather than left cleared, and this drives
+    /// the inline message + Retry affordance under the field.
+    capture_error: Option<gpui::SharedString>,
     /// The task row currently showing its detail card (note, schedule
     /// status, delete), if any — `docs/DESIGN_DIRECTION.md`'s "Task detail"
     /// component, available from every task view. Only one row expands at a
@@ -207,6 +213,7 @@ impl Flow {
                 tasks: QueryCache::new(8),
                 capturing: false,
                 capture_input,
+                capture_error: None,
                 expanded_task_id: None,
                 note_task_id: None,
                 note_input,
@@ -234,6 +241,7 @@ impl Flow {
     /// view."
     pub(super) fn open_capture(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.capturing = true;
+        self.capture_error = None;
         let focus = self.capture_input.read(cx).focus();
         window.focus(&focus, cx);
         cx.notify();
@@ -248,9 +256,22 @@ impl Flow {
             return;
         }
         self.capturing = false;
+        self.capture_error = None;
         self.capture_input.update(cx, |input, cx| input.clear(cx));
         window.focus(&self.new_task_focus, cx);
         cx.notify();
+    }
+
+    /// The Retry affordance under a failed capture (`capture_error`): the
+    /// original text is already sitting in `capture_input` (restored by
+    /// `submit_capture` on failure), so this just resubmits it exactly
+    /// like pressing Enter again would.
+    pub(super) fn retry_capture(&mut self, cx: &mut Context<Self>) {
+        let title = self.capture_input.read(cx).content().to_string();
+        if title.is_empty() {
+            return;
+        }
+        self.submit_capture(title, cx);
     }
 
     fn on_capture_event(
@@ -260,23 +281,35 @@ impl Flow {
         cx: &mut Context<Self>,
     ) {
         if matches!(event, ComposerEvent::Edited) {
+            // Deliberately does *not* clear `capture_error` here: a failed
+            // submit's own restore (`submit_capture`) programmatically
+            // calls `set_content`, which emits this same `Edited` event —
+            // clearing the error right here would erase it in the same
+            // beat it was set. The error instead clears on the next
+            // successful submit, or when the field closes.
             self.highlight_capture_date_phrase(cx);
             return;
         }
         let ComposerEvent::Submit(title) = event else {
             return;
         };
+        self.submit_capture(title.clone(), cx);
+    }
+
+    /// Shared by a fresh Enter submit and the failed-capture Retry click —
+    /// same write, same failure handling either way.
+    fn submit_capture(&mut self, original_title: String, cx: &mut Context<Self>) {
         let Some(db) = self.db.clone() else { return };
 
         // Parsing is pure and cheap (no I/O), so it runs inline rather than
         // adding a second background hop before the write below.
-        let parsed = crate::parse::parse(title, chrono::Local::now().date_naive());
+        let parsed = crate::parse::parse(&original_title, chrono::Local::now().date_naive());
         // A title that parsed down to nothing but the date phrase itself
         // (the user typed only "tomorrow") has no title left; PRD §6.1
         // requires a nonempty title, so treat that as unrecognized rather
         // than saving a blank one.
         let (title, date, time) = if parsed.cleaned_title.is_empty() {
-            (title.clone(), None, None)
+            (original_title.clone(), None, None)
         } else {
             (parsed.cleaned_title, parsed.date, parsed.time)
         };
@@ -304,9 +337,22 @@ impl Flow {
                 })
                 .await;
             if created.is_err() {
+                // PRD §6.1: "show a non-blocking error with Retry on
+                // failure, and never discard typed content." The field
+                // already self-cleared on submit (Composer-mode Enter), so
+                // put the user's exact original text back rather than
+                // leaving them to retype it.
+                let _ = flow.update(cx, |flow, cx| {
+                    flow.capture_error = Some("Couldn't save. Try again.".into());
+                    flow.capture_input.update(cx, |input, cx| {
+                        input.set_content(original_title.clone(), cx)
+                    });
+                    cx.notify();
+                });
                 return;
             }
             let _ = flow.update(cx, |flow, cx| {
+                flow.capture_error = None;
                 for view in [View::Inbox, View::Today, View::Upcoming, View::Anytime] {
                     flow.tasks.invalidate(&view);
                 }
