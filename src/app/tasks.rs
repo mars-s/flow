@@ -389,7 +389,7 @@ impl Flow {
                 // `completing_ids` stays set until `write_completed`'s own
                 // write actually lands — see the comment there.
                 flow.write_completed(id.clone(), true, origin_view, cx);
-                flow.show_undo_toast(id, title, origin_view, UndoKind::Complete, cx);
+                flow.show_undo_toast(vec![id], title, false, origin_view, UndoKind::Complete, cx);
             });
         })
         .detach();
@@ -404,15 +404,17 @@ impl Flow {
     /// would let the first timer clear the second toast early.
     fn show_undo_toast(
         &mut self,
-        task_id: String,
+        task_ids: Vec<String>,
         title: String,
+        summary: bool,
         origin_view: View,
         kind: UndoKind,
         cx: &mut Context<Self>,
     ) {
         self.undo_token += 1;
         let token = self.undo_token;
-        self.undo_toast = Some(UndoToast { task_id, title: title.into(), origin_view, token, kind });
+        self.undo_toast =
+            Some(UndoToast { task_ids, title: title.into(), summary, origin_view, token, kind });
         cx.notify();
         cx.spawn(async move |flow, cx| {
             cx.background_executor().timer(UNDO_TOAST_DURATION).await;
@@ -433,18 +435,36 @@ impl Flow {
         let Some(toast) = self.undo_toast.take() else { return };
         cx.notify();
         match toast.kind {
-            UndoKind::Complete => self.write_completed(toast.task_id, false, toast.origin_view, cx),
+            // Always exactly one id — nothing shows a Complete-kind toast
+            // for more than a single task (there's no bulk-complete
+            // action, only bulk-delete).
+            UndoKind::Complete => {
+                let Some(id) = toast.task_ids.into_iter().next() else { return };
+                self.write_completed(id, false, toast.origin_view, cx);
+            }
             UndoKind::Delete => {
                 let Some(db) = self.db.clone() else { return };
-                let task_id = toast.task_id.clone();
+                let task_ids = toast.task_ids;
                 cx.spawn(async move |flow, cx| {
-                    let result = cx
+                    // Every id restored even if one fails partway through —
+                    // same "don't let one failure hide the rest" reasoning
+                    // as bulk_delete's own loop, logged individually rather
+                    // than aborting the whole undo on the first error.
+                    let failures = cx
                         .background_executor()
-                        .spawn(async move { db.restore_task(toast.task_id) })
+                        .spawn(async move {
+                            let mut failures = 0;
+                            for id in task_ids {
+                                if let Err(error) = db.restore_task(&id) {
+                                    crate::debug_log!("task {id}: undo (restore) FAILED: {error:#}");
+                                    failures += 1;
+                                }
+                            }
+                            failures
+                        })
                         .await;
-                    if let Err(error) = result {
-                        crate::debug_log!("task {task_id}: undo (restore) FAILED: {error:#}");
-                        return;
+                    if failures > 0 {
+                        crate::debug_log!("undo: {failures} task(s) failed to restore");
                     }
                     let _ = flow.update(cx, |flow, cx| {
                         flow.invalidate_all_views();
@@ -733,7 +753,7 @@ impl Flow {
             };
             let _ = flow.update(cx, |flow, cx| {
                 flow.invalidate_all_views();
-                flow.show_undo_toast(id, title, origin_view, UndoKind::Delete, cx);
+                flow.show_undo_toast(vec![id], title, false, origin_view, UndoKind::Delete, cx);
             });
         })
         .detach();
@@ -776,28 +796,49 @@ impl Flow {
         .detach();
     }
 
-    /// The bulk-action bar's Delete button.
+    /// The bulk-action bar's Delete button. Same Undo-toast affordance as a
+    /// single row's delete (PRD §6.1's "undo-delete" acceptance criterion
+    /// doesn't distinguish single from bulk) — previously this permanently
+    /// deleted every selected task with no recovery at all, a real gap
+    /// found via a PRD audit, not a user report: bulk delete is a single
+    /// shared button reachable after selecting several rows, an easier
+    /// misclick target than any one row's own delete.
     fn bulk_delete(&mut self, cx: &mut Context<Self>) {
         let ids: Vec<String> = self.selected_task_ids.drain().collect();
         if ids.is_empty() {
             return;
         }
         let Some(db) = self.db.clone() else { return };
+        // Multi-select only ever spans rows within the currently open view,
+        // so the current destination's view is the right origin for all of
+        // them — same single value every selected row would have carried
+        // individually.
+        let origin_view = self.destination.view().unwrap_or(View::Inbox);
 
         cx.spawn(async move |flow, cx| {
-            let _ = cx
+            let deleted: Vec<String> = cx
                 .background_executor()
                 .spawn(async move {
+                    let mut deleted = Vec::new();
                     for id in ids {
-                        if let Err(error) = db.delete_task(id.clone()) {
-                            eprintln!("Flow: bulk_delete failed for task {id}: {error:#}");
-                            crate::debug_log!("task {id}: bulk_delete FAILED: {error:#}");
+                        match db.delete_task(id.clone()) {
+                            Ok(()) => deleted.push(id),
+                            Err(error) => {
+                                eprintln!("Flow: bulk_delete failed for task {id}: {error:#}");
+                                crate::debug_log!("task {id}: bulk_delete FAILED: {error:#}");
+                            }
                         }
                     }
+                    deleted
                 })
                 .await;
             let _ = flow.update(cx, |flow, cx| {
                 flow.invalidate_all_views();
+                if !deleted.is_empty() {
+                    let count = deleted.len();
+                    let title = if count == 1 { "1 task".to_string() } else { format!("{count} tasks") };
+                    flow.show_undo_toast(deleted, title, true, origin_view, UndoKind::Delete, cx);
+                }
                 cx.notify();
             });
         })
@@ -848,10 +889,17 @@ impl Flow {
     /// it instead of being read back off `self.destination`.
     pub(super) fn render_undo_toast(&mut self, theme: Theme, cx: &mut Context<Self>) -> Option<AnyElement> {
         let toast = self.undo_toast.as_ref()?;
-        let title = toast.title.clone();
         let verb = match toast.kind {
             UndoKind::Complete => "Completed",
             UndoKind::Delete => "Deleted",
+        };
+        // A single task's own title is quoted like a literal value; a bulk
+        // delete's "5 tasks" is a summary, not a name, so it reads oddly
+        // quoted the same way.
+        let message = if toast.summary {
+            format!("{verb} {}", toast.title)
+        } else {
+            format!("{verb} \u{201c}{}\u{201d}", toast.title)
         };
 
         Some(
@@ -886,7 +934,7 @@ impl Flow {
                             div()
                                 .text_size(px(12.5))
                                 .text_color(theme.text)
-                                .child(format!("{verb} \u{201c}{title}\u{201d}")),
+                                .child(message),
                         )
                         .child(
                             div()

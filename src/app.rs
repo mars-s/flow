@@ -373,10 +373,21 @@ pub(super) enum CalendarViewMode {
 }
 
 /// What `render_undo_toast` (`app/tasks.rs`) shows and what `Flow::undo`
-/// reverses.
+/// reverses. `task_ids` is one element for every path except bulk delete
+/// (the multi-select action bar's "Delete") — kept as a `Vec` universally
+/// rather than a separate bulk variant so `undo_last_action` has one
+/// reversal path per `UndoKind`, not two.
 struct UndoToast {
-    task_id: String,
+    task_ids: Vec<String>,
+    /// A single task's own title (quoted in the toast) or, for bulk
+    /// delete, a plain summary like "5 tasks" (not quoted — see `summary`).
     title: gpui::SharedString,
+    /// `true` when `title` is already a plain summary ("5 tasks") rather
+    /// than one task's actual name — set explicitly by the caller rather
+    /// than inferred from `task_ids.len()`, since bulk delete can
+    /// (rarely) net exactly one surviving id and still isn't "that task's
+    /// title," it's "1 task."
+    summary: bool,
     origin_view: View,
     token: u64,
     kind: UndoKind,
@@ -1320,8 +1331,8 @@ impl Flow {
                 // panel whose whole purpose is being read (or
                 // screenshotted) by whoever's debugging.
                 Some(toast) => format!(
-                    "{:?} of {} ({:?})",
-                    toast.kind, toast.task_id, toast.origin_view
+                    "{:?} of {} task(s) {:?} ({:?})",
+                    toast.kind, toast.task_ids.len(), toast.task_ids, toast.origin_view
                 ),
                 None => "none".to_string(),
             },
