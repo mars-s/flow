@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    Animation, AnimationExt, AnyElement, ClickEvent, Context, Entity, IntoElement, ListAlignment,
-    ListState, ParentElement, SharedString, Styled, Window, div, ease_out_quint, list, prelude::*,
-    px,
+    Animation, AnimationExt, AnyElement, ClickEvent, Context, Entity, FocusHandle, IntoElement,
+    KeyDownEvent, ListAlignment, ListState, ParentElement, SharedString, Styled, Window, div,
+    ease_out_quint, list, prelude::*, px,
 };
 
 use super::Flow;
@@ -168,6 +168,28 @@ impl Flow {
             }
             return;
         }
+    }
+
+    /// Gets or creates the keyboard focus handle for one task row —
+    /// `Flow::row_focuses`'s field doc has the full reasoning.
+    pub(super) fn row_focus(&mut self, task_id: &str, cx: &mut Context<Self>) -> FocusHandle {
+        self.row_focuses
+            .entry(task_id.to_string())
+            .or_insert_with(|| cx.focus_handle())
+            .clone()
+    }
+
+    /// Drops focus handles for any task id no longer present in `tasks` —
+    /// called from `render_task_view` alongside its other per-list-refetch
+    /// bookkeeping (`completing_ids` pruning, `sync_task_list_state`), so
+    /// `row_focuses` stays bounded to what's actually visible rather than
+    /// accumulating one entry per task ever seen in a session. The pruned
+    /// row was already gone from the render tree the same frame this runs
+    /// (it's no longer in `tasks`), so this can't blur something still on
+    /// screen — dropping its handle here is bookkeeping cleanup, not a
+    /// focus-movement decision in its own right.
+    fn prune_row_focuses(&mut self, tasks: &[Task]) {
+        self.row_focuses.retain(|id, _| tasks.iter().any(|task| &task.id == id));
     }
 
     /// Reads a view's completed tasks, kicking off a background fetch on a
@@ -938,6 +960,7 @@ impl Flow {
                 // collapsed/checked, covering the whole write+refetch round
                 // trip with no gap for it to flash back into view.
                 self.completing_ids.retain(|id| tasks.iter().any(|task| &task.id == id));
+                self.prune_row_focuses(&tasks);
                 Some(tasks)
             }
             // Every mutation (complete, delete, schedule, ...) invalidates
@@ -1140,7 +1163,16 @@ fn task_list(
                                         list_expanded.as_deref() == Some(task.id.as_str());
                                     let is_selected = selected.contains(&task.id);
                                     let is_completing = completing_ids.contains(&task.id);
-                                    entity.update(cx, |_flow, cx| {
+                                    entity.update(cx, |flow, cx| {
+                                        // Only the compact row needs a
+                                        // focus handle — the expanded card
+                                        // (a different call entirely, once
+                                        // this task is expanded) isn't in
+                                        // this pass's scope, and creating
+                                        // one it'll never use would just be
+                                        // a wasted map entry.
+                                        let focus = (!is_expanded)
+                                            .then(|| flow.row_focus(&task.id, cx));
                                         render_task_row(
                                             task,
                                             view,
@@ -1152,6 +1184,7 @@ fn task_list(
                                             list_note_input.clone(),
                                             list_schedule_input.clone(),
                                             list_subtask_context.clone(),
+                                            focus,
                                             theme,
                                             cx,
                                         )
@@ -1271,6 +1304,9 @@ fn render_upcoming_section(
                 note_input.clone(),
                 schedule_input.clone(),
                 subtask_context.clone(),
+                // Upcoming's rows aren't in this first keyboard-access
+                // pass's scope — see `render_task_row`'s `focus` param doc.
+                None,
                 theme,
                 cx,
             )
@@ -1325,6 +1361,10 @@ fn completed_section(
                             note_input.clone(),
                             schedule_input.clone(),
                             subtask_context.clone(),
+                            // Completed-section rows aren't in this first
+                            // keyboard-access pass's scope — see
+                            // `render_task_row`'s `focus` param doc.
+                            None,
                             theme,
                             cx,
                         )
@@ -1472,11 +1512,22 @@ fn render_task_row(
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
+    // `Some` only from the virtualized flat-list path (Inbox/Today/
+    // Anytime/Someday's compact rows), which is the one call site that
+    // already runs inside `entity.update` and so can cheaply fetch a
+    // handle per visible row without the O(n) cost of doing it for every
+    // task up front. `None` from the Completed section and Upcoming's
+    // rows (still mouse-only) — see `Flow::row_focuses`'s field doc and
+    // `docs/HANDOFF.md` for the full scope of what this first pass covers
+    // and what's deliberately left for later.
+    focus: Option<FocusHandle>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
     let id_for_row_click = task.id.clone();
     let note_for_click = task.note.clone();
+    let id_for_row_key = task.id.clone();
+    let note_for_row_key = task.note.clone();
 
     // A row is either its compact one-line form or its expanded detail
     // card — never both. Stacking a plain row on top of a card that
@@ -1531,6 +1582,27 @@ fn render_task_row(
         .cursor_pointer()
         .hover(|el| el.bg(theme.overlay))
         .when(is_selected, |row| row.bg(theme.sidebar_item_background))
+        // First entry in the keyboard-accessibility pass this codebase's
+        // own audit flagged (`docs/HANDOFF.md`) — tab reaches the row,
+        // enter/space opens it, matching a plain click. Scoped to just
+        // this activation for now; cmd+select and arrow-key list
+        // navigation between rows are deliberately not attempted here —
+        // see the `focus` parameter's doc for the exact boundary.
+        .when_some(focus, |row, handle| {
+            row.track_focus(&handle)
+                .tab_index(0)
+                .focus_visible(|style| style.border_1().border_color(theme.accent))
+                .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+                    if event.keystroke.modifiers.modified() {
+                        return;
+                    }
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                        flow.selected_task_ids.clear();
+                        flow.toggle_expanded(id_for_row_key.clone(), note_for_row_key.clone(), cx);
+                        cx.stop_propagation();
+                    }
+                }))
+        })
         .on_click(cx.listener(move |flow, event: &ClickEvent, _, cx| {
             if event.modifiers().secondary() {
                 flow.toggle_selected(id_for_row_click.clone(), cx);

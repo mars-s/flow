@@ -95,6 +95,16 @@ pub struct Flow {
     /// entry — `ui::scrollbar` already had a `Scrollable` impl for
     /// `ListState` built and ready, just never used until now.
     task_list_scrollbars: HashMap<View, Rc<crate::ui::scrollbar::ScrollbarState>>,
+    /// Per-task keyboard focus handles, keyed by task id — the same
+    /// pattern `nav_focuses` uses for the sidebar's fixed seven
+    /// destinations, but as a map instead of a fixed array since the task
+    /// list is dynamic. Created lazily (`Flow::row_focus`) and pruned in
+    /// `render_task_view` whenever a fresh task list arrives (same spot
+    /// that already prunes `completing_ids`), so this stays bounded to
+    /// currently-visible tasks rather than growing forever across a
+    /// session. First entry in the `CLAUDE.md`/PRD keyboard-accessibility
+    /// gap this project's own audit found — see `docs/HANDOFF.md`.
+    row_focuses: HashMap<String, FocusHandle>,
     /// What `render_task_view` last saw for the expanded task's row —
     /// `(id, schedule_picker_open, scheduling, adding_subtask,
     /// pending_complete_confirm, subtask_count)`. Compared against each
@@ -282,6 +292,7 @@ impl Flow {
                 last_tasks: HashMap::new(),
                 task_list_states: HashMap::new(),
                 task_list_scrollbars: HashMap::new(),
+                row_focuses: HashMap::new(),
                 last_expanded_signature: None,
                 last_completed: HashMap::new(),
                 last_subtasks: HashMap::new(),
