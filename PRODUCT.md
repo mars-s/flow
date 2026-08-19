@@ -9,8 +9,11 @@ adaptive
 ## Stack
 
 Existing native Rust and GPUI desktop application for macOS and Linux. The
-first implementation keeps task data local; self-hosted Convex is a later
-sync/deployment phase.
+first implementation keeps task data local on Turso/SQLite; self-hosted Turso
+Sync is a later deployment phase (Milestone 2 — see
+`docs/PRODUCT_REQUIREMENTS.md` §12). Convex was the originally planned
+persistence layer; superseded by Turso, see `docs/turso.md` and this file's
+own Capabilities and Constraints section for why.
 
 ## Users
 
@@ -41,9 +44,16 @@ editable schedules without sending task titles to an LLM.
 
 - Inbox, Today, Upcoming, Anytime, and Someday are the core task surfaces.
 - Tasks support a note and one level of subtasks.
-- Initial persistence is local. Self-hosted Convex and read-only Google
-  Calendar arrive after the task and NLP experience is proper.
-- Flow remains GPL-3.0 open source and strips Flow's GPUI shell in place while
+- Initial persistence is local, on Turso/SQLite (`docs/turso.md`) — chosen
+  over the originally planned Convex because Flow needed fast, concurrent,
+  local-first storage without writing backend code (Convex is
+  server-authoritative over a websocket regardless of client language).
+  Self-hosted Turso Sync for multi-device use is still ahead (Milestone 2).
+  A read-only glance at the user's own macOS Calendar via EventKit (not
+  Google OAuth — see `docs/PRODUCT_REQUIREMENTS.md` §6.5's 2026-08-19
+  revision) has landed, arriving after the task and NLP experience was
+  proper, per the original sequencing here.
+- Flow remains GPL-3.0 open source and strips Waku's GPUI shell in place while
   retaining required upstream and third-party notices.
 - Calendar events are read-only context. Flow never writes calendar events.
 
