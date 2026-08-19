@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `262afce` — check `git status` before
+- Working tree is clean as of commit `1d73565` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -285,12 +285,15 @@ re-introduce with the next unrelated change nearby.
       currently be in the Tab order at all — this affects every composer
       field app-wide (Capture, notes, this field, subtask-add), not just
       task rows, so it's a separate, broader fix than this pass's scope;
-      noted here rather than folded in blind. **Not done, deliberately
-      scoped out of these six passes** rather than attempted blind: the
-      title, subtask checkboxes, the add-subtask row, the
-      complete-with-subtasks confirm — every *individual control* still
-      left on a task row/card, per the PRD's per-verb requirement
-      (subtasks etc. still need their own keyboard path). Also not
+      noted here rather than folded in blind. `1d73565` did the
+      "Complete parent and all subtasks?" confirm banner's Cancel/
+      Complete-all buttons too, same pattern — this closes out every
+      individually-tracked control on the detail card except the subtask
+      section itself. **Not done, deliberately scoped out of these seven
+      passes** rather than attempted blind: the row title (not an
+      actionable control, may not need this at all), subtask checkboxes,
+      the add-subtask row — the last real individual controls left, per
+      the PRD's per-verb requirement. Also not
       done: Completed-
       section rows, Upcoming's rows (both still pass `None` for `focus` —
       see `render_task_row`'s param doc), and arrow-key navigation between
