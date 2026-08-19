@@ -1009,6 +1009,7 @@ impl Flow {
                 .clone()
         });
         let completed_clear_focus = self.completed_clear_focus(view, cx);
+        let detail_delete_focus = self.detail_delete_focus.clone();
         match tasks {
             Some(tasks) => task_list(
                 view,
@@ -1026,6 +1027,7 @@ impl Flow {
                 list_state,
                 scrollbar_state,
                 completed_clear_focus,
+                detail_delete_focus,
                 theme,
                 cx,
             )
@@ -1068,6 +1070,7 @@ fn task_list(
     list_state: Option<ListState>,
     scrollbar_state: Option<Rc<crate::ui::scrollbar::ScrollbarState>>,
     completed_clear_focus: FocusHandle,
+    detail_delete_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1130,6 +1133,7 @@ fn task_list(
                                 note_input.clone(),
                                 schedule_input.clone(),
                                 subtask_context.clone(),
+                                detail_delete_focus.clone(),
                                 theme,
                                 cx,
                             )
@@ -1148,6 +1152,7 @@ fn task_list(
                 let list_schedule_input = schedule_input.clone();
                 let list_subtask_context = subtask_context.clone();
                 let list_expanded = expanded.clone();
+                let list_detail_delete_focus = detail_delete_focus.clone();
                 div()
                     .id("task-list-open")
                     .relative()
@@ -1186,13 +1191,20 @@ fn task_list(
                                     let is_selected = selected.contains(&task.id);
                                     let is_completing = completing_ids.contains(&task.id);
                                     entity.update(cx, |flow, cx| {
-                                        // Only the compact row needs a
-                                        // focus handle — the expanded card
-                                        // (a different call entirely, once
-                                        // this task is expanded) isn't in
-                                        // this pass's scope, and creating
-                                        // one it'll never use would just be
-                                        // a wasted map entry.
+                                        // The compact row's own focus
+                                        // handle is only needed (and only
+                                        // created — see `row_focus`'s
+                                        // pruning reasoning) when this row
+                                        // isn't the expanded one; the
+                                        // expanded card instead reuses the
+                                        // single stable `detail_delete_focus`
+                                        // for its delete button, threaded
+                                        // in below regardless of expansion
+                                        // state since it's cheap (one
+                                        // clone, not a map entry) and only
+                                        // ever bound by `render_detail_card`
+                                        // when this row actually is the
+                                        // expanded one.
                                         let focus = (!is_expanded)
                                             .then(|| flow.row_focus(&task.id, cx));
                                         render_task_row(
@@ -1207,6 +1219,7 @@ fn task_list(
                                             list_schedule_input.clone(),
                                             list_subtask_context.clone(),
                                             focus,
+                                            list_detail_delete_focus.clone(),
                                             theme,
                                             cx,
                                         )
@@ -1245,6 +1258,7 @@ fn task_list(
                         schedule_input,
                         subtask_context,
                         completed_clear_focus,
+                        detail_delete_focus,
                         theme,
                         cx,
                     )),
@@ -1288,6 +1302,7 @@ fn render_upcoming_section(
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
+    detail_delete_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1330,6 +1345,7 @@ fn render_upcoming_section(
                 // Upcoming's rows aren't in this first keyboard-access
                 // pass's scope — see `render_task_row`'s `focus` param doc.
                 None,
+                detail_delete_focus.clone(),
                 theme,
                 cx,
             )
@@ -1352,6 +1368,7 @@ fn completed_section(
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     completed_clear_focus: FocusHandle,
+    detail_delete_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1389,6 +1406,7 @@ fn completed_section(
                             // keyboard-access pass's scope — see
                             // `render_task_row`'s `focus` param doc.
                             None,
+                            detail_delete_focus.clone(),
                             theme,
                             cx,
                         )
@@ -1557,6 +1575,10 @@ fn render_task_row(
     // `docs/HANDOFF.md` for the full scope of what this first pass covers
     // and what's deliberately left for later.
     focus: Option<FocusHandle>,
+    // Bound to the expanded card's delete button, when this row happens
+    // to be the expanded one — see `Flow::detail_delete_focus`'s field
+    // doc for why one stable handle covers every task instead of a map.
+    detail_delete_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1578,6 +1600,7 @@ fn render_task_row(
             note_input,
             schedule_input,
             subtask_context,
+            detail_delete_focus,
             theme,
             cx,
         );
@@ -1767,6 +1790,7 @@ fn render_detail_card(
     note_input: Entity<ComposerInput>,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
+    detail_delete_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1788,6 +1812,8 @@ fn render_detail_card(
     let has_open_subtasks_for_complete = !open_subtask_ids.is_empty();
     let id_for_delete = task.id.clone();
     let title_for_delete = task.title.clone();
+    let id_for_delete_key = task.id.clone();
+    let title_for_delete_key = task.title.clone();
     let id_for_collapse = task.id.clone();
     let note_for_collapse = task.note.clone();
     let placement = placement_label(task);
@@ -1947,9 +1973,26 @@ fn render_detail_card(
                         "icons/trash.svg",
                         theme,
                     )
+                    .track_focus(&detail_delete_focus)
+                    .tab_index(0)
+                    .focus_visible(|style| style.border_1().border_color(theme.accent))
                     .on_click(cx.listener(move |flow, _, _, cx| {
                         flow.delete_task(id_for_delete.clone(), title_for_delete.clone(), origin_view, cx);
                         cx.stop_propagation();
+                    }))
+                    .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+                        if event.keystroke.modifiers.modified() {
+                            return;
+                        }
+                        if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                            flow.delete_task(
+                                id_for_delete_key.clone(),
+                                title_for_delete_key.clone(),
+                                origin_view,
+                                cx,
+                            );
+                            cx.stop_propagation();
+                        }
                     })),
                 ),
         )

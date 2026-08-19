@@ -116,6 +116,13 @@ pub struct Flow {
     /// includes handles actually `track_focus`'d in the current frame, so
     /// this being unused whenever no toast is showing is harmless.
     undo_toast_focus: FocusHandle,
+    /// The expanded detail card's delete button — a single stable field,
+    /// same reasoning as `undo_toast_focus`: only one task can ever be
+    /// expanded at a time (`expanded_task_id: Option<String>`), so there's
+    /// only ever one card's delete button to reach, and reusing one handle
+    /// across every task avoids needing a `row_focuses`-style per-task map
+    /// for something that's never actually rendered more than once.
+    detail_delete_focus: FocusHandle,
     /// What `render_task_view` last saw for the expanded task's row —
     /// `(id, schedule_picker_open, scheduling, adding_subtask,
     /// pending_complete_confirm, subtask_count)`. Compared against each
@@ -297,6 +304,7 @@ impl Flow {
                 new_task_focus: cx.focus_handle(),
                 completed_clear_focuses: HashMap::new(),
                 undo_toast_focus: cx.focus_handle(),
+                detail_delete_focus: cx.focus_handle(),
                 nav_focuses: array::from_fn(|_| cx.focus_handle()),
                 mode_tasks_focus: cx.focus_handle(),
                 mode_thumb: None,
