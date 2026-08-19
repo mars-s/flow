@@ -15,7 +15,11 @@ See [Choose Flow's first calendar source](choose-calendar-source.md)'s
 for the full decision: Flow reads the local macOS Calendar app via EventKit,
 not Google OAuth. `b76195e` landed the permission flow (Settings' "Connect
 Calendar"), `src/eventkit.rs`/`src/platform.rs`'s EventKit bridge, and gated
-the Today glance on it. This ticket is what's still open.
+the Today glance on it. `e8e910c` landed this ticket's own Day/Week slice
+(`src/app/calendar.rs`) — an agenda-per-day layout, disclosed as a
+simplification against Apple Calendar's real hour-grid positioning in that
+commit's own message. **Still open below: Month, Year, and the two
+unresolved questions this ticket already named.**
 
 ## Goal
 
@@ -28,10 +32,14 @@ A real `Destination::Calendar` view — currently still the generic
   everything this needs — `id`, `title`, `source_title`, `color` — nothing
   new to fetch, just something to render and a per-calendar shown/hidden set
   to add to `Flow`).
-- A top switch between Day / Week / Month / Year.
-- Day and Week: a time-gridded main view (hour rows, events laid out by
-  start/end within the grid, all-day events in a header strip above it —
-  `CalendarEvent::all_day` already distinguishes this).
+- A top switch between Day / Week / Month / Year (Day/Week done; Month/Year
+  need their own switch entries added once built).
+- Day and Week: **done** (`e8e910c`) as an agenda-per-day layout rather than
+  a true pixel-positioned hour grid — see that commit's message for why.
+  Upgrading to real hour-of-day positioning with overlap resolution (an
+  absolute-layout algorithm for concurrent events) is still open if the
+  agenda layout is felt to be insufficient in practice; nothing about the
+  agenda approach blocks it later, it's a rendering change only.
 - Month: a traditional 5–6 week grid, one cell per day, showing a few
   events per day plus an overflow count.
 - Year: twelve small month grids (a bird's-eye view, no per-event detail).
@@ -54,10 +62,13 @@ A real `Destination::Calendar` view — currently still the generic
   match; Month: the visible month, expanded to the full weeks shown at its
   edges like Apple Calendar's own grid does; Year: the twelve visible
   months) — pick the convention, don't leave it implicit per view.
-- Whether per-calendar visibility toggles persist across launches (a small
-  local pref, e.g. alongside `theme.rs`'s persistence if it has any) or
-  reset to "all visible" every launch — nothing in the PRD states this, and
-  it's a real product decision, not an implementation detail.
+- Whether per-calendar visibility toggles persist across launches. Decided
+  for now (`e8e910c`, `Flow::calendar_hidden_ids`'s own field doc): no —
+  every launch starts with every calendar visible, since there's no
+  settings-persistence file anywhere in this codebase yet and building one
+  just for this would be new infrastructure, not a natural extension. Worth
+  revisiting once real usage says otherwise, or once some other feature
+  needs the same persistence file first.
 - Whether Today's own glance should also start respecting the same
   per-calendar visibility toggles once they exist, or stay showing every
   calendar regardless (the glance and the tab could reasonably diverge: a
@@ -66,9 +77,10 @@ A real `Destination::Calendar` view — currently still the generic
 
 ## Suggested slicing
 
-Land Day/Week first (the two most task-adjacent views — "what do I have
-today/this week" is the actual job the calendar glance already serves, just
-expanded), then Month, then Year, then the sidebar's visibility toggles. Each
-is independently shippable and testable against a real Apple Calendar
-account (no test-calendar fixture exists for EventKit — see Milestone 3's
-own exit-criteria note on this).
+Day/Week landed first (`e8e910c`) — the two most task-adjacent views, "what
+do I have today/this week" being the actual job the calendar glance already
+serves, just expanded. Sidebar visibility toggles also landed as part of
+that same commit (they were cheap once `platform::calendar_list` existed).
+Still open, in order: Month, then Year. Each is independently shippable and
+testable against a real Apple Calendar account (no test-calendar fixture
+exists for EventKit — see Milestone 3's own exit-criteria note on this).

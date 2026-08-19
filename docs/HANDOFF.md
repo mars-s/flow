@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `65ba255` — check `git status` before
+- Working tree is clean as of commit `e8e910c` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -258,11 +258,23 @@ rather than only a scroll-position quirk. **Worth root-causing properly**
 if it recurs — see that field's doc for the minimal-diff-splice follow-up
 already named there as the fix shape.
 
-**Not done yet, next up**: the actual Calendar tab (Day/Week/Month/Year,
-modeled on the user's Apple Calendar reference) — `platform::calendar_list`
-exists but nothing renders it yet, `Destination::Calendar` still shows the
-generic placeholder. See `wayfinder/tickets/eventkit-calendar-tab.md` for
-the tracked scope.
+**Added (`e8e910c`): the Calendar tab's Day/Week views** —
+`Destination::Calendar` is real now (`src/app/calendar.rs`), not the
+generic placeholder: a per-account calendar sidebar with color-coded
+visibility toggles, Day/Week switch, Today/‹/› navigation, and a quiet
+"No calendar connected → Open Settings" state matching Today's own
+hidden-until-connected principle. Keyboard-accessible from the start, not
+retrofitted. **Disclosed simplification**: an agenda-per-day layout (each
+day's events listed top-to-bottom), not Apple Calendar's pixel-accurate
+hour grid with time-of-day positioning and overlap resolution — see that
+commit's message for the full reasoning. A multi-day event files under its
+start date's column only.
+
+**Not done yet, next up**: Month and Year views, and whether calendar
+visibility toggles should persist across launches (currently don't — no
+settings-persistence infrastructure exists anywhere in this codebase yet).
+See `wayfinder/tickets/eventkit-calendar-tab.md` for the tracked scope and
+open questions.
 
 **Fixed (`64b0f36`, found via a PRD §11 acceptance-criteria audit): the
 compact row's own checkbox (and Space) could complete a parent with
