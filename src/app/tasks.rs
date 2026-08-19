@@ -2,12 +2,14 @@
 //! Someday), all backed by `crate::db::View` and sharing one row renderer.
 
 use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    Animation, AnimationExt, AnyElement, ClickEvent, Context, Entity, IntoElement, ParentElement,
-    SharedString, Styled, Window, div, ease_out_quint, prelude::*, px,
+    Animation, AnimationExt, AnyElement, ClickEvent, Context, Entity, IntoElement, ListAlignment,
+    ListState, ParentElement, SharedString, Styled, Window, div, ease_out_quint, list, prelude::*,
+    px,
 };
 
 use super::Flow;
@@ -134,6 +136,38 @@ impl Flow {
         crate::debug_log!("cache: invalidate {view:?}");
         self.tasks.invalidate(&view);
         self.completed_tasks.invalidate(&view);
+    }
+
+    /// Creates `view`'s virtualized-list state on first use, or tells GPUI
+    /// its item count changed on every later call — see the field doc on
+    /// `Flow::task_list_states` for the scroll-position tradeoff this
+    /// whole-range splice accepts.
+    fn sync_task_list_state(&mut self, view: View, tasks: &[Task]) {
+        match self.task_list_states.get(&view) {
+            Some(state) => state.splice(0..state.item_count(), tasks.len()),
+            None => {
+                self.task_list_states.insert(
+                    view,
+                    ListState::new(tasks.len(), ListAlignment::Top, px(600.0)),
+                );
+            }
+        }
+    }
+
+    /// Finds which flat (non-Upcoming) view currently shows `task_id` and
+    /// tells that view's `ListState` to remeasure just that one row — see
+    /// `render_task_view`'s expanded-row-signature comment for why this
+    /// gets called. A subtask, or a task in Upcoming (not virtualized),
+    /// simply has no entry in `last_tasks`/`task_list_states` and is a
+    /// harmless no-op here.
+    fn remeasure_task_row(&self, task_id: &str) {
+        for (view, tasks) in &self.last_tasks {
+            let Some(ix) = tasks.iter().position(|task| task.id == task_id) else { continue };
+            if let Some(state) = self.task_list_states.get(view) {
+                state.remeasure_items(ix..ix + 1);
+            }
+            return;
+        }
     }
 
     /// Reads a view's completed tasks, kicking off a background fetch on a
@@ -817,12 +851,45 @@ impl Flow {
                 }
             };
             SubtaskContext {
-                subtasks,
                 adding: self.adding_subtask,
                 input: self.subtask_input.clone(),
                 pending_confirm: self.pending_complete_confirm.as_deref() == Some(id.as_str()),
+                subtask_count: subtasks.len(),
+                subtasks,
             }
         });
+        // The expanded task's row is the one row in a virtualized flat
+        // view whose height isn't a fixed 40px — everything that can
+        // change it (which task is expanded, the schedule picker, the
+        // add-subtask row, the complete-with-subtasks confirm banner, and
+        // the subtask list's own length) is folded into one signature
+        // compared against last render. `gpui::ListState`'s own doc is
+        // explicit that a virtualized list needs telling when an item's
+        // height changes at a fixed index; `remeasure_items` (not
+        // `splice`) preserves scroll position, since this is a size
+        // change, not a membership one.
+        let expanded_signature = expanded.clone().map(|id| {
+            (
+                id,
+                schedule_picker_open,
+                scheduling,
+                self.adding_subtask,
+                self.pending_complete_confirm.clone(),
+                subtask_context.as_ref().map_or(0, |context| context.subtask_count),
+            )
+        });
+        if expanded_signature != self.last_expanded_signature {
+            for changed_id in [
+                self.last_expanded_signature.as_ref().map(|signature| signature.0.clone()),
+                expanded_signature.as_ref().map(|signature| signature.0.clone()),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                self.remeasure_task_row(&changed_id);
+            }
+            self.last_expanded_signature = expanded_signature;
+        }
         // Always fetched, not only once expanded — the collapsed row still
         // needs a count, and this is the same "resolve the whole collection
         // up front, render degrades on a miss" pattern `read_view` already
@@ -842,7 +909,27 @@ impl Flow {
         let tasks_query = self.read_view(view, cx);
         let tasks = match tasks_query {
             Query::Ready(tasks) => {
+                // Only resplice on an actual Arc identity change (a real
+                // refetch), not every render this Ready value happens to
+                // be read on — a bare `Arc::ptr_eq` miss against whatever
+                // was last stored is the cheapest correct check available,
+                // since `query.rs` hands back a fresh Arc per fetch.
+                let changed =
+                    self.last_tasks.get(&view).is_none_or(|prev| !Arc::ptr_eq(prev, &tasks));
                 self.last_tasks.insert(view, tasks.clone());
+                // `changed` alone isn't enough to gate this: `sidebar.rs`'s
+                // `inbox_count` reads this exact same query and updates
+                // `last_tasks` too (for the badge), independently of
+                // whether `render_task_view` has ever synced a ListState —
+                // sidebar renders first, so by the time this runs the Arc
+                // can already match with no ListState ever having been
+                // created. Missing-entry is therefore checked too, or the
+                // `list_state.expect(...)` below panics on first load.
+                if view != View::Upcoming
+                    && (changed || !self.task_list_states.contains_key(&view))
+                {
+                    self.sync_task_list_state(view, &tasks);
+                }
                 // The single source of truth for "is this row actually
                 // gone yet" — see `write_completed`'s comment on why it
                 // deliberately doesn't clear this itself. Once a fresh
@@ -868,6 +955,17 @@ impl Flow {
         // render would still carry an id the fresh fetch just confirmed
         // gone, for one extra frame.
         let completing_ids = self.completing_ids.clone();
+        // Upcoming isn't virtualized (see `task_list_states`'s field doc),
+        // so it has neither a list state nor a scrollbar to hand down.
+        let list_state = (view != View::Upcoming)
+            .then(|| self.task_list_states.get(&view).cloned())
+            .flatten();
+        let scrollbar_state = (view != View::Upcoming).then(|| {
+            self.task_list_scrollbars
+                .entry(view)
+                .or_insert_with(crate::ui::scrollbar::ScrollbarState::new)
+                .clone()
+        });
         match tasks {
             Some(tasks) => task_list(
                 view,
@@ -882,6 +980,8 @@ impl Flow {
                 schedule_input,
                 subtask_context,
                 selected,
+                list_state,
+                scrollbar_state,
                 theme,
                 cx,
             )
@@ -901,6 +1001,10 @@ struct SubtaskContext {
     adding: bool,
     input: Entity<ComposerInput>,
     pending_confirm: bool,
+    /// `subtasks.len()`, kept alongside it so `render_task_view` can fold
+    /// it into the expanded row's remeasure signature without cloning the
+    /// whole `Arc<Vec<Task>>` just to read a length.
+    subtask_count: usize,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -917,6 +1021,8 @@ fn task_list(
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
     selected: HashSet<String>,
+    list_state: Option<ListState>,
+    scrollbar_state: Option<Rc<crate::ui::scrollbar::ScrollbarState>>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -932,56 +1038,48 @@ fn task_list(
         .size_full()
         .flex()
         .flex_col()
+        .when(selected_count >= 2, |list| {
+            list.child(
+                div()
+                    .flex_none()
+                    .px(px(24.0))
+                    .pt(px(40.0))
+                    .child(bulk_action_bar(selected_count, theme, cx)),
+            )
+        })
         .child(
-            div()
-                .id("task-list-open")
-                .flex_1()
-                .min_h(px(0.0))
-                .overflow_y_scroll()
-                .flex()
-                .flex_col()
-                .px(px(24.0))
-                .pt(px(40.0))
-                .pb(px(20.0))
-                .gap(px(1.0))
-                .when(selected_count >= 2, |list| {
-                    list.child(bulk_action_bar(selected_count, theme, cx))
-                })
-                .map(|list| {
-                    // PRD §6.3: "Upcoming groups active tasks by local date
-                    // from tomorrow onward" — every other view stays the
-                    // flat list it's always been.
-                    if view == View::Upcoming {
-                        list.children(group_by_scheduled_date(&tasks).into_iter().map(
-                            |(date, group)| {
-                                render_upcoming_section(
-                                    date,
-                                    group,
-                                    view,
-                                    &expanded,
-                                    &selected,
-                                    &completing_ids,
-                                    schedule_picker_open,
-                                    scheduling,
-                                    note_input.clone(),
-                                    schedule_input.clone(),
-                                    subtask_context.clone(),
-                                    theme,
-                                    cx,
-                                )
-                            },
-                        ))
-                    } else {
-                        list.children(tasks.iter().cloned().map(|task| {
-                            let is_expanded = expanded.as_deref() == Some(task.id.as_str());
-                            let is_selected = selected.contains(&task.id);
-                            let is_completing = completing_ids.contains(&task.id);
-                            render_task_row(
-                                task,
+            // PRD §6.3: "Upcoming groups active tasks by local date from
+            // tomorrow onward" — every other view stays the flat list it's
+            // always been, now virtualized via GPUI's own `list()`
+            // (`Flow::task_list_states`'s field doc has the full reasoning
+            // and its one known limitation). Upcoming's date-grouped
+            // sections don't fit `list()`'s flat item-index model without
+            // materially more work, so it keeps the plain scrollable
+            // `.children()` render it's always had.
+            if view == View::Upcoming {
+                div()
+                    .id("task-list-open")
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .overflow_y_scroll()
+                    .flex()
+                    .flex_col()
+                    .px(px(24.0))
+                    // Same reasoning as the flat-list branch's own
+                    // conditional pt: avoid doubling the top inset above
+                    // the pinned bulk bar when it's shown.
+                    .when(selected_count < 2, |list| list.pt(px(40.0)))
+                    .pb(px(20.0))
+                    .gap(px(1.0))
+                    .children(group_by_scheduled_date(&tasks).into_iter().map(
+                        |(date, group)| {
+                            render_upcoming_section(
+                                date,
+                                group,
                                 view,
-                                is_expanded,
-                                is_selected,
-                                is_completing,
+                                &expanded,
+                                &selected,
+                                &completing_ids,
                                 schedule_picker_open,
                                 scheduling,
                                 note_input.clone(),
@@ -990,9 +1088,66 @@ fn task_list(
                                 theme,
                                 cx,
                             )
-                        }))
-                    }
-                }),
+                        },
+                    ))
+                    .into_any_element()
+            } else {
+                let list_state = list_state
+                    .expect("a non-Upcoming view always has a synced ListState by the time task_list is reached — render_task_view only skips syncing it for Upcoming");
+                let entity = cx.entity();
+                // Cloned rather than moved: `note_input`/`schedule_input`/
+                // `subtask_context`/`expanded` are all still needed below
+                // for `completed_section`, which this closure — built once
+                // but called on every visible row — must not consume.
+                let list_note_input = note_input.clone();
+                let list_schedule_input = schedule_input.clone();
+                let list_subtask_context = subtask_context.clone();
+                let list_expanded = expanded.clone();
+                div()
+                    .id("task-list-open")
+                    .relative()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .child(
+                        list(list_state.clone(), move |ix, _window, cx| {
+                            let task = tasks[ix].clone();
+                            let is_expanded = list_expanded.as_deref() == Some(task.id.as_str());
+                            let is_selected = selected.contains(&task.id);
+                            let is_completing = completing_ids.contains(&task.id);
+                            entity.update(cx, |_flow, cx| {
+                                render_task_row(
+                                    task,
+                                    view,
+                                    is_expanded,
+                                    is_selected,
+                                    is_completing,
+                                    schedule_picker_open,
+                                    scheduling,
+                                    list_note_input.clone(),
+                                    list_schedule_input.clone(),
+                                    list_subtask_context.clone(),
+                                    theme,
+                                    cx,
+                                )
+                            })
+                        })
+                        .px(px(24.0))
+                        // The 40px top inset belongs to whichever element is
+                        // visually first in this region — the pinned bulk
+                        // bar (which carries its own pt(40) above) when 2+
+                        // are selected, the list itself otherwise. Applying
+                        // both unconditionally would double the gap above
+                        // the first row whenever the bulk bar shows.
+                        .when(selected_count < 2, |list| list.pt(px(40.0)))
+                        .pb(px(20.0))
+                        .w_full()
+                        .h_full(),
+                    )
+                    .when_some(scrollbar_state, |el, scrollbar_state| {
+                        el.child(crate::ui::scrollbar::vertical(&list_state, &scrollbar_state))
+                    })
+                    .into_any_element()
+            },
         )
         .when(has_completed, |list| {
             list.child(

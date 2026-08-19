@@ -8,9 +8,10 @@
 
 use std::array;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui::{AnyElement, App, Context, Entity, FocusHandle, Window, div, prelude::*};
+use gpui::{AnyElement, App, Context, Entity, FocusHandle, ListState, Window, div, prelude::*};
 
 use crate::db::{Bucket, Db, Task, View};
 use crate::input::{ComposerEvent, ComposerInput};
@@ -74,6 +75,33 @@ pub struct Flow {
     /// Same stale-while-revalidate fallback as `last_tasks`, for
     /// `completed_tasks`.
     last_completed: HashMap<View, Arc<Vec<Task>>>,
+    /// One virtualized-list state per flat (non-Upcoming) view — GPUI's
+    /// own `list()`/`ListState`, the primitive `CLAUDE.md`'s performance
+    /// section names ("Long collections are virtualized with `list()`"),
+    /// proven to bound render cost regardless of item count in
+    /// `ui::virtualized_list`'s tests. Created lazily and re-spliced
+    /// (`app/tasks.rs::sync_task_list_state`) whenever `last_tasks`' Arc
+    /// for that view changes identity — a real refetch, not the same
+    /// stale snapshot redrawn across renders. **Known simplification**:
+    /// the resplice always replaces the whole range rather than diffing
+    /// old against new, so any data change (not just an unrelated one
+    /// elsewhere) resets scroll position to the top — acceptable for now
+    /// since it only fires on an actual mutation, not on every render;
+    /// a minimal-diff splice is the natural follow-up if that's felt in
+    /// practice. Upcoming isn't covered — its date-grouped sections don't
+    /// fit `list()`'s flat item-index model without materially more work.
+    task_list_states: HashMap<View, ListState>,
+    /// The overlay scrollbar paired with each view's `task_list_states`
+    /// entry — `ui::scrollbar` already had a `Scrollable` impl for
+    /// `ListState` built and ready, just never used until now.
+    task_list_scrollbars: HashMap<View, Rc<crate::ui::scrollbar::ScrollbarState>>,
+    /// What `render_task_view` last saw for the expanded task's row —
+    /// `(id, schedule_picker_open, scheduling, adding_subtask,
+    /// pending_complete_confirm, subtask_count)`. Compared against each
+    /// render so `remeasure_task_row` runs only on an actual change, not
+    /// every frame — see `render_task_view`'s own comment for why the
+    /// expanded row specifically needs this at all.
+    last_expanded_signature: Option<(String, bool, bool, bool, Option<String>, usize)>,
     /// Same stale-while-revalidate fallback as `last_tasks`, keyed by
     /// parent task id — without it, ticking a subtask flickers its own
     /// count ("Subtasks (1/3)" → "Subtasks" → back) and its indented list
@@ -252,6 +280,9 @@ impl Flow {
                 db,
                 tasks: QueryCache::new(8),
                 last_tasks: HashMap::new(),
+                task_list_states: HashMap::new(),
+                task_list_scrollbars: HashMap::new(),
+                last_expanded_signature: None,
                 last_completed: HashMap::new(),
                 last_subtasks: HashMap::new(),
                 capturing: false,
