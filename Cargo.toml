@@ -127,6 +127,22 @@ objc2-user-notifications = { version = "0.3", default-features = false, features
     "UNUserNotificationCenter",
 ] }
 objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "objc2-core-graphics"] }
+# PRD §6.5: the calendar glance now reads from macOS's own Calendar app
+# (EventKit) rather than a Google OAuth connection — Apple Calendar already
+# aggregates whatever accounts the user has configured (iCloud, Google,
+# Exchange, ...), so it's a strict superset for a local-first, no-backend
+# app, at the cost of being macOS-only (matches wry/WKWebView's own
+# macOS-only status in this same target block).
+objc2-event-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "block2",
+    "EKCalendar",
+    "EKEvent",
+    "EKEventStore",
+    "EKObject",
+    "EKSource",
+    "EKTypes",
+] }
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]

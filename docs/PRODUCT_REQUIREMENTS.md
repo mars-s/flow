@@ -228,20 +228,37 @@ Parsing behavior:
 
 ### 6.5 Calendar connection and glance
 
-- v1 supports one Google Calendar connection using read-only OAuth scope.
-- The connection screen clearly names the read-only access and permits
-  disconnecting, which revokes locally stored credentials and deletes cached
-  events.
-- Sync only a rolling window: 30 days before today to 90 days after today;
-  refresh after successful connection, on explicit refresh, on app focus after
-  15 minutes, and at most once every five minutes in the background.
-- Cache event ID, calendar ID, title, start/end, all-day status, and display
-  color. Do not fetch attendees, descriptions, conferencing links, or location
-  in v1.
-- Calendar errors never block task CRUD. A failure replaces the card with a
-  quiet “Calendar unavailable · Retry” state.
-- The app must show the source calendar color and distinguish all-day and timed
-  events. Tapping an event opens the provider’s event URL when available.
+**Revised 2026-08-19** (explicit user decision, superseding this section's
+original Google Calendar OAuth design — see Milestone 3's note for the full
+reasoning): v1 reads the local macOS Calendar app via EventKit instead of a
+Google OAuth connection.
+
+- v1 requests macOS's own EventKit calendar permission (read-only —
+  `EKEventStore.requestFullAccessToEvents`, never a write scope). This is a
+  system permission grant, not a per-provider OAuth flow: whatever calendars
+  the user already has configured in Apple Calendar (iCloud, Google,
+  Exchange, subscribed) become visible in Flow simultaneously, each with its
+  own on/off toggle, matching Apple Calendar's own sidebar model.
+- The connection lives in Settings: a clear read-only disclosure, a
+  "Connect Calendar" action that triggers the system permission prompt, and
+  a way to reach macOS's own System Settings → Privacy & Security →
+  Calendars pane to revoke it (Flow cannot revoke a system permission grant
+  programmatically — only macOS can).
+- Until permission is granted, the Today calendar-glance card is hidden
+  entirely rather than showing an empty or disconnected state — nothing to
+  read is more honest than a card implying there's a feature to configure.
+- No sync window, no local cache, no background refresh, and no rolling
+  30/90-day sync policy: EventKit is already a live local read of a
+  synchronous system store, so Flow queries it directly for whatever range
+  a view (Today, or the Calendar tab's Day/Week/Month/Year) is currently
+  showing, same as Apple Calendar itself does.
+- Show the source calendar's own color and distinguish all-day and timed
+  events, per calendar (`EKCalendar.color`, `EKEvent.isAllDay`). No
+  event-URL tap-through — EventKit's local events have no equivalent of a
+  provider's web event URL.
+- A permission failure or later revocation never blocks task CRUD — same
+  principle as the original OAuth design, just a different failure surface
+  (EventKit denies the query instead of a network call failing).
 
 ## 7. Interaction and motion requirements
 
@@ -281,6 +298,10 @@ tasks
 calendar_connections
   id, user_id, provider, encrypted_refresh_token, scopes,
   calendar_account_email?, connected_at, last_sync_at?, last_error?
+  # Not used by v1's EventKit design (§6.5, revised 2026-08-19): EventKit is
+  # queried live with no local cache or stored credential, so these two
+  # tables have nothing to populate right now. Kept in the schema as the
+  # shape a future non-macOS or OAuth-based provider would need.
 
 calendar_events
   id, connection_id, provider_event_id, calendar_id, title,
@@ -375,8 +396,11 @@ microservice in v1.
 
 - Treat task titles and calendar event titles as private data in UI, logs, and
   telemetry. No title or event value may be sent to error reporting by default.
-- Use Google’s minimum read-only calendar scope. Encrypt refresh tokens at rest
-  with a deployment-managed key and never return them to the client.
+- Use EventKit's read-only access level (`requestFullAccessToEvents`, never a
+  write scope). There is no refresh token to encrypt or store — see §6.5's
+  2026-08-19 revision; this bullet's original Google-OAuth wording is kept
+  below as a note for whenever a non-macOS or multi-account provider is
+  reconsidered, not as current v1 scope.
 - Authenticate every backend function; authorize every row by `user_id`.
 - Rate-limit calendar refresh, validate all parsed values server-side, and
   reject malformed dates and parent relationships.
@@ -407,11 +431,18 @@ microservice in v1.
 
 ### Calendar
 
-- A connected Google calendar’s events appear in Today and Upcoming within the
-  rolling sync window, ordered correctly and without blocking task interaction.
-- Revoking/disconnecting removes cached events and tokens from the active
-  installation.
-- A provider failure is recoverable from the UI and does not expose credentials.
+**Revised 2026-08-19 to match §6.5's EventKit design:**
+
+- Once EventKit permission is granted, today's events appear in the Today
+  glance and the Calendar tab shows Day/Week/Month/Year views of live
+  EventKit data, ordered correctly and without blocking task interaction.
+- Revoking calendar permission (via macOS System Settings) is reflected the
+  next time Flow queries EventKit — no stale cached events or credentials
+  persist locally, since v1 keeps no local cache at all (§6.5).
+- An EventKit permission denial or query failure is recoverable from the UI
+  (Today's glance stays hidden; the Calendar tab shows a quiet
+  "unavailable · Open Settings" state) and never exposes anything
+  credential-shaped, since there are no credentials to expose.
 
 ### Platform
 
@@ -452,12 +483,28 @@ rows for what sync needs to reconcile.
 Exit: two desktop instances for the same account converge after a mutation;
 the app remains useful when the sync endpoint is temporarily unavailable.
 
-### Milestone 3 — Google calendar glance
+### Milestone 3 — Calendar glance and Calendar tab
 
-Add OAuth connection, encrypted credentials, rolling event sync, event cache,
-and failure/disconnect states. Keep write scopes out.
+**Revised 2026-08-19**: originally scoped as Google OAuth; the user
+redirected this to macOS EventKit instead — see §6.5 for the full revised
+requirements. Rationale: Flow is local-first and explicitly avoids writing
+backend code (the same reasoning that picked Turso over Convex); EventKit
+needs no server, no encrypted-token storage, no OAuth consent screen, and
+transparently aggregates every calendar account already configured in Apple
+Calendar (which itself supports Google, iCloud, Exchange, and more) instead
+of Flow re-implementing a connection per provider.
 
-Exit: Calendar acceptance criteria pass against a test calendar.
+Add the EventKit permission request (Settings), the Today glance's
+hide-until-connected gate, and a real Calendar tab — Day/Week/Month/Year
+views reading live EventKit data, modeled on Apple Calendar's own layout
+(user-provided reference: a left calendar-list sidebar with per-calendar
+color toggles, a top Day/Week/Month/Year switch, and a time-gridded main
+view for Day/Week).
+
+Exit: Calendar acceptance criteria pass against the developer's real Apple
+Calendar data (no test-calendar fixture needed — EventKit has no sandboxed
+equivalent of a Google test account, so this milestone's manual verification
+is against a real account instead).
 
 ### Milestone 4 — k3s deployment
 

@@ -36,5 +36,14 @@
 	<true/>
 	<key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <!-- EventKit calendar glance (PRD §6.5): both keys are required — macOS
+         14+'s full-access API (EKAuthorizationStatus.fullAccess) reads the
+         Full key, while EKEventStore falls back to the legacy Write key on
+         13.x, Flow's own LSMinimumSystemVersion floor. Without both, calling
+         requestFullAccessToEvents on 13.x crashes instead of prompting. -->
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Flow shows your calendar events alongside your tasks. Access is read-only — Flow never creates, edits, or deletes anything in your calendar.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Flow shows your calendar events alongside your tasks. Access is read-only — Flow never creates, edits, or deletes anything in your calendar.</string>
 </dict>
 </plist>
