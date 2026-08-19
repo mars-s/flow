@@ -26,8 +26,11 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `609b8d5` — check `git status` before
+- Working tree is clean as of commit `d33f22e` — check `git status` before
   assuming that's still true.
+- A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
+  of 2026-08-19, continuing this session's work autonomously. Auto-expires
+  after 7 days.
 - No `/loop` or other background job is currently running.
 
 ## What's built (Milestone 0 — done)
@@ -110,9 +113,12 @@ Capture (with live NLP-parse highlighting), Inbox's inline Process action
 pill, delete), Cmd+click multi-select with a bulk-action bar, one-level
 subtasks (add/complete/the "complete parent and all subtasks?" confirm),
 completion collapse animation + Undo toast, deletion Undo toast, a "Clear"
-button on the expanded Completed section, and a hidden dev inspector
+button on the expanded Completed section, a hidden dev inspector
 (Cmd-Option-I, debug builds only — GPUI's own `Inspector`/
-`DivInspectorState`, no menu item, same convention as Zed's).
+`DivInspectorState`, no menu item, same convention as Zed's), and
+Capture's failed-save handling (`d33f22e`, PRD §6.1: restores the typed
+title and shows an inline error + Retry instead of silently discarding it
+on a write failure).
 
 **Known, deliberate scope cuts** (not bugs):
 - The compact task row shows no subtask progress — only fetched once a
