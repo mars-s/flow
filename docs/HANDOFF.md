@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `d33f22e` — check `git status` before
+- Working tree is clean as of commit `9810093` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -118,7 +118,22 @@ button on the expanded Completed section, a hidden dev inspector
 `DivInspectorState`, no menu item, same convention as Zed's), and
 Capture's failed-save handling (`d33f22e`, PRD §6.1: restores the typed
 title and shows an inline error + Retry instead of silently discarding it
-on a write failure).
+on a write failure), and an animated Tasks/Calendar mode pill.
+
+**Fixed (`9810093`, user-reported): the completion checkbox's flicker.**
+Two real, separate causes, both now fixed — see that commit's message for
+the full mechanics: (1) `completing_ids` was cleared as soon as the local
+180ms collapse animation finished, not when the DB write actually landed,
+so the row briefly re-rendered as a normal unchecked row mid-flight; (2)
+`render_task_view` showed a full loading skeleton on every cache
+invalidation, which every task mutation triggers, so any tick/delete/
+schedule blanked the whole list for a frame. Flow now keeps
+`last_tasks`/`last_completed` per view and draws that instead of a
+skeleton whenever a fresh value isn't ready yet — the skeleton is reserved
+for a view's genuine first load. **Worth a direct re-check** the next time
+someone's watching the app: this was fixed once already (motion pass round
+1) and still had a real defect, so don't assume it's fully clean until
+someone's actually ticked a task and watched it.
 
 **Known, deliberate scope cuts** (not bugs):
 - The compact task row shows no subtask progress — only fetched once a
