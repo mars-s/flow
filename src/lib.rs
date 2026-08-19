@@ -26,6 +26,8 @@ mod assets;
 mod browser;
 mod db;
 mod debug_log;
+#[cfg(target_os = "macos")]
+mod eventkit;
 mod input;
 mod md;
 mod parse;

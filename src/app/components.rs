@@ -4,9 +4,10 @@
 //! "coming soon" body. Kept as its own module so Milestone 1 can grow real
 //! per-destination views without churning `render.rs`.
 
-use gpui::{AnyElement, Div, Hsla, IntoElement, ParentElement, Styled, div, hsla, px};
+use gpui::{AnyElement, Div, Hsla, IntoElement, ParentElement, Rgba, Styled, div, prelude::*, px};
 
 use super::Destination;
+use crate::platform::CalendarEvent;
 use crate::theme::Theme;
 
 /// Title + "coming soon" placeholder body for a not-yet-built destination.
@@ -45,40 +46,21 @@ pub(super) fn placeholder_pane(theme: Theme, destination: Destination) -> Div {
         )
 }
 
-/// One event on the fixture-backed calendar glance below.
-struct GlanceEvent {
-    time: &'static str,
-    title: &'static str,
-    /// Stands in for a real per-calendar color (`calendar_events.color`,
-    /// PRD §8) until Milestone 3 wires up an actual Google Calendar
-    /// connection. Deliberately not a `theme` token: per
-    /// `DESIGN_DIRECTION.md`'s "Calendar colors remain calendar colors,
-    /// never Flow status colors," an event's color is calendar data, not
-    /// app state, so it never comes from the semantic palette.
-    color: Hsla,
-}
-
-/// Milestone 1's PRD §12 exit scope: "a small fixture-backed calendar-
-/// glance component only to prove layout" — real Google Calendar data is
-/// Milestone 3. Scoped to Today only, matching §6.3's literal text ("A
-/// compact calendar-glance card precedes the tasks" appears in Today's own
-/// paragraph, not Upcoming's or any other view's).
+/// Today's calendar glance (PRD §6.3, §6.5 revised 2026-08-19). Only ever
+/// called once `calendar_auth == Granted` — see `tasks.rs`'s call site —
+/// so there's no "not connected" state to render here; that state lives in
+/// the card simply not appearing (PRD §6.5: "the Today calendar-glance
+/// card is hidden entirely rather than showing an empty or disconnected
+/// state").
 ///
-/// This intentionally skips the connected/loading/error states
-/// `DESIGN_DIRECTION.md`'s required-states table lists for the calendar
-/// rail — there is no real "is a calendar connected" concept yet to be in
-/// any of those states, so showing the populated fixture unconditionally
-/// is what actually proves the layout; a fake "not connected" empty state
-/// would need to be swapped for a real one anyway once Milestone 3 lands.
-pub(super) fn calendar_glance(theme: Theme) -> AnyElement {
-    // The same three example events from `DESIGN_DIRECTION.md`'s own
-    // calendar-rail mockup, reused rather than invented, so the fixture
-    // matches the approved visual reference instead of drifting from it.
-    let events = [
-        GlanceEvent { time: "8:00 AM", title: "Laundry", color: hsla(38.0 / 360.0, 0.75, 0.62, 1.0) },
-        GlanceEvent { time: "10:00 AM", title: "Research", color: hsla(200.0 / 360.0, 0.55, 0.60, 1.0) },
-        GlanceEvent { time: "3:30 PM", title: "Design sync", color: hsla(280.0 / 360.0, 0.45, 0.68, 1.0) },
-    ];
+/// `events` is `None` while the first fetch for this Today mount is still
+/// in flight (`Flow::refresh_today_calendar_events`) — shows just the date
+/// header rather than a loading skeleton, since a calendar with genuinely
+/// zero events today looks identical and this is a small, low-stakes
+/// glance rather than a primary content area.
+pub(super) fn calendar_glance(theme: Theme, events: Option<&[CalendarEvent]>) -> AnyElement {
+    let mut events: Vec<&CalendarEvent> = events.unwrap_or(&[]).iter().collect();
+    events.sort_by_key(|event| (event.all_day, event.start));
 
     div()
         .flex_none()
@@ -99,19 +81,36 @@ pub(super) fn calendar_glance(theme: Theme) -> AnyElement {
                 // in the app, rather than a second convention.
                 .child(chrono::Local::now().format("%A, %b %-d").to_string()),
         )
+        .when(events.is_empty(), |card| {
+            card.child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(theme.text_ghost)
+                    .child("No events today"),
+            )
+        })
         .children(events.into_iter().map(|event| {
+            // Never a `theme` token: per `DESIGN_DIRECTION.md`'s "Calendar
+            // colors remain calendar colors, never Flow status colors,"
+            // an event's color is calendar data, not app state.
+            let (r, g, b, a) = event.color;
+            let color: Hsla = Rgba { r, g, b, a }.into();
             div()
                 .flex()
                 .items_center()
                 .gap(px(8.0))
-                .child(div().flex_none().size(px(6.0)).rounded_full().bg(event.color))
+                .child(div().flex_none().size(px(6.0)).rounded_full().bg(color))
                 .child(
                     div()
                         .flex_none()
                         .w(px(64.0))
                         .text_size(px(12.0))
                         .text_color(theme.text_secondary)
-                        .child(event.time),
+                        .child(if event.all_day {
+                            "All day".to_string()
+                        } else {
+                            event.start.format("%-I:%M %p").to_string()
+                        }),
                 )
                 .child(
                     div()
@@ -120,7 +119,7 @@ pub(super) fn calendar_glance(theme: Theme) -> AnyElement {
                         .truncate()
                         .text_size(px(12.5))
                         .text_color(theme.text)
-                        .child(event.title),
+                        .child(event.title.clone()),
                 )
         }))
         .into_any_element()

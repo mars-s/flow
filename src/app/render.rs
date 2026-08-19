@@ -8,6 +8,7 @@ use gpui::{
 
 use super::Flow;
 use super::components::placeholder_pane;
+use super::sidebar::Destination;
 use crate::theme::Theme;
 use crate::ui::motion;
 
@@ -45,6 +46,7 @@ impl Flow {
         let destination = self.destination;
         let body = match destination.view() {
             Some(_) => self.render_task_view(destination, theme, cx),
+            None if destination == Destination::Settings => self.render_settings(cx),
             None => placeholder_pane(theme, destination).into_any_element(),
         };
         div()

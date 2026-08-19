@@ -1098,6 +1098,8 @@ impl Flow {
         let confirm_cancel_focus = self.confirm_cancel_focus.clone();
         let confirm_yes_focus = self.confirm_yes_focus.clone();
         let add_subtask_focus = self.add_subtask_focus.clone();
+        let calendar_auth = self.calendar_auth;
+        let today_calendar_events = self.today_calendar_events.clone();
         match tasks {
             Some(tasks) => task_list(
                 view,
@@ -1125,6 +1127,8 @@ impl Flow {
                 confirm_cancel_focus,
                 confirm_yes_focus,
                 add_subtask_focus,
+                calendar_auth,
+                today_calendar_events,
                 theme,
                 cx,
             )
@@ -1180,6 +1184,8 @@ fn task_list(
     confirm_cancel_focus: FocusHandle,
     confirm_yes_focus: FocusHandle,
     add_subtask_focus: FocusHandle,
+    calendar_auth: crate::platform::CalendarAuth,
+    today_calendar_events: Option<Arc<Vec<crate::platform::CalendarEvent>>>,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1310,13 +1316,22 @@ fn task_list(
                             .when(selected_count < 2, |wrapper| wrapper.pt(px(40.0)))
                             .pb(px(20.0))
                             // PRD §6.3: "A compact calendar-glance card
-                            // precedes the tasks" in Today specifically —
-                            // fixture-backed per Milestone 1's exit scope
-                            // (§12), see `components::calendar_glance`'s
-                            // own doc for the full reasoning.
-                            .when(view == View::Today, |wrapper| {
-                                wrapper.child(super::components::calendar_glance(theme))
-                            })
+                            // precedes the tasks" in Today specifically.
+                            // PRD §6.5 (revised 2026-08-19): hidden
+                            // entirely until EventKit permission is
+                            // granted, rather than showing an empty or
+                            // "not connected" state — see
+                            // `components::calendar_glance`'s own doc.
+                            .when(
+                                view == View::Today
+                                    && calendar_auth == crate::platform::CalendarAuth::Granted,
+                                |wrapper| {
+                                    wrapper.child(super::components::calendar_glance(
+                                        theme,
+                                        today_calendar_events.as_deref().map(Vec::as_slice),
+                                    ))
+                                },
+                            )
                             .child(
                                 list(list_state.clone(), move |ix, _window, cx| {
                                     let task = tasks[ix].clone();

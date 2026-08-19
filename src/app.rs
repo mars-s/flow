@@ -278,6 +278,23 @@ pub struct Flow {
     /// immediately when the expanded card's checkbox is clicked on a task
     /// with at least one incomplete subtask.
     pending_complete_confirm: Option<String>,
+    /// PRD §6.5 (revised 2026-08-19: EventKit, not Google OAuth). Read at
+    /// startup and refreshed after Settings' "Connect Calendar" completes —
+    /// there's no EventKit change notification wired up yet (a `NSNotification`
+    /// observer, the natural follow-up), so a permission revoked from System
+    /// Settings while Flow is already running isn't noticed until relaunch.
+    calendar_auth: crate::platform::CalendarAuth,
+    /// Set to `true` while `Settings::connect_calendar` awaits the system
+    /// permission prompt, so the button can show a busy state instead of
+    /// being clickable twice.
+    calendar_connecting: bool,
+    /// Today's calendar-glance events (PRD §6.5/§6.3), fetched once per
+    /// Today-view mount rather than in `calendar_glance`'s own render path —
+    /// EventKit's query is synchronous system-framework I/O, so it belongs
+    /// behind the same `cx.background_executor().spawn` + `cx.notify()`
+    /// convention as every other Flow data fetch, not called fresh on every
+    /// frame `render_task_view` draws Today.
+    today_calendar_events: Option<Arc<Vec<crate::platform::CalendarEvent>>>,
 }
 
 /// What `render_undo_toast` (`app/tasks.rs`) shows and what `Flow::undo`
@@ -415,6 +432,9 @@ impl Flow {
                 adding_subtask: false,
                 subtask_input,
                 pending_complete_confirm: None,
+                calendar_auth: crate::platform::calendar_authorization_status(),
+                calendar_connecting: false,
+                today_calendar_events: None,
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
@@ -915,6 +935,64 @@ impl Flow {
         self.expanded_task_id = id;
     }
 
+    /// Settings' "Connect Calendar" button (PRD §6.5). Triggers the system
+    /// EventKit permission prompt; a no-op re-prompt if the user already
+    /// decided (granted or denied) — EventKit only ever prompts once, same
+    /// as `platform::calendar_request_access`'s own doc says.
+    pub(super) fn connect_calendar(&mut self, cx: &mut Context<Self>) {
+        if self.calendar_connecting {
+            return;
+        }
+        self.calendar_connecting = true;
+        cx.notify();
+        cx.spawn(async move |flow, cx| {
+            let status = crate::platform::calendar_request_access().await;
+            let _ = flow.update(cx, |flow, cx| {
+                flow.calendar_connecting = false;
+                flow.calendar_auth = status;
+                flow.today_calendar_events = None;
+                // Settings' own destination doesn't change here, so
+                // `set_destination`'s Today-arrival fetch never runs for
+                // this grant — fetch directly if Today is already open
+                // behind Settings (e.g. reopened from a previous session).
+                if flow.destination == Destination::Today {
+                    flow.refresh_today_calendar_events(cx);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Fetches today's events once per Today-view mount (`set_destination`'s
+    /// own call site) rather than from `calendar_glance`'s render path —
+    /// see `today_calendar_events`'s own field doc for why.
+    pub(super) fn refresh_today_calendar_events(&mut self, cx: &mut Context<Self>) {
+        if self.calendar_auth != crate::platform::CalendarAuth::Granted {
+            self.today_calendar_events = None;
+            return;
+        }
+        cx.spawn(async move |flow, cx| {
+            let events = cx
+                .background_executor()
+                .spawn(async move {
+                    let start = chrono::Local::now()
+                        .date_naive()
+                        .and_hms_opt(0, 0, 0)
+                        .and_then(|naive| naive.and_local_timezone(chrono::Local).single())
+                        .unwrap_or_else(chrono::Local::now);
+                    let end = start + chrono::Duration::days(1);
+                    crate::platform::calendar_events_between(start, end)
+                })
+                .await;
+            let _ = flow.update(cx, |flow, cx| {
+                flow.today_calendar_events = Some(Arc::new(events));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     /// Where the window should land keyboard focus on open, so arrow keys
     /// work in the sidebar immediately without an extra tab press.
     pub(crate) fn initial_focus(&self, _cx: &App) -> FocusHandle {
@@ -933,6 +1011,9 @@ impl Flow {
         crate::debug_log!("destination: {:?} -> {destination:?}", self.destination);
         self.destination = destination;
         window.set_window_title(&window_title(destination));
+        if destination == Destination::Today {
+            self.refresh_today_calendar_events(cx);
+        }
         cx.notify();
     }
 
@@ -955,7 +1036,8 @@ impl Flow {
              cached views (tasks/completed/last_tasks/last_completed): {}/{}/{}/{}\n\
              cached subtask parents: {}\n\
              virtualized list states/scrollbars: {}/{}\n\
-             keyboard focus handles (row/subtask): {}/{}",
+             keyboard focus handles (row/subtask): {}/{}\n\
+             calendar_auth: {:?} (connecting: {}, today events cached: {})",
             self.destination,
             self.capturing,
             self.capture_error,
@@ -995,6 +1077,9 @@ impl Flow {
             self.task_list_scrollbars.len(),
             self.row_focuses.len(),
             self.subtask_focuses.len(),
+            self.calendar_auth,
+            self.calendar_connecting,
+            self.today_calendar_events.is_some(),
         )
     }
 }

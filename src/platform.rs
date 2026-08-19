@@ -1,5 +1,149 @@
 use gpui::Window;
 
+/// Calendar auth state Flow's UI cares about (PRD §6.5: EventKit on macOS
+/// only — every other platform reports `Unavailable`, same shape as a
+/// permission that was asked for and denied, since there's no calendar
+/// backend wired up there yet).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CalendarAuth {
+    Unavailable,
+    NotDetermined,
+    Denied,
+    Granted,
+}
+
+/// One calendar event, already converted to Rust-native types regardless of
+/// platform — `app.rs`/`app/tasks.rs` never touch an Objective-C object.
+#[derive(Debug, Clone)]
+pub struct CalendarEvent {
+    pub id: String,
+    pub calendar_title: String,
+    pub title: String,
+    pub start: chrono::DateTime<chrono::Local>,
+    pub end: chrono::DateTime<chrono::Local>,
+    pub all_day: bool,
+    /// The source calendar's own color, straight sRGB with alpha, each
+    /// 0.0–1.0 — never a Flow theme token (`DESIGN_DIRECTION.md`: "Calendar
+    /// colors remain calendar colors, never Flow status colors").
+    pub color: (f32, f32, f32, f32),
+}
+
+/// One calendar the user can see and toggle — the Calendar tab's own
+/// sidebar list.
+#[derive(Debug, Clone)]
+pub struct CalendarInfo {
+    pub id: String,
+    pub title: String,
+    pub source_title: String,
+    pub color: (f32, f32, f32, f32),
+}
+
+/// Current calendar permission state without prompting. Safe to call at any
+/// time — it's a synchronous in-process query on macOS, not I/O, so this
+/// doesn't reopen the render-path-I/O question `CLAUDE.md` cares about.
+#[cfg(target_os = "macos")]
+pub fn calendar_authorization_status() -> CalendarAuth {
+    match crate::eventkit::authorization_status() {
+        crate::eventkit::AuthStatus::Granted => CalendarAuth::Granted,
+        crate::eventkit::AuthStatus::NotDetermined => CalendarAuth::NotDetermined,
+        crate::eventkit::AuthStatus::Denied => CalendarAuth::Denied,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn calendar_authorization_status() -> CalendarAuth {
+    CalendarAuth::Unavailable
+}
+
+/// Triggers the system permission prompt (Settings' "Connect Calendar"
+/// button). A one-shot user action, not a render path — see
+/// `eventkit::request_access`'s own doc for why bridging its completion
+/// handler into an `.await`-able future here is the documented
+/// `CLAUDE.md` carve-out, not a repeat of the render-path-I/O mistake.
+#[cfg(target_os = "macos")]
+pub async fn calendar_request_access() -> CalendarAuth {
+    match crate::eventkit::request_access().await {
+        crate::eventkit::AuthStatus::Granted => CalendarAuth::Granted,
+        crate::eventkit::AuthStatus::NotDetermined => CalendarAuth::NotDetermined,
+        crate::eventkit::AuthStatus::Denied => CalendarAuth::Denied,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn calendar_request_access() -> CalendarAuth {
+    CalendarAuth::Unavailable
+}
+
+/// All events in `[start, end)` across every visible calendar. Returns an
+/// empty `Vec` on anything short of a crash (no permission, a query
+/// failure, a non-macOS platform) — PRD §6.5: calendar failures never
+/// block task CRUD, and an empty glance is the correct degraded state.
+#[cfg(target_os = "macos")]
+pub fn calendar_events_between(
+    start: chrono::DateTime<chrono::Local>,
+    end: chrono::DateTime<chrono::Local>,
+) -> Vec<CalendarEvent> {
+    crate::eventkit::events_between(start, end)
+        .into_iter()
+        .map(|event| CalendarEvent {
+            id: event.id,
+            calendar_title: event.calendar_title,
+            title: event.title,
+            start: event.start,
+            end: event.end,
+            all_day: event.all_day,
+            color: event.color,
+        })
+        .collect()
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn calendar_events_between(
+    _start: chrono::DateTime<chrono::Local>,
+    _end: chrono::DateTime<chrono::Local>,
+) -> Vec<CalendarEvent> {
+    Vec::new()
+}
+
+/// Every calendar that supports events, for the Calendar tab's own sidebar.
+#[cfg(target_os = "macos")]
+pub fn calendar_list() -> Vec<CalendarInfo> {
+    crate::eventkit::list_calendars()
+        .into_iter()
+        .map(|calendar| CalendarInfo {
+            id: calendar.id,
+            title: calendar.title,
+            source_title: calendar.source_title,
+            color: calendar.color,
+        })
+        .collect()
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn calendar_list() -> Vec<CalendarInfo> {
+    Vec::new()
+}
+
+/// Deep-links to System Settings → Privacy & Security → Calendars — PRD
+/// §6.5: "Flow cannot revoke a system permission grant programmatically —
+/// only macOS can," so Settings' own denied-state button sends the user
+/// there instead of trying to flip the permission itself.
+#[cfg(target_os = "macos")]
+pub fn open_calendar_privacy_pane() {
+    use objc2_app_kit::NSWorkspace;
+    use objc2_foundation::{NSString, NSURL};
+
+    let url = NSURL::URLWithString(&NSString::from_str(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
+    ));
+    if let Some(url) = url {
+        NSWorkspace::sharedWorkspace().openURL(&url);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn open_calendar_privacy_pane() {}
+
 #[cfg(target_os = "macos")]
 pub fn show_about_panel() {
     use objc2::MainThreadMarker;
