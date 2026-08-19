@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `d8d1206` — check `git status` before
+- Working tree is clean as of commit `dea6184` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -125,6 +125,17 @@ state" inspector panel (`d8d1206` — `src/debug_log.rs`,
 `crate::debug_log!(...)`, `Flow::debug_snapshot()`; see the
 `.claude/skills/flow-debug` skill, gitignored like the other project-local
 skills, for how to use both).
+
+**Fixed (`dea6184`, found while adding the log above): a stuck-UI bug.**
+`write_completed`/`delete_task` silently swallowed a failed DB write with
+no log and no recovery. Writing the log line surfaced a real consequence
+in the completing=true path specifically: without a successful write,
+`completing_ids`' pruning (added a few fixes ago, see below) never gets
+the fresh `Ready` read it needs to clear the id — so a failed
+completing-write left a row permanently stuck showing as collapsed/
+checked, with no way out short of restarting the app. Both paths now log
+the failure; the completing one also explicitly clears `completing_ids`
+instead of waiting for a confirmation that would never arrive.
 
 **Fixed (`9810093`, user-reported): the completion checkbox's flicker.**
 Two real, separate causes, both now fixed — see that commit's message for
