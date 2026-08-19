@@ -524,7 +524,12 @@ impl Flow {
                 })
                 .await;
             if let Err(error) = &created {
-                crate::debug_log!("capture {original_title:?}: FAILED: {error:#}");
+                // PRD §10: never log a task's actual title — see
+                // `delete_task`'s identical fix for the full reasoning.
+                // No task id exists yet to log instead (creation is what
+                // just failed), so this line just records that *a*
+                // capture failed, not which one.
+                crate::debug_log!("capture: FAILED: {error:#}");
                 // PRD §6.1: "show a non-blocking error with Retry on
                 // failure, and never discard typed content." The field
                 // already self-cleared on submit (Composer-mode Enter), so
@@ -539,7 +544,7 @@ impl Flow {
                 });
                 return;
             }
-            crate::debug_log!("capture {original_title:?}: created");
+            crate::debug_log!("capture: created");
             let _ = flow.update(cx, |flow, cx| {
                 flow.capture_error = None;
                 for view in [View::Inbox, View::Today, View::Upcoming, View::Anytime] {
@@ -962,9 +967,14 @@ impl Flow {
             self.selected_task_ids.len(),
             self.completing_ids.len(),
             match &self.undo_toast {
+                // PRD §10: task titles are private, "in UI, logs, and
+                // telemetry" — the toast's own task id is enough to
+                // identify it here without also echoing its title into a
+                // panel whose whole purpose is being read (or
+                // screenshotted) by whoever's debugging.
                 Some(toast) => format!(
-                    "{:?} of {:?} ({:?})",
-                    toast.kind, toast.title, toast.origin_view
+                    "{:?} of {} ({:?})",
+                    toast.kind, toast.task_id, toast.origin_view
                 ),
                 None => "none".to_string(),
             },

@@ -654,7 +654,12 @@ impl Flow {
     /// exposed action. Soft-deletes via `Db::delete_task`, which every
     /// `list_view` query already filters out.
     fn delete_task(&mut self, id: String, title: String, origin_view: View, cx: &mut Context<Self>) {
-        crate::debug_log!("task {id} ({title:?}): delete requested");
+        // PRD §10: "Treat task titles... as private data in... logs" — the
+        // id alone is enough to find this event in the log, no reason to
+        // also write the task's actual content to a plain-text file on
+        // disk that this session's own `flow-debug` skill tells agents to
+        // read.
+        crate::debug_log!("task {id}: delete requested");
         let Some(db) = self.db.clone() else { return };
         self.set_expanded_task(None, cx);
         self.schedule_picker_open = false;
