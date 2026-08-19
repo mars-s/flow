@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `fe173a6` — check `git status` before
+- Working tree is clean as of commit `ff5529a` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -595,26 +595,38 @@ that default may already be overridden by a real secret I can't see), but
 those involve codesigning/notarization/artifact-naming I have no way to
 verify blind.
 
-**Active blocker, not just dormant dead code — found in the same sweep,
-worth fixing before the next real release attempt**: `scripts/release.ts`
-(12 references) and `scripts/bundle-linux.sh` (its entire `cargo build`
-line) both still bundle/codesign a `flow-daemon` binary that Milestone 0
-deleted from the Cargo workspace — `bundle-linux.sh` would fail
-immediately with a cargo "package not found" error, and `release.ts`'s
-daemon-locate/codesign/notarize steps would fail partway through a real
-release. This has caused zero visible problems all session because the
-only script actually exercised every night, `scripts/bundle.sh` (macOS
-debug bundling, what `dev.ts` calls), never references the daemon at all
-— confirmed clean via grep. **Not fixed here**: unlike the dead-code
-flags above, this needs surgery on a 691-line release script (codesigning,
-notarization, DMG mounting) I have no way to actually test — no Apple
-signing credentials visible in this environment, and this session's own
-constraint is text-only verification with no way to run a real release.
-Fixing it blind risks a release script that looks corrected but silently
-fails somewhere in the codesign/notarize chain, which is worse than the
-current honest "fails immediately and obviously." Flag it clearly instead
-so whoever next runs a release isn't surprised by a `flow-daemon` cargo
-error with no context for why.
+**Active blocker, not just dormant dead code — found in the same sweep**:
+`scripts/release.ts` (12 references) and `scripts/bundle-linux.sh` (its
+entire `cargo build` line) both still bundle/codesign a `flow-daemon`
+binary that Milestone 0 deleted from the Cargo workspace —
+`bundle-linux.sh` would fail immediately with a cargo "package not found"
+error, and `release.ts`'s daemon-locate/codesign/notarize steps would fail
+partway through a real release. This has caused zero visible problems all
+session because the only script actually exercised every night,
+`scripts/bundle.sh` (macOS debug bundling, what `dev.ts` calls), never
+references the daemon at all — confirmed clean via grep. **Still not
+fixed**: unlike the naming mismatches below (verified against the
+scripts' own documented contracts and fixed directly), this needs real
+surgery on the daemon-specific bundling logic itself with no way to
+actually test it. Fixing it blind risks a release script that looks
+corrected but silently fails somewhere in the codesign/notarize chain,
+worse than the current honest "fails immediately and obviously."
+
+**Fixed (`ff5529a`, three separate confirmed mismatches, found by reading
+`release.ts`/`bundle-linux.sh`'s own source rather than guessing): `.github/
+workflows/release.yml` was internally inconsistent with what its own
+scripts actually do.** `release.ts`'s own `--help` text documents
+`FLOW_SIGNING_IDENTITY`/`FLOW_ANALYTICS_ENDPOINT`/`FLOW_ANALYTICS_WEBSITE_ID`
+as what it reads, but the workflow exposed them as `WAKU_SIGNING_IDENTITY`/
+etc. — `release.ts` would never see a signing identity regardless of the
+underlying secret's actual value. `release.ts` hardcodes `appName = "Flow"`
+(outputs `Flow-<version>.dmg`/`.zip`) and `bundle-linux.sh` hardcodes
+`package="flow-*"`, but both `upload-artifact` glob patterns still looked
+for `Waku-*`/`waku-*`, which (with `if-no-files-found: error`) would
+hard-fail the moment build/sign actually succeeded. Fixed all three —
+left the secret *names* on the right-hand side of `secrets.WAKU_*`
+untouched (no visibility into GitHub's actual configured secret names)
+and left the daemon-build lines above alone, per the same reasoning.
 
 **A fourth dormant-dead-code find, same sweep**: `scripts/seed-mock-
 sessions.ts` (1019 lines) seeds synthetic `AgentSession`/`sessions`/
