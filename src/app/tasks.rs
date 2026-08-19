@@ -1011,6 +1011,8 @@ impl Flow {
         let completed_clear_focus = self.completed_clear_focus(view, cx);
         let detail_delete_focus = self.detail_delete_focus.clone();
         let schedule_pill_focus = self.schedule_pill_focus.clone();
+        let process_pill_focuses = self.process_pill_focuses.clone();
+        let process_clear_focus = self.process_clear_focus.clone();
         match tasks {
             Some(tasks) => task_list(
                 view,
@@ -1030,6 +1032,8 @@ impl Flow {
                 completed_clear_focus,
                 detail_delete_focus,
                 schedule_pill_focus,
+                process_pill_focuses,
+                process_clear_focus,
                 theme,
                 cx,
             )
@@ -1074,6 +1078,8 @@ fn task_list(
     completed_clear_focus: FocusHandle,
     detail_delete_focus: FocusHandle,
     schedule_pill_focus: FocusHandle,
+    process_pill_focuses: [FocusHandle; 3],
+    process_clear_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1138,6 +1144,8 @@ fn task_list(
                                 subtask_context.clone(),
                                 detail_delete_focus.clone(),
                                 schedule_pill_focus.clone(),
+                                process_pill_focuses.clone(),
+                                process_clear_focus.clone(),
                                 theme,
                                 cx,
                             )
@@ -1158,6 +1166,8 @@ fn task_list(
                 let list_expanded = expanded.clone();
                 let list_detail_delete_focus = detail_delete_focus.clone();
                 let list_schedule_pill_focus = schedule_pill_focus.clone();
+                let list_process_pill_focuses = process_pill_focuses.clone();
+                let list_process_clear_focus = process_clear_focus.clone();
                 div()
                     .id("task-list-open")
                     .relative()
@@ -1226,6 +1236,8 @@ fn task_list(
                                             focus,
                                             list_detail_delete_focus.clone(),
                                             list_schedule_pill_focus.clone(),
+                                            list_process_pill_focuses.clone(),
+                                            list_process_clear_focus.clone(),
                                             theme,
                                             cx,
                                         )
@@ -1266,6 +1278,8 @@ fn task_list(
                         completed_clear_focus,
                         detail_delete_focus,
                         schedule_pill_focus,
+                        process_pill_focuses,
+                        process_clear_focus,
                         theme,
                         cx,
                     )),
@@ -1311,6 +1325,8 @@ fn render_upcoming_section(
     subtask_context: Option<SubtaskContext>,
     detail_delete_focus: FocusHandle,
     schedule_pill_focus: FocusHandle,
+    process_pill_focuses: [FocusHandle; 3],
+    process_clear_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1355,6 +1371,8 @@ fn render_upcoming_section(
                 None,
                 detail_delete_focus.clone(),
                 schedule_pill_focus.clone(),
+                process_pill_focuses.clone(),
+                process_clear_focus.clone(),
                 theme,
                 cx,
             )
@@ -1379,6 +1397,8 @@ fn completed_section(
     completed_clear_focus: FocusHandle,
     detail_delete_focus: FocusHandle,
     schedule_pill_focus: FocusHandle,
+    process_pill_focuses: [FocusHandle; 3],
+    process_clear_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1418,6 +1438,8 @@ fn completed_section(
                             None,
                             detail_delete_focus.clone(),
                             schedule_pill_focus.clone(),
+                            process_pill_focuses.clone(),
+                            process_clear_focus.clone(),
                             theme,
                             cx,
                         )
@@ -1586,12 +1608,15 @@ fn render_task_row(
     // `docs/HANDOFF.md` for the full scope of what this first pass covers
     // and what's deliberately left for later.
     focus: Option<FocusHandle>,
-    // Bound to the expanded card's delete button and schedule pill, when
-    // this row happens to be the expanded one — see
-    // `Flow::detail_delete_focus`'s field doc for why one stable handle
-    // covers every task instead of a map.
+    // Bound to the expanded card's delete button, schedule pill, and
+    // (once the picker is open) its quick-pick pills, when this row
+    // happens to be the expanded one — see `Flow::detail_delete_focus`'s
+    // field doc for why one stable handle set covers every task instead
+    // of a map.
     detail_delete_focus: FocusHandle,
     schedule_pill_focus: FocusHandle,
+    process_pill_focuses: [FocusHandle; 3],
+    process_clear_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1615,6 +1640,8 @@ fn render_task_row(
             subtask_context,
             detail_delete_focus,
             schedule_pill_focus,
+            process_pill_focuses,
+            process_clear_focus,
             theme,
             cx,
         );
@@ -1806,6 +1833,8 @@ fn render_detail_card(
     subtask_context: Option<SubtaskContext>,
     detail_delete_focus: FocusHandle,
     schedule_pill_focus: FocusHandle,
+    process_pill_focuses: [FocusHandle; 3],
+    process_clear_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -2024,6 +2053,8 @@ fn render_detail_card(
                 task.scheduled_date.is_some(),
                 scheduling,
                 schedule_input,
+                process_pill_focuses,
+                process_clear_focus,
                 theme,
                 cx,
             ))
@@ -2213,6 +2244,8 @@ fn render_process_row(
     has_schedule: bool,
     scheduling: bool,
     schedule_input: Entity<ComposerInput>,
+    process_pill_focuses: [FocusHandle; 3],
+    process_clear_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -2227,10 +2260,18 @@ fn render_process_row(
                 .flex()
                 .items_center()
                 .gap(px(6.0))
-                .children(ProcessTarget::ALL.into_iter().map(|target| {
+                // `ProcessTarget::ALL`'s fixed order (Today, Anytime,
+                // Someday) matches `process_pill_focuses`'s field doc —
+                // zipping keeps that correspondence explicit at the use
+                // site instead of relying on array-index arithmetic.
+                .children(ProcessTarget::ALL.into_iter().zip(process_pill_focuses).map(
+                    |(target, focus)| {
                     let id = task_id.clone();
+                    let id_for_key = task_id.clone();
                     div()
                         .id(gpui::SharedString::from(format!("process-{task_id}-{}", target.label())))
+                        .track_focus(&focus)
+                        .tab_index(0)
                         .flex()
                         .items_center()
                         .gap(px(4.0))
@@ -2242,18 +2283,31 @@ fn render_process_row(
                         .text_color(theme.text_secondary)
                         .bg(theme.overlay)
                         .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
+                        .focus_visible(|style| style.border_1().border_color(theme.accent))
                         .on_click(cx.listener(move |flow, _, _, cx| {
                             flow.process_task(id.clone(), target, cx);
                             cx.stop_propagation();
+                        }))
+                        .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+                            if event.keystroke.modifiers.modified() {
+                                return;
+                            }
+                            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                flow.process_task(id_for_key.clone(), target, cx);
+                                cx.stop_propagation();
+                            }
                         }))
                         .child(crate::ui::icon(target.icon_path(), 12.0, theme.text_secondary))
                         .child(target.label())
                 }))
                 .when(has_schedule, |row| {
                     let id = task_id.clone();
+                    let id_for_key = task_id.clone();
                     row.child(
                         div()
                             .id(gpui::SharedString::from(format!("process-{task_id}-clear")))
+                            .track_focus(&process_clear_focus)
+                            .tab_index(0)
                             .flex()
                             .items_center()
                             .gap(px(4.0))
@@ -2265,9 +2319,19 @@ fn render_process_row(
                             .text_color(theme.text_secondary)
                             .bg(theme.overlay)
                             .hover(|el| el.bg(theme.overlay_strong).text_color(theme.text))
+                            .focus_visible(|style| style.border_1().border_color(theme.accent))
                             .on_click(cx.listener(move |flow, _, _, cx| {
                                 flow.clear_schedule(id.clone(), bucket, cx);
                                 cx.stop_propagation();
+                            }))
+                            .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+                                if event.keystroke.modifiers.modified() {
+                                    return;
+                                }
+                                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                    flow.clear_schedule(id_for_key.clone(), bucket, cx);
+                                    cx.stop_propagation();
+                                }
                             }))
                             .child(crate::ui::icon("icons/x.svg", 12.0, theme.text_secondary))
                             .child("Clear"),

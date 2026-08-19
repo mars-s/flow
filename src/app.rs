@@ -126,6 +126,16 @@ pub struct Flow {
     /// The expanded detail card's schedule pill — same single-stable-
     /// handle reasoning as `detail_delete_focus`.
     schedule_pill_focus: FocusHandle,
+    /// The open schedule picker's Today/Anytime/Someday quick-pick pills,
+    /// in `ProcessTarget::ALL`'s order — same single-stable-handle
+    /// reasoning as `schedule_pill_focus` (only one picker open at a
+    /// time), three named fields rather than a map since `ProcessTarget`
+    /// is a small fixed enum, not dynamic per-task data.
+    process_pill_focuses: [FocusHandle; 3],
+    /// The open schedule picker's "Clear" pill (only shown when the task
+    /// already has a schedule) — same reasoning, kept separate from
+    /// `process_pill_focuses` since it isn't a `ProcessTarget` variant.
+    process_clear_focus: FocusHandle,
     /// What `render_task_view` last saw for the expanded task's row —
     /// `(id, schedule_picker_open, scheduling, adding_subtask,
     /// pending_complete_confirm, subtask_count)`. Compared against each
@@ -309,6 +319,8 @@ impl Flow {
                 undo_toast_focus: cx.focus_handle(),
                 detail_delete_focus: cx.focus_handle(),
                 schedule_pill_focus: cx.focus_handle(),
+                process_pill_focuses: array::from_fn(|_| cx.focus_handle()),
+                process_clear_focus: cx.focus_handle(),
                 nav_focuses: array::from_fn(|_| cx.focus_handle()),
                 mode_tasks_focus: cx.focus_handle(),
                 mode_thumb: None,
