@@ -332,6 +332,8 @@ pub struct Flow {
     /// one Calendar tab is ever visible at a time.
     calendar_day_focus: FocusHandle,
     calendar_week_focus: FocusHandle,
+    calendar_month_focus: FocusHandle,
+    calendar_year_focus: FocusHandle,
     calendar_today_focus: FocusHandle,
     calendar_prev_focus: FocusHandle,
     calendar_next_focus: FocusHandle,
@@ -342,6 +344,8 @@ pub struct Flow {
 pub(super) enum CalendarViewMode {
     Day,
     Week,
+    Month,
+    Year,
 }
 
 /// What `render_undo_toast` (`app/tasks.rs`) shows and what `Flow::undo`
@@ -490,6 +494,8 @@ impl Flow {
                 calendar_row_focuses: HashMap::new(),
                 calendar_day_focus: cx.focus_handle(),
                 calendar_week_focus: cx.focus_handle(),
+                calendar_month_focus: cx.focus_handle(),
+                calendar_year_focus: cx.focus_handle(),
                 calendar_today_focus: cx.focus_handle(),
                 calendar_prev_focus: cx.focus_handle(),
                 calendar_next_focus: cx.focus_handle(),
@@ -1059,12 +1065,34 @@ impl Flow {
     /// (chrono's ISO-week default, not a separate convention invented for
     /// this).
     pub(super) fn calendar_visible_range(&self) -> (chrono::NaiveDate, chrono::NaiveDate) {
+        use chrono::Datelike;
         match self.calendar_view_mode {
             CalendarViewMode::Day => (self.calendar_cursor, self.calendar_cursor),
             CalendarViewMode::Week => {
                 let week = self.calendar_cursor.week(chrono::Weekday::Mon);
                 (week.first_day(), week.last_day())
             }
+            // The visible month expanded to the full Monday-start weeks
+            // shown at its edges, matching Apple Calendar's own month grid
+            // (the ticket's own stated requirement) rather than stopping
+            // mid-week at the 1st/last day.
+            CalendarViewMode::Month => {
+                let first_of_month = self.calendar_cursor.with_day(1).unwrap_or(self.calendar_cursor);
+                let last_of_month = first_of_month
+                    .checked_add_months(chrono::Months::new(1))
+                    .and_then(|next| next.pred_opt())
+                    .unwrap_or(first_of_month);
+                (
+                    first_of_month.week(chrono::Weekday::Mon).first_day(),
+                    last_of_month.week(chrono::Weekday::Mon).last_day(),
+                )
+            }
+            CalendarViewMode::Year => (
+                chrono::NaiveDate::from_ymd_opt(self.calendar_cursor.year(), 1, 1)
+                    .unwrap_or(self.calendar_cursor),
+                chrono::NaiveDate::from_ymd_opt(self.calendar_cursor.year(), 12, 31)
+                    .unwrap_or(self.calendar_cursor),
+            ),
         }
     }
 
@@ -1114,16 +1142,48 @@ impl Flow {
         cx.notify();
     }
 
-    /// The tab's ‹/Today/› controls. `delta_days` is in whole days for Day
-    /// mode; Week mode's own ‹/› pass ±7 regardless of where in the week
-    /// `calendar_cursor` currently sits, so a week-flip always lands on the
-    /// same weekday rather than drifting.
-    pub(super) fn navigate_calendar(&mut self, delta_days: i64, cx: &mut Context<Self>) {
-        self.calendar_cursor = if delta_days == 0 {
+    /// The tab's ‹/Today/› controls. `step` is `-1`/`0`/`1` (back/today/
+    /// forward) — the actual jump size depends on the current mode (a day,
+    /// a week, a month, or a year), decided here rather than by each
+    /// caller, so `calendar.rs`'s nav buttons don't need to know the
+    /// mode-to-jump-size mapping themselves.
+    pub(super) fn navigate_calendar(&mut self, step: i64, cx: &mut Context<Self>) {
+        self.calendar_cursor = if step == 0 {
             chrono::Local::now().date_naive()
         } else {
-            self.calendar_cursor + chrono::Duration::days(delta_days)
+            match self.calendar_view_mode {
+                CalendarViewMode::Day => self.calendar_cursor + chrono::Duration::days(step),
+                CalendarViewMode::Week => self.calendar_cursor + chrono::Duration::days(step * 7),
+                CalendarViewMode::Month => {
+                    let months = chrono::Months::new(1);
+                    if step > 0 {
+                        self.calendar_cursor.checked_add_months(months)
+                    } else {
+                        self.calendar_cursor.checked_sub_months(months)
+                    }
+                    .unwrap_or(self.calendar_cursor)
+                }
+                CalendarViewMode::Year => {
+                    let years = chrono::Months::new(12);
+                    if step > 0 {
+                        self.calendar_cursor.checked_add_months(years)
+                    } else {
+                        self.calendar_cursor.checked_sub_months(years)
+                    }
+                    .unwrap_or(self.calendar_cursor)
+                }
+            }
         };
+        self.refresh_calendar_tab(cx);
+        cx.notify();
+    }
+
+    /// The Year grid's click-to-drill-down: jumps straight to Month mode
+    /// for the clicked month, rather than making someone switch modes and
+    /// navigate month-by-month to get there.
+    pub(super) fn jump_to_month(&mut self, first_day: chrono::NaiveDate, cx: &mut Context<Self>) {
+        self.calendar_view_mode = CalendarViewMode::Month;
+        self.calendar_cursor = first_day;
         self.refresh_calendar_tab(cx);
         cx.notify();
     }
