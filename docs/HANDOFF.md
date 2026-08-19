@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `7e9987e` — check `git status` before
+- Working tree is clean as of commit `c5c91f9` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -277,13 +277,14 @@ re-introduce with the next unrelated change nearby.
       - Arrow-key navigation between rows — Tab order is currently the
         only way to move focus between tasks; no listbox-style arrow
         handling.
-      - **Found but not fixed, flagged as a separate broader item**: the
-        schedule/note/capture/subtask composer fields (`input.rs`) call
-        `track_focus` but never `.tab_index()`, so they may not be in the
-        Tab order at all — this is an `input.rs`-wide question (every
-        `ComposerInput` in the app), not something scoped to task rows,
-        and deserves its own look rather than a blind fix folded into
-        this pass.
+      **Fixed separately** (`c5c91f9`): every `ComposerInput` (Capture,
+      notes, the schedule field, subtask-add) now has `.tab_index(0)`
+      alongside its existing `track_focus`, one line in the shared
+      component covering all four fields at once. They were already
+      correctly auto-focused via explicit `window.focus(...)` calls when
+      their section opens — the actual gap was no way *back* into the
+      field via Tab once focus left it. No `.focus_visible()` added: a
+      text field's caret/selection already carries focused state visually.
       Not yet visually verified — this session has no screen-recording
       access; worth an actual Tab/Enter/Space walkthrough of a real task
       list before trusting the feel of it.
