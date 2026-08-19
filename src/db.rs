@@ -770,9 +770,12 @@ async fn restore_task(conn: &turso::Connection, id: String) -> Result<()> {
 }
 
 async fn create_subtask(conn: &turso::Connection, parent_id: String, title: String) -> Result<Task> {
+    // PRD §8: "A deleted or completed parent cannot accept a new open
+    // subtask" — both halves enforced here, not just the deleted one.
     let mut parent_rows = conn
         .query(
-            "SELECT bucket, parent_id FROM tasks WHERE id = ?1 AND deleted_at IS NULL",
+            "SELECT bucket, parent_id FROM tasks \
+             WHERE id = ?1 AND deleted_at IS NULL AND completed_at IS NULL",
             (parent_id.as_str(),),
         )
         .await
@@ -781,7 +784,7 @@ async fn create_subtask(conn: &turso::Connection, parent_id: String, title: Stri
         .next()
         .await
         .context("reading the parent task row")?
-        .ok_or_else(|| anyhow!("parent task not found"))?;
+        .ok_or_else(|| anyhow!("parent task not found, deleted, or completed"))?;
     let parent_bucket = Bucket::parse(&parent_row.get::<String>(0)?)?;
     if parent_row.get::<Option<String>>(1)?.is_some() {
         return Err(anyhow!(
@@ -1051,6 +1054,19 @@ mod tests {
 
         let grandchild = db.create_subtask(&child.id, "Pick a seat");
         assert!(grandchild.is_err(), "one-level ceiling should reject this");
+    }
+
+    #[test]
+    fn a_completed_parent_cannot_accept_a_new_subtask() {
+        let db = open_test_db();
+        let parent = db.create_task("Plan trip").expect("create");
+        db.set_completed(&parent.id, true).expect("complete parent");
+
+        let child = db.create_subtask(&parent.id, "Book flights");
+        assert!(
+            child.is_err(),
+            "a completed parent should reject a new open subtask (PRD §8)"
+        );
     }
 
     #[test]
