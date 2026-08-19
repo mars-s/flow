@@ -1013,6 +1013,8 @@ impl Flow {
         let schedule_pill_focus = self.schedule_pill_focus.clone();
         let process_pill_focuses = self.process_pill_focuses.clone();
         let process_clear_focus = self.process_clear_focus.clone();
+        let confirm_cancel_focus = self.confirm_cancel_focus.clone();
+        let confirm_yes_focus = self.confirm_yes_focus.clone();
         match tasks {
             Some(tasks) => task_list(
                 view,
@@ -1034,6 +1036,8 @@ impl Flow {
                 schedule_pill_focus,
                 process_pill_focuses,
                 process_clear_focus,
+                confirm_cancel_focus,
+                confirm_yes_focus,
                 theme,
                 cx,
             )
@@ -1080,6 +1084,8 @@ fn task_list(
     schedule_pill_focus: FocusHandle,
     process_pill_focuses: [FocusHandle; 3],
     process_clear_focus: FocusHandle,
+    confirm_cancel_focus: FocusHandle,
+    confirm_yes_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1146,6 +1152,8 @@ fn task_list(
                                 schedule_pill_focus.clone(),
                                 process_pill_focuses.clone(),
                                 process_clear_focus.clone(),
+                                confirm_cancel_focus.clone(),
+                                confirm_yes_focus.clone(),
                                 theme,
                                 cx,
                             )
@@ -1168,6 +1176,8 @@ fn task_list(
                 let list_schedule_pill_focus = schedule_pill_focus.clone();
                 let list_process_pill_focuses = process_pill_focuses.clone();
                 let list_process_clear_focus = process_clear_focus.clone();
+                let list_confirm_cancel_focus = confirm_cancel_focus.clone();
+                let list_confirm_yes_focus = confirm_yes_focus.clone();
                 div()
                     .id("task-list-open")
                     .relative()
@@ -1238,6 +1248,8 @@ fn task_list(
                                             list_schedule_pill_focus.clone(),
                                             list_process_pill_focuses.clone(),
                                             list_process_clear_focus.clone(),
+                                            list_confirm_cancel_focus.clone(),
+                                            list_confirm_yes_focus.clone(),
                                             theme,
                                             cx,
                                         )
@@ -1280,6 +1292,8 @@ fn task_list(
                         schedule_pill_focus,
                         process_pill_focuses,
                         process_clear_focus,
+                        confirm_cancel_focus,
+                        confirm_yes_focus,
                         theme,
                         cx,
                     )),
@@ -1327,6 +1341,8 @@ fn render_upcoming_section(
     schedule_pill_focus: FocusHandle,
     process_pill_focuses: [FocusHandle; 3],
     process_clear_focus: FocusHandle,
+    confirm_cancel_focus: FocusHandle,
+    confirm_yes_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1373,6 +1389,8 @@ fn render_upcoming_section(
                 schedule_pill_focus.clone(),
                 process_pill_focuses.clone(),
                 process_clear_focus.clone(),
+                confirm_cancel_focus.clone(),
+                confirm_yes_focus.clone(),
                 theme,
                 cx,
             )
@@ -1399,6 +1417,8 @@ fn completed_section(
     schedule_pill_focus: FocusHandle,
     process_pill_focuses: [FocusHandle; 3],
     process_clear_focus: FocusHandle,
+    confirm_cancel_focus: FocusHandle,
+    confirm_yes_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1440,6 +1460,8 @@ fn completed_section(
                             schedule_pill_focus.clone(),
                             process_pill_focuses.clone(),
                             process_clear_focus.clone(),
+                            confirm_cancel_focus.clone(),
+                            confirm_yes_focus.clone(),
                             theme,
                             cx,
                         )
@@ -1617,6 +1639,8 @@ fn render_task_row(
     schedule_pill_focus: FocusHandle,
     process_pill_focuses: [FocusHandle; 3],
     process_clear_focus: FocusHandle,
+    confirm_cancel_focus: FocusHandle,
+    confirm_yes_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1642,6 +1666,8 @@ fn render_task_row(
             schedule_pill_focus,
             process_pill_focuses,
             process_clear_focus,
+            confirm_cancel_focus,
+            confirm_yes_focus,
             theme,
             cx,
         );
@@ -1835,6 +1861,8 @@ fn render_detail_card(
     schedule_pill_focus: FocusHandle,
     process_pill_focuses: [FocusHandle; 3],
     process_clear_focus: FocusHandle,
+    confirm_cancel_focus: FocusHandle,
+    confirm_yes_focus: FocusHandle,
     theme: Theme,
     cx: &mut Context<Flow>,
 ) -> AnyElement {
@@ -1930,6 +1958,9 @@ fn render_detail_card(
             let id_for_confirm = task.id.clone();
             let title_for_confirm = task.title.clone();
             let confirm_subtask_ids = open_subtask_ids.clone();
+            let id_for_confirm_key = task.id.clone();
+            let title_for_confirm_key = task.title.clone();
+            let confirm_subtask_ids_key = open_subtask_ids.clone();
             card.child(
                 div()
                     .flex()
@@ -1954,6 +1985,8 @@ fn render_detail_card(
                             .child(
                                 div()
                                     .id("complete-confirm-cancel")
+                                    .track_focus(&confirm_cancel_focus)
+                                    .tab_index(0)
                                     .px(px(8.0))
                                     .py(px(3.0))
                                     .rounded(px(5.0))
@@ -1961,15 +1994,27 @@ fn render_detail_card(
                                     .text_size(px(11.5))
                                     .text_color(theme.text_secondary)
                                     .hover(|el| el.bg(theme.overlay_strong))
+                                    .focus_visible(|style| style.border_1().border_color(theme.accent))
                                     .on_click(cx.listener(move |flow, _, _, cx| {
                                         flow.cancel_complete_confirm(cx);
                                         cx.stop_propagation();
+                                    }))
+                                    .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+                                        if event.keystroke.modifiers.modified() {
+                                            return;
+                                        }
+                                        if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                            flow.cancel_complete_confirm(cx);
+                                            cx.stop_propagation();
+                                        }
                                     }))
                                     .child("Cancel"),
                             )
                             .child(
                                 div()
                                     .id("complete-confirm-yes")
+                                    .track_focus(&confirm_yes_focus)
+                                    .tab_index(0)
                                     .px(px(8.0))
                                     .py(px(3.0))
                                     .rounded(px(5.0))
@@ -1978,6 +2023,7 @@ fn render_detail_card(
                                     .font_weight(gpui::FontWeight::MEDIUM)
                                     .text_color(theme.accent)
                                     .hover(|el| el.bg(theme.overlay_strong))
+                                    .focus_visible(|style| style.border_1().border_color(theme.accent))
                                     .on_click(cx.listener(move |flow, _, _, cx| {
                                         flow.confirm_complete_with_subtasks(
                                             id_for_confirm.clone(),
@@ -1987,6 +2033,21 @@ fn render_detail_card(
                                             cx,
                                         );
                                         cx.stop_propagation();
+                                    }))
+                                    .on_key_down(cx.listener(move |flow, event: &KeyDownEvent, _, cx| {
+                                        if event.keystroke.modifiers.modified() {
+                                            return;
+                                        }
+                                        if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                            flow.confirm_complete_with_subtasks(
+                                                id_for_confirm_key.clone(),
+                                                title_for_confirm_key.clone(),
+                                                confirm_subtask_ids_key.clone(),
+                                                origin_view,
+                                                cx,
+                                            );
+                                            cx.stop_propagation();
+                                        }
                                     }))
                                     .child("Complete all"),
                             ),

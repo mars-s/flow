@@ -136,6 +136,11 @@ pub struct Flow {
     /// already has a schedule) — same reasoning, kept separate from
     /// `process_pill_focuses` since it isn't a `ProcessTarget` variant.
     process_clear_focus: FocusHandle,
+    /// The "Complete parent and all subtasks?" inline confirm's two
+    /// buttons — same single-stable-handle reasoning (only one confirm
+    /// shown at a time, tied to the one expanded task).
+    confirm_cancel_focus: FocusHandle,
+    confirm_yes_focus: FocusHandle,
     /// What `render_task_view` last saw for the expanded task's row —
     /// `(id, schedule_picker_open, scheduling, adding_subtask,
     /// pending_complete_confirm, subtask_count)`. Compared against each
@@ -321,6 +326,8 @@ impl Flow {
                 schedule_pill_focus: cx.focus_handle(),
                 process_pill_focuses: array::from_fn(|_| cx.focus_handle()),
                 process_clear_focus: cx.focus_handle(),
+                confirm_cancel_focus: cx.focus_handle(),
+                confirm_yes_focus: cx.focus_handle(),
                 nav_focuses: array::from_fn(|_| cx.focus_handle()),
                 mode_tasks_focus: cx.focus_handle(),
                 mode_thumb: None,
