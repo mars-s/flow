@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `9810093` — check `git status` before
+- Working tree is clean as of commit `043d38a` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -130,10 +130,13 @@ invalidation, which every task mutation triggers, so any tick/delete/
 schedule blanked the whole list for a frame. Flow now keeps
 `last_tasks`/`last_completed` per view and draws that instead of a
 skeleton whenever a fresh value isn't ready yet — the skeleton is reserved
-for a view's genuine first load. **Worth a direct re-check** the next time
-someone's watching the app: this was fixed once already (motion pass round
-1) and still had a real defect, so don't assume it's fully clean until
-someone's actually ticked a task and watched it.
+for a view's genuine first load. `043d38a` applied the same fix to
+subtasks (`last_subtasks`) — toggling one had the identical flicker on its
+own smaller scale (the "Subtasks (N/M)" count and indented list, not the
+whole view). **Worth a direct re-check** the next time someone's watching
+the app: the row-level piece of this was "fixed" once already (motion pass
+round 1) and still had a real defect, so don't assume any of it is fully
+clean until someone's actually ticked a task and watched it.
 
 **Known, deliberate scope cuts** (not bugs):
 - The compact task row shows no subtask progress — only fetched once a
