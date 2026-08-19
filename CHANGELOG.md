@@ -16,8 +16,8 @@ the original feature bullet instead of adding separate entries for them.
 
 ## [unreleased]
 
-- Fork from Flow as Flow, a personal task manager. The entries below this
-  point are Flow's release history prior to the fork and are kept for
+- Fork from Waku as Flow, a personal task manager. The entries below this
+  point are Waku's release history prior to the fork and are kept for
   provenance, not as Flow release notes.
 
 ## [0.1.4]
