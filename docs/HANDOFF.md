@@ -3,7 +3,9 @@
 Status as of 2026-08-19. Written for another agent (or a future session)
 picking up this repo cold. Read [AGENTS.md](../AGENTS.md) first for the
 standing development rules (dev watcher, performance, accessibility) — this
-document is project state and decisions, not those rules.
+document is project state and decisions, not those rules. For the full
+commit-by-commit history, use `git log`; this doc tracks current state and
+what's still open, not a journal of everything that happened to get here.
 
 ## What Flow is
 
@@ -16,598 +18,147 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
 ## Repo / git state
 
 - `main` is a **fresh, orphan branch** — root commit `98d1b69`, no shared
-  history with anything else. It was deliberately detached from the Waku
-  repo it was forked from (github.com/egoist/waku).
-- `origin` is **https://github.com/mars-s/flow**, a public repo created
-  2026-08-18 (`gh repo create flow --public --source=. --remote=origin
-  --push`). Only `main` was pushed; `archive/waku-upstream` and
-  `milestone-0-strip` are intentionally local-only. GPL-3.0 (`LICENSE`,
-  unchanged) plus the README's upstream-attribution sentence to Waku
-  satisfy the license carry-over the user asked for when creating this repo.
-- Two other local branches exist purely as an archival safety net, not for
-  active work: `archive/waku-upstream` (the pre-detachment Waku-based
-  history) and `milestone-0-strip` (the working branch used during the
-  strip, before detachment). Neither should be merged into `main`.
-- Current commits on `main` (oldest first):
-  1. `98d1b69` — initial detached snapshot (Milestone 0 strip + Waku→Flow
-     rename, squashed into one commit).
-  2. `789344a` — untracked local Claude Code plugin/index scaffolding that
-     had accidentally been swept into the first commit.
-  3. `1d61bca` — retokened `theme.rs` to match `docs/DESIGN_DIRECTION.md`,
-     rebuilt the sidebar (Tasks/Calendar mode switch + task list + pinned
-     Settings), added several missing icons.
-  4. `39dcab4` — wired up Turso (`src/db.rs`): dedicated tokio thread,
-     placeholder `schema_version` table, ping smoke test passing.
-  5. `6109057` — noted the new GitHub remote in this doc.
-  6. `2c098f8` — real task data model/schema/CRUD in `db.rs`.
-  7. `9908636` — handoff doc: Milestone 1 checklist added.
-  8. `c215709` — Inbox view + sidebar badge wired to the real database.
-  9. `e28af28` — handoff doc: Inbox+badge checkpoint noted.
-  10. `e407738` — "+ Capture" now creates real tasks.
-  11. `6ecd6db` — handoff doc: capture-wiring checkpoint noted.
-  12. `863d31d` — Today/Upcoming/Anytime/Someday wired to real
-      bucket-filtered data, plus `Db::schedule`.
-  13. `b5dca80` — handoff doc: five-views + `schedule()` checkpoint noted.
-  14. `c765ece` — the NLP date/time parser (`src/parse.rs`), wired into
-      capture; also records the user's global-hotkey quick-capture north
-      star in the PRD §13.
-  15. `fe8df26` — handoff doc: NLP parser + capture-wiring checkpoint noted.
-  16. `05ef517` — Inbox's inline "Process" action (Today/Anytime/Someday).
-  17. `b688ac4` — handoff doc: Process-action checkpoint noted.
-  18. `1a026b1` — "Schedule…" added to Process, reusing `parse.rs` for
-      arbitrary-date entry instead of a calendar widget.
-  19. `ecfaf3d` — handoff doc: Schedule-action checkpoint noted.
-  20. `c4bc8c3` — task detail card redesign (raised surface, note field,
-      schedule pill, delete), the schedule-clipping display bug fix, and
-      Cmd+click multi-select with a bulk-action bar — built in an isolated
-      git worktree by a subagent, reviewed, and fast-forward merged (see
-      "Milestone 1 progress" below).
-  21. `75df865` — fixed a duplicate task title rendering in the expanded
-      detail card (the compact row and the card both drew a header; the
-      card now replaces the row instead of sitting below it).
-  22. `9d6a156` — stopped bulk process/delete from silently swallowing
-      per-task errors (now logged via `eprintln!` instead of `let _ =`).
-  23. `6869c1c` — icons on the Today/Anytime/Someday/Schedule… pills,
-      space-to-capture from any task view, friendly schedule formatting,
-      a collapsed-by-default "Completed" section per view, and live
-      highlighting of the parser-recognized date/time phrase in Capture/
-      Schedule… — built in an isolated git worktree by a subagent
-      (interrupted once by a usage-limit reset mid-run, resumed from the
-      same worktree), independently re-verified, fast-forward merged.
-  24. `c8f2922` — made the custom titlebar actually draggable
-      (`window.start_window_move()` on mouse-down; the `window_control_area`
-      tag alone only feeds Windows' non-client hit-testing, not macOS),
-      fixed the sidebar divider not running the full window height, and
-      reverted an over-correction that had centered the task list into a
-      narrow column — kept as widescreen per explicit user feedback.
-  25. `013c5fb` — a "Clear" option on the schedule picker to remove a
-      task's schedule (previously only changeable, never removable).
-  26. `0133d87` — completion collapse animation and a 10-second Undo toast.
-  27. `326837b` — renamed the debug app from "Flow Debug" to "Flow Dev"
-      (display name and data directory; bundle identifier unchanged),
-      done mid-incident to rule out stale per-app WindowServer/
-      LaunchServices state as the cause of the regression `53a744b` fixed.
-  28. `53a744b` — fixed a blank-main-pane regression: `render_drag_bar`
-      needed `absolute()` (it was starving the main pane to zero width as
-      a plain flex sibling demanding the full row's width). See
-      `docs/main-pane-blank-regression.md` for the full incident writeup —
-      worth reading before touching `flow-shell`'s layout or adding any
-      new overlay to it.
-  29. `fb4ff18` — Upcoming groups by date (PRD §6.3), with real unit test
-      coverage on the grouping/label logic.
-  30. `acf3e55` — subtask persistence (`Db::create_subtask`/`list_subtasks`,
-      one-level ceiling enforced at the DB layer, every list_view/
-      list_completed query now filters `parent_id IS NULL`). No UI yet.
-  31. `55e5e0a` — four user-reported fixes/changes in one commit (see
-      "Milestone 1 progress" below for the itemized list): the
-      completed-cache invalidation bug, Capture activating a task the
-      moment it parses a date (an explicit PRD §14 override), the
-      redesigned schedule picker (NLP field focused immediately instead of
-      gated behind a button), and a "Clear" button on the expanded
-      "Completed" section. Also carries in-progress, not-yet-wired subtask
-      UI scaffolding (composer + event handler, no render changes).
-  32. `e05cd14` — subtasks fully wired into the detail card: indented
-      list, add, complete, and the inline "complete parent and all
-      subtasks?" confirm.
-  33. `07c66d2` — fixed notes being silently dropped when the card closed
-      without a GPUI blur (user-reported).
-  34. `d365f52` — closed out the PRD doc-drift (Convex → Turso, IA
-      diagram, §14's activation decision). Documentation only.
-  35. `687ec81` — a 10-second Undo toast for deletion (PRD §6.1), reusing
-      the existing completion toast's UI/timer via a new `UndoKind`
-      instead of building a second toast system. New `Db::restore_task`.
-  36. `42ae253` — handoff doc: flagged (not fixed) a real
-      keyboard-accessibility gap in `tasks.rs` — see "Not done yet" below
-      for the full evidence and why it wasn't attempted blind.
-  37. `2aec602` — removed two pre-existing unused imports
-      (`render.rs`/`ui/mod.rs`), caught during the same audit. No behavior
-      change.
-  38. `7187452` — hidden dev inspector overlay, Cmd-Option-I, debug builds
-      only: wires GPUI's own `Inspector`/`DivInspectorState` (already in
-      the pinned fork, same primitive Zed's `inspector_ui` builds on) up
-      to a panel showing the picked element's source location, bounds,
-      content size, and a full `Debug` dump of its style. No menu item —
-      same convention as Zed's own inspector. Requested by the user as a
-      standing debugging aid, not part of Milestone 1's task-feature scope.
-  39. `0b4e4e9` — first motion-polish pass, user-requested ("everything
-      coherent and crafted... add animations to the entire thing"). Fixed
-      the real reported glitch (completion collapse: opacity and height
-      shrank on the same pace, so `overflow_hidden` clipped a still-visible
-      checkbox/title mid-shrink — fade now races ahead of the collapse).
-      Added the two places with zero motion that read as hard cuts against
-      their neighbors: the detail card's mount and the Completed section's
-      reveal-on-expand. Consolidated the two previously-duplicated magic
-      durations into `ui::motion::REVEAL`/`TRANSITION`. **Not** a full
-      pass over every element — see "Not done yet" for what's left.
-- Working tree is clean as of commit `0b4e4e9` unless the "Milestone 1
-  progress" section below says otherwise — check there for what's currently
-  in flight before assuming everything is committed.
-- The overnight `/loop` (fixed 5-minute interval, cron job `57c760d9`) that
-  ran 2026-08-19 has finished and been stopped (`CronDelete`) — its backlog
-  (Upcoming grouping, subtasks, the notes bug, four user-reported fixes,
-  the delete-Undo toast, PRD doc-drift) is fully done, see the numbered
-  commit list above. Every increment during that loop was verified by
-  `cargo check`/`cargo test` and the watcher's successful rebuild only —
-  this session's terminal has no screen-recording permission (see the
-  blank-main-pane incident above), so none of it had an actual look at the
-  running app. Say so plainly if asked, rather than claiming visual
-  verification that didn't happen. Direct conversation resumed once the
-  user was back; a `/loop` can be restarted later if useful.
+  history with anything else. Deliberately detached from the Waku repo it
+  was forked from (github.com/egoist/waku). GPL-3.0 (`LICENSE`, unchanged)
+  plus the README's upstream-attribution sentence to Waku carry the license
+  requirement over; that's a legal obligation, not branding.
+- `origin` is **https://github.com/mars-s/flow**, public, `main` only.
+  `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
+  (the working branch used during the strip) are local-only archival
+  branches — never merge either into `main`.
+- Working tree is clean as of commit `ef42b8a` — check `git status` before
+  assuming that's still true.
+- No `/loop` or other background job is currently running.
 
 ## What's built (Milestone 0 — done)
 
 Per `wayfinder/flow-map.md` and its closed tickets: the Waku coding-agent
 product (daemon, agent sessions/transcript/composer, provider/git/tooling
-UI, the entire `waku-core` agent-provider backend — ~37,000 lines across
-`crates/waku-core` plus `terminal.rs`/`computer_use.rs`/`daemon.rs`/
-`js_repl.rs`) is deleted, not hidden. What survives: the GPUI window
-lifecycle/chrome, `theme.rs`, `browser.rs` (generic WKWebView, kept for a
-future Calendar OAuth flow), `input.rs` (generic text-input widget, its only
-real caller of `src/md/`'s syntax highlighting), and a slimmed
-`crates/flow-core` (just `i18n`/`identity`, recovered from the deleted
-`waku-protocol` crate's source).
-
-`cargo check --workspace` is clean throughout. Test count: 148 as of the
-Milestone 0 commit, 147 in `src/app` + `src/db.rs`'s lib tests as of commit
-`863d31d` (`cargo test --package flow --lib`). Run that command to check
-the current count/status rather than trusting this number as it ages.
+UI, the entire `waku-core` agent-provider backend — ~37,000 lines) is
+deleted, not hidden. What survives: the GPUI window lifecycle/chrome,
+`theme.rs`, `browser.rs` (generic WKWebView, kept for a future Calendar
+OAuth flow), `input.rs` (generic text-input widget), and a slimmed
+`crates/flow-core` (`i18n`/`identity`).
 
 ## Current UI state
 
 - Sidebar (`src/app/sidebar.rs`, 252px, matches
-  `docs/DESIGN_DIRECTION.md`'s navigation-rail spec):
-  - "Flow" wordmark, a "+ Capture" row that **works** — click/enter/space or
-    `⌘N` opens a real composer field; Enter creates the task via
-    `Db::create_task`; Escape closes it. See "Milestone 1 progress" below.
-  - A **Tasks/Calendar segmented mode switch** — this is a deliberate
-    departure from the original PRD's flat 7-destination sidebar list,
-    added per explicit user request in this session. Tasks mode lists
-    Inbox/Today/Upcoming/Anytime/Someday; Calendar mode shows no list (the
-    main pane just shows the Calendar placeholder). **`docs/PRODUCT_REQUIREMENTS.md`
-    section 5's IA diagram has not been updated to reflect this change yet**
-    — that's a known doc-drift gap, not a decision to revert.
-  - Settings is a single row pinned to the bottom via a flex spacer,
-    reachable from either mode, not part of either mode.
-  - All rows are icon + label, monochrome (no per-item color — the user
-    explicitly rejected a colorful Things-3-style treatment and kept the
-    existing focus-blue-only system). New icons authored this session:
-    `inbox`, `calendar`, `layers`, `archive`, `home` (in
-    `assets/icons/*.svg`, Lucide-style, registered in `src/assets.rs`).
-- Main pane: **all five task views are real** (`src/app/tasks.rs`,
-  `render_task_view`) — Inbox, Today, Upcoming, Anytime, and Someday all
-  read/write the actual database through `db::View`. Task rows show a
-  friendly schedule label ("Today"/"Tomorrow"/weekday/short date + 12-hour
-  time — see the "Milestone 1 progress" section below for
-  `format_schedule`, which superseded the raw `YYYY-MM-DD [· HH:mm]` this
-  paragraph originally described). Completed tasks live in a collapsed
-  "Completed" section per view rather than vanishing. Calendar and Settings
-  still render `components.rs`'s "Coming soon" placeholder.
-  Subtasks and an Undo toast now both exist (see "Milestone 1 progress"
-  below) — this paragraph originally described them as absent, from
-  before either landed. Scheduling a task now has
-  three real paths: typing a date phrase into Capture, the detail card's
-  Today/Anytime/Someday/"Schedule…" picker, and the same picker's bulk
-  variant for multi-select — the original "no UI path to schedule" gap
-  this paragraph described is closed.
-- `theme.rs` was retokened this session to actually match
-  `docs/DESIGN_DIRECTION.md` (it had drifted — still had Waku's old
-  coral-accent palette after the strip). Light theme values were **not**
-  touched; the doc only specifies dark mode.
+  `docs/DESIGN_DIRECTION.md`'s navigation-rail spec): "Flow" wordmark, a
+  working "+ Capture" row (click/enter/space or `⌘N`), a **Tasks/Calendar
+  segmented mode switch** (a deliberate departure from the PRD's original
+  flat 7-destination list, per explicit user request — Tasks mode lists
+  Inbox/Today/Upcoming/Anytime/Someday, Calendar mode shows no list), and
+  Settings pinned to the bottom via a flex spacer. All rows are icon +
+  label, monochrome — no per-item color; the user explicitly rejected a
+  colorful Things-3-style treatment.
+- Main pane: **all five task views are real** (`src/app/tasks.rs`) —
+  Inbox, Today, Upcoming, Anytime, Someday all read/write the actual
+  database through `db::View`. Upcoming groups tasks by date with a
+  weekday-style header. Completed tasks live in a collapsed, per-view
+  "Completed" section rather than vanishing. Calendar and Settings still
+  render `components.rs`'s "Coming soon" placeholder.
+- Scheduling has three real paths: typing a date phrase into Capture, the
+  detail card's Today/Anytime/Someday/"Schedule…" picker (NLP field
+  focused immediately, quick-picks below it), and the same picker's bulk
+  variant for multi-select.
+- `theme.rs` matches `docs/DESIGN_DIRECTION.md` (dark mode only; light
+  theme values were never part of that doc and haven't been touched).
 
-## Decisions made this session (with why)
+## Decisions made (with why)
 
-1. **Detach from Waku's git history entirely.** User's words: "this is meant
-   to be named flow in a different git system, completely unrelated to
-   waku." Not just a rename — a fresh orphan branch, no shared commits, no
-   `origin`. GPL-3.0 license and the README's upstream-attribution sentence
-   to Waku are kept regardless (legal requirement, not branding).
+1. **Detach from Waku's git history entirely.** User's words: "this is
+   meant to be named flow in a different git system, completely unrelated
+   to waku." A fresh orphan branch, no shared commits, no `origin` carried
+   over.
 2. **Turso over Convex for persistence**, despite the PRD originally naming
-   Convex as the sync-phase plan. User wanted "really fast, concurrent,
-   local" with sync later and explicitly did not want to write backend
-   code. Convex is server-authoritative-over-websocket, not embedded/local,
-   and still requires writing TypeScript functions regardless of client
-   language — doesn't match either stated requirement. Turso (Rust rewrite
-   of SQLite, embedded, pure-Rust/no C toolchain, Turso Sync for the later
-   phase) does. See `docs/turso.md` for the full research and
-   `docs/PRODUCT_REQUIREMENTS.md` section 9, which still says "self-hosted
-   Convex" and **needs updating** to reflect this decision.
+   Convex. User wanted "really fast, concurrent, local" with sync later and
+   explicitly did not want to write backend code — Convex is
+   server-authoritative-over-websocket and still requires TypeScript
+   functions regardless of client language, matching neither requirement.
+   See `docs/turso.md` for the full research.
 3. **No colored left border on the selected sidebar row.** Added once,
-   caught by the user as "vibe-coded looking sloppy UI" — it's literally
-   `craft-floor.md`'s (the `impeccable` skill) banned pattern list. Reverted
-   to a plain filled pill. Lesson recorded in memory
-   (`flow-ui-craft-discipline`): load `impeccable`'s craft-floor checklist
-   before UI work, not after a correction.
+   caught by the user as "vibe-coded looking sloppy UI" — literally
+   `impeccable`'s craft-floor banned pattern. Reverted to a plain filled
+   pill. Lesson recorded in memory (`flow-ui-craft-discipline`): load
+   `impeccable`'s craft-floor checklist before UI work, not after a
+   correction.
 4. **Sidebar IA: Tasks/Calendar mode switch replaces the flat destination
-   list**, per explicit user instruction after being shown a reference
-   screenshot of a "Home | Code" segmented pill. See "Current UI state"
-   above for the resulting structure. This is a real product decision that
-   changed the PRD's original IA — flagged above as a doc-drift gap.
-5. **Database bridging pattern**: a dedicated `current_thread` tokio runtime
-   on its own OS thread (`src/db.rs`), matching the existing precedent in
-   `src/analytics.rs`. Chosen because Turso requires tokio (not
+   list**, per explicit user instruction (shown a reference screenshot of a
+   "Home | Code" segmented pill). A real product decision that changed the
+   PRD's original IA; the PRD text now reflects it.
+5. **Database bridging pattern**: a dedicated `current_thread` tokio
+   runtime on its own OS thread (`src/db.rs`), matching the existing
+   precedent in `src/analytics.rs`. Turso requires tokio (not
    runtime-agnostic) while GPUI's `cx.background_executor()` is
    smol-backed, and Turso's `Connection` `Send`/`Sync` bounds are
-   undocumented upstream — keeping the connection on one dedicated thread
-   for its whole lifetime sidesteps that question entirely rather than
-   assuming an answer.
+   undocumented upstream — one dedicated thread for the connection's whole
+   lifetime sidesteps that question entirely.
+6. **Capture activates a task the instant it parses a date** (overrides
+   PRD §14's original text, which said a parsed date should not
+   auto-activate). Explicit user correction; the PRD has been updated to
+   match — the code was never the thing that needed to change twice.
+7. **Completion and deletion share one Undo toast + timer** (`UndoKind`
+   enum distinguishes which DB-reversal action Undo performs), instead of
+   two toast systems — PRD §6.1 only names a 10-second window for deletion,
+   reused for completion since nothing else states a different one.
 
-## Milestone 1 progress (local task vertical slice)
+## Milestone 1 (local task vertical slice) — feature status
 
-Started 2026-08-18. This section is the live checklist — updated after each
-verified, committed increment, not just at the end, per the user's explicit
-request to keep this document current as work happens rather than write it
-once at a session's close. Check the git log above for exactly which commit
-landed which line.
+**Shipped and wired to the real database:** task CRUD, all five views,
+Capture (with live NLP-parse highlighting), Inbox's inline Process action
+(Today/Anytime/Someday/Schedule…), the task detail card (note, schedule
+pill, delete), Cmd+click multi-select with a bulk-action bar, one-level
+subtasks (add/complete/the "complete parent and all subtasks?" confirm),
+completion collapse animation + Undo toast, deletion Undo toast, a "Clear"
+button on the expanded Completed section, and a hidden dev inspector
+(Cmd-Option-I, debug builds only — GPUI's own `Inspector`/
+`DivInspectorState`, no menu item, same convention as Zed's).
 
-**Done:**
-
-- [x] Task data model + `Bucket` enum, matching
-      `docs/PRODUCT_REQUIREMENTS.md` §8 minus the `users` table (see commit
-      `2c098f8`'s message for why that's an intentional simplification, not
-      an oversight).
-- [x] Real migration runner in `db.rs` (`MIGRATIONS` const, versioned via
-      `schema_version`), replacing the earlier placeholder.
-- [x] `Db::create_task` / `Db::list_bucket` / `Db::set_completed`, each with
-      a passing test against a real temp-file database (not mocked).
-
-**Done (continued):**
-
-- [x] `Db` wired into `Flow` — opened once in `Flow::new` (`src/app.rs`), a
-      one-time sub-millisecond local-file open, not a render-path cost (see
-      the comment there for why that's an intentional exception, not an
-      oversight). `None` on failure, degrades gracefully rather than
-      panicking.
-- [x] Reactive task-list reads via the existing `QueryCache` in
-      `src/query.rs` (`Flow::read_bucket` in `src/app/tasks.rs`) — this repo
-      already had the exact right primitive for this (read from `render`,
-      background-fetch on a miss, `cx.notify()` on arrival), no new
-      abstraction needed.
-- [x] Real Inbox view (`src/app/tasks.rs::render_inbox`) replaces the
-      placeholder pane: task rows (title + a 17px completion circle per
-      `docs/DESIGN_DIRECTION.md`), a loading skeleton, an empty state
-      ("Nothing to process. Capture the next thing." per the direction
-      doc's required-states table), and a database-unavailable fallback.
-- [x] Completion toggle (`Flow::toggle_completed`) — writes via
-      `Db::set_completed`, invalidates the Inbox cache entry, refetches.
-      **Partial**: the row does fade via `with_animation` on initial
-      render, but there's no dedicated completion collapse/Undo yet — the
-      row just disappears on the next fetch since `list_bucket` filters out
-      completed tasks. `docs/DESIGN_DIRECTION.md`'s "10-second Undo toast"
-      is not implemented.
-- [x] Sidebar Inbox badge reads the same cache instead of a hardcoded `0`
-      (`Flow::inbox_count` in `sidebar.rs`).
-- [x] **Capture works.** "+ Capture" (click/enter/space) or `⌘N` from
-      anywhere opens the sidebar's Capture row as a real `ComposerInput`
-      field (reused, not a new widget — it already emitted
-      `ComposerEvent::Submit` on Enter and self-cleared). Submitting calls
-      `Db::create_task` and invalidates the Inbox cache. Escape closes it —
-      this repurposes two actions that were already bound but unhandled
-      dead code left over from the Waku strip (`NewTask` on `secondary-n`/
-      the app menu, `CancelTurn` on `escape` at the "Flow" key context) —
-      see commit `e407738`'s message. **Known gap**: no confirmation before
-      Escape discards unsaved text, since a bare title field has nothing to
-      confirm yet; revisit once the composer grows a note field.
-- [x] **All five task views render real, bucket-filtered data**, not just
-      Inbox. `db::View` (Inbox/Today/Upcoming/Anytime/Someday) is the
-      UI-facing address, distinct from the storage-level `Bucket`
-      (Inbox/Active/Someday); Today/Upcoming/Anytime all read
-      `Bucket::Active`, sliced by `scheduled_date` against
-      `chrono::Local::now()`. One generic `render_task_view`/
-      `render_task_row` pair serves all five — `Destination::view()`
-      (`sidebar.rs`) is the single Destination→View mapping everything
-      else routes through. Today/Upcoming rows show a trailing
-      `scheduled_date`/`scheduled_time` label (raw, unformatted).
-- [x] `Db::schedule(id, bucket, date, time)` — moves a task between
-      placements with an optional date/time, PRD §5's "Move to active" /
-      "Schedule and activate" actions. Two tests move a real task through
-      Anytime → Today → Upcoming by date (against real `chrono` dates, not
-      fixed strings) and confirm Someday stays isolated.
-- [x] **Deterministic NLP date/time parser** (`src/parse.rs`) — the full
-      PRD §6.4 supported-forms table: today/tomorrow, "in N days" (1-365),
-      weekday/"next weekday" (with the today-matches-next-week rule),
-      explicit dates (three input orders), 12h/24h times, both date-then-
-      time and time-then-date combinations. Ambiguous forms (bare "at 8",
-      "next week", a past month/day with no year, an impossible date) are
-      left unrecognized rather than guessed, per PRD principle 3. Pure and
-      deterministic — takes `today` as a parameter, never reads the clock
-      itself. 16 tests, including both of the PRD's exact acceptance-case
-      titles verbatim.
-- [x] **Capture now runs every title through the parser.** A recognized
-      suffix is stripped and stored as `scheduled_date`/`scheduled_time`
-      via `Db::schedule`; the task's bucket stays `Inbox` (PRD §14: a
-      parsed date does not auto-activate a task). A db.rs test locks this
-      in — a scheduled Inbox task stays out of Today. This is the one real
-      way, right now, that a task ends up with a schedule at all: typing
-      "take out laundry 8am tomorrow" into Capture works end to end. There
-      is still no way to schedule or reschedule a task **after** it's
-      captured (no "Process" action, no date picker) — see the gap below.
-- [x] Recorded the user's stated long-term direction for capture — a
-      global-hotkey, always-on-top, natural-language quick-capture popup
-      reachable from any app, likely paired with a menu bar mode — in
-      `docs/PRODUCT_REQUIREMENTS.md` §13 and this project's memory. Not
-      started; noted here so it isn't lost. The in-app composer
-      (`open_capture`/`capture_input` in `app.rs`) is deliberately built as
-      a self-contained, reusable unit specifically so this later surface
-      can host the same field and submit logic.
-- [x] **Inbox's inline "Process" action** (PRD §6.3: "an inline 'Process'
-      action that offers Today, Anytime, Someday, and schedule"). Clicking
-      an Inbox row (not its completion circle) opens a row of three quick
-      buttons underneath it; picking one calls `Db::schedule` and
-      invalidates both Inbox and the destination view
-      (`Flow::process_task`/`toggle_processing` in `app/tasks.rs`). Only
-      one row processes at a time (`Flow.processing_task_id`). This is the
-      first way, besides typing a date phrase into Capture, to move a task
-      out of Inbox.
-- [x] **"Schedule…" (the fourth PRD-named Process option, an arbitrary
-      date).** Rather than a calendar widget, it swaps the three buttons
-      for a free-text field and runs the input through the same
-      `parse.rs` Capture uses (`Flow::on_schedule_event`, `app.rs`) —
-      reuse over building a new component. Schedules via
-      `Db::schedule(id, Bucket::Active, ...)`; unlike Capture's
-      parse-at-creation path (which deliberately leaves the bucket as
-      Inbox, PRD §14), this is the explicit user-driven "Schedule and
-      activate" action, so it does activate. An unrecognized phrase leaves
-      the field open rather than guessing. Escape now closes whichever of
-      scheduling/processing/capturing is open, checked in that order.
-- [x] **Fixed: the schedule-clipping display bug.** A task's
-      `scheduled_date`/`scheduled_time` is now shown on its row in *every*
-      view, not just Today/Upcoming. This was a real bug, not a missing
-      feature: `parse.rs` was already correctly stripping "tomorrow" out of
-      "take out trash tomorrow" and storing the date, but nothing displayed
-      it for an Inbox task — the date effectively vanished. User-confirmed:
-      the title-clipping itself is correct and intended; only the display
-      gate was wrong. Fixed in `render_task_row` (`app/tasks.rs`) —
-      `schedule_label(&task)` now runs unconditionally instead of being
-      gated on `view`.
-- [x] **Task detail card**, replacing the old bare pill-row Process
-      interaction. Matches `docs/DESIGN_DIRECTION.md`'s already-specified
-      "Task detail" component (a `theme.raised`, 10px-radius surface, not a
-      modal) rather than the user's reference app's literal look — their
-      reference showed tag/checklist/flag icons that are *that app's*
-      features, which Flow doesn't have, so those were deliberately not
-      copied; only real, wired controls made it in. Contains: checkbox +
-      title header, a note field (new `Db::set_note`, saved on blur since
-      the field is multiline and Enter inserts a newline instead of
-      submitting), a schedule-status pill showing the task's current
-      placement (click reopens the Today/Anytime/Someday/"Schedule…"
-      picker — the same one from before, relocated), and a delete action
-      (new `Db::delete_task`, soft delete via `deleted_at`, which every
-      `list_view` query already filters on for free). Available from every
-      task view now, not just Inbox, per the design doc's general spec.
-      Subtasks landed later in the session — see "One-level subtasks,
-      fully wired" below; this line originally noted their absence.
-- [x] **Cmd+click multi-select**, with a bulk-action bar (same
-      Today/Anytime/Someday/Delete actions, applied to the whole selection)
-      appearing at 2+ selected rows. Uses `gpui::Modifiers::secondary()` —
-      a ready-made cross-platform Cmd(mac)/Ctrl(other) check already in the
-      pinned GPUI fork, found by reading `ClickEvent`/`MouseDownEvent`
-      usage in `src/input.rs` rather than guessing at field names.
-- Built via an isolated `git worktree` subagent (per explicit user
-  request), independently re-verified by the coordinating session before
-  merging — not just trusted from the agent's own report. 166 tests
-  passing as of commit `c4bc8c3` (2 new: `set_note`, `delete_task`);
-  verified in the running debug app after merge, not just `cargo check`.
-- [x] **Fixed: duplicate task title in the expanded detail card** (`75df865`)
-      and **bulk process/delete no longer silently swallow per-task errors**
-      (`9d6a156`).
-- [x] **Icons on the schedule-picker pills** — Today/Anytime/Someday/
-      Schedule… now show their sidebar-matching icon (`star`/`layers`/
-      `archive`/`calendar`) instead of plain text, no per-item color (kept
-      the single-accent rule).
-- [x] **Space opens Capture from any task view.** Bound globally
-      (`SpaceCapture`/`lib.rs`) but scoped off composer focus via a
-      `"Flow && !ComposerInput"` key-context predicate, plus a defensive
-      `capturing`/`scheduling`/`expanded_task_id` guard, so a literal typed
-      space in Capture/Schedule…/the note field is unaffected.
-- [x] **Friendly schedule formatting** (closes the gap below) —
-      `format_schedule` in `app/tasks.rs` renders Today/Tomorrow/weekday
-      name (next 6 days)/short date (`"Aug 23"`), with 12-hour time
-      appended (`"Tomorrow 6:00 PM"`). Used by both the row's trailing
-      label and the detail card's status pill.
-- [x] **Collapsed-by-default "Completed" section per view**, instead of a
-      completed task disappearing entirely. New `Db::list_completed(view)`
-      mirrors `list_view`'s bucket/date filtering with
-      `completed_at IS NOT NULL`. Docked at the bottom of the view; when
-      expanded it grows upward capped at 280px before scrolling internally
-      rather than pushing the open list further up or growing unbounded.
-      Un-completing a row from there works via the same completion circle.
-- [x] **Live highlight of the recognized date/time phrase while typing**
-      Capture (and Schedule…) — `parse.rs`'s `ParsedTitle` now carries a
-      `source_range`, and `ComposerEvent::Edited` repaints it live using
-      the composer's existing search-match highlight mechanism
-      (`ComposerInput::set_search_matches`), reused rather than building a
-      second highlight system. This is the "clickable preview chip" gap
-      below, resolved as an in-place highlight instead of a separate chip
-      per explicit user direction ("just highlighting the words is fine").
-- [x] **Custom titlebar is actually draggable**, and the traffic-light /
-      "Flow" wordmark overlap is fixed. An invisible full-width strip is
-      layered on top of the window (not its own flex row, to keep the
-      sidebar's divider running the full height) calling
-      `window.start_window_move()` on mouse-down; double-click zooms via
-      `window.titlebar_double_click()`. The sidebar's top padding is tied
-      to the same `DRAG_BAR_HEIGHT` constant so the two can't drift apart.
-- 169 tests passing as of commit `6869c1c` (3 new: `list_completed`, two
-  `parse.rs` `source_range` tests); the window-chrome fixes in `c8f2922`
-  added no new tests (pure layout/interaction, no new logic to unit-test).
-  Both increments verified in the running debug app, not just `cargo check`.
-
-- [x] **A "Clear" option to remove a task's schedule** (`013c5fb`) — a
-      fifth pill in the schedule picker, shown only when the task actually
-      has a schedule. `Flow::clear_schedule` writes `date=None, time=None`
-      via `Db::schedule` while keeping the task's current bucket, so an
-      Active task drops back into Anytime rather than needing a bucket
-      choice of its own.
-
-- [x] **Completion collapse animation + 10-second Undo toast** (`0133d87`)
-      — the checkbox fills immediately, the row fades and collapses over
-      the existing 180 ms `ROW_TRANSITION` (reusing the row's mount
-      fade-in mechanism for the reverse direction, keyed to a distinct
-      animation id so it gets a fresh timeline instead of jumping to the
-      fade-in's already-elapsed one), then a floating single-slot toast
-      offers Undo for 10 seconds (PRD §6.1's delete-undo window, reused
-      since completion's own spec doesn't name a different one). Reopening
-      (including via the toast, or from the Completed section) still
-      writes immediately — nothing to animate out.
-
-- [x] **Upcoming groups by date** (`fb4ff18`) — date sections with a
-      weekday-style header ("Tomorrow"/"Friday"/"Aug 23", factored out of
-      `format_schedule` into `day_label` so both share the logic), relying
-      on `list_view`'s existing `ORDER BY scheduled_date ASC` rather than
-      re-sorting client-side. PRD §6.3's "empty days with events still
-      show" isn't implemented — there's no calendar-events data yet to
-      populate an empty day with (Google Calendar glance is a later
-      milestone) — so only task-bearing days appear, correctly for now.
-      First unit tests in `tasks.rs` (3 new, on the pure grouping/label
-      functions, not GPUI element construction).
-- **Not independently visually verified in the running app** — this
-      session's terminal has no screen-recording permission (see the
-      blank-main-pane incident above for the lengths that was chased to);
-      only `cargo check`/`cargo test` and the watcher's successful rebuild
-      confirm this compiles and runs, not that it looks right. Worth an
-      actual look before trusting the visual result.
-
-- [x] **Fixed: deleting a completed task left it stuck visible in
-      "Completed" forever** (`55e5e0a`, user-reported). Root cause:
-      `invalidate_all_views` only ever cleared the `tasks` cache, never
-      `completed_tasks` — now routes through `invalidate_view` (which
-      already clears both) instead of duplicating the logic, so every
-      call site through it (delete, bulk-delete, process, bulk-process)
-      is fixed at once.
-- [x] **Changed (explicit user correction, overrides PRD §14): Capture
-      activates a task the instant it parses a date** (`55e5e0a`) — a
-      task with a recognized date goes straight to Today/Upcoming instead
-      of staying in Inbox with the schedule merely attached. The PRD text
-      itself hasn't been updated to match yet (see the doc-drift item
-      below) — the code is now the source of truth here, not the PRD.
-- [x] **Redesigned the schedule picker** (`55e5e0a`) — opening it focuses
-      the free-text NLP field immediately instead of showing
-      Today/Anytime/Someday/"Schedule…" as buttons first with the field
-      gated behind a second click. Today/Anytime/Someday now render as a
-      quick-pick list under the always-visible field.
-- [x] **"Clear" button on the expanded "Completed" section** (`55e5e0a`,
-      user-requested) — soft-deletes every completed task currently shown
-      there.
-- [x] **One-level subtasks, fully wired** (`acf3e55` backend + `e05cd14`
-      UI). Backend: `Db::create_subtask`/`list_subtasks`, one-level
-      ceiling enforced server-side (a subtask cannot itself take a
-      subtask), every view query filters `parent_id IS NULL` so a subtask
-      never leaks in as an independent top-level row. UI: a real
-      "Subtasks" section in the detail card (note → subtasks → schedule →
-      delete, per `docs/DESIGN_DIRECTION.md`'s stated order) — indented
-      rows with a slender left guide (`border_l_1()`), a "(done/total)"
-      count instead of a literal ring (no ring/chart primitive exists
-      here to justify building one for a single spot), an inline
-      "+ Add subtask" row, and PRD §6.2's "complete parent and all
-      subtasks?" confirm — an inline banner, not a modal, matching this
-      design system's existing swap-in-place idiom. A subtask itself
-      shows no Subtasks section of its own, enforcing the ceiling in the
-      UI too. **Scope cut, deliberate:** the compact list row shows no
-      subtask progress — only fetched once a task is expanded, to avoid
-      an N+1 fetch on every visible row (`CLAUDE.md`'s render-path I/O
-      rule).
-
-- [x] **Fixed: notes silently dropped when the card closed without a
-      blur** (`07c66d2`, user-reported: "notes don't work"). Root cause:
-      the note field's only save trigger was GPUI blur, which needs
-      keyboard focus to explicitly move to another *focusable* element —
-      none of the detail card's other controls (checkbox, title, schedule
-      pill, delete) take focus on click, so collapsing the card, completing
-      a task, or switching straight to a different task's card all changed
-      `expanded_task_id` without ever blurring the note field, silently
-      dropping whatever was typed. Fix: every direct write to
-      `expanded_task_id` now goes through `Flow::set_expanded_task`, which
-      flushes the note proactively (`Flow::flush_note`, the same write
-      `on_note_blur` already did, just no longer the *only* trigger for
-      it) — six call sites fixed at once rather than patched individually.
-
-- [x] **PRD doc-drift closed out** (`d365f52`) — §9 (Convex → Turso
-      throughout: the "Backend" subsection, the repository-target tree,
-      the executable-path diagram, Milestones 2/4, §15's reference links),
-      §5's IA diagram (now shows the actual Tasks/Calendar mode switch,
-      not the flat 7-destination list, plus the scheduling-activates
-      paragraph corrected), and §14 (the auto-activate-on-parsed-date
-      decision marked resolved, dated, with the actual answer). PRD no
-      longer contradicts the shipped code or this session's decisions.
-      Documentation only, no code changes.
-- [x] **10-second Undo toast for deletion** (`687ec81`) — PRD §6.1's
-      "Deletion shows an undo toast for 10 seconds" was the one acceptance
-      criterion still unmet after the backlog above emptied out (found by
-      re-checking §11's acceptance criteria against the shipped app, not
-      requested — a real gap, not busywork). New `Db::restore_task` clears
-      `deleted_at`; the existing completion toast now carries an
-      `UndoKind` (`Complete`/`Delete`) so both actions share one toast UI
-      and dismiss timer. Only the detail card's single-task delete shows
-      it — bulk-delete and "Clear completed" don't, matching how bulk
-      actions already skip per-item completion toasts too.
+**Known, deliberate scope cuts** (not bugs):
+- The compact task row shows no subtask progress — only fetched once a
+  task is expanded, to avoid an N+1 fetch on every visible row
+  (`CLAUDE.md`'s render-path I/O rule).
+- PRD §6.3's "empty days with events still show" in Upcoming isn't
+  implemented — there's no calendar-events data yet to populate an empty
+  day with (Google Calendar glance is a later milestone).
 
 **Not done yet, in the order they're planned:**
 
-- [ ] **Motion pass, round 2.** `0b4e4e9` fixed the one reported glitch and
-      the two starkest hard-cuts (detail card mount, Completed reveal);
-      it deliberately did not touch every surface — per Impeccable's
-      `animate`/`polish` guidance ("one authored moment... not scattered
-      effects"), a full sweep needs the user actually looking at the app
-      first (this session has no screen-recording access, so nothing past
-      the fixed rows was visually triaged). Candidates worth a look next,
-      not yet started: the schedule picker's field↔pills swap
+- [ ] **Motion pass, round 2.** `0b4e4e9` fixed the one reported glitch
+      (completion collapse: opacity and height shrank on the same pace, so
+      `overflow_hidden` clipped a still-visible checkbox/title mid-shrink —
+      fade now races ahead of the collapse) and the two starkest hard-cuts
+      against it (the detail card's mount, the Completed section's
+      reveal-on-expand), plus consolidated the app's two previously-
+      duplicated magic durations into `ui::motion::REVEAL`/`TRANSITION`.
+      Deliberately not a full sweep — per Impeccable's `animate`/`polish`
+      guidance ("one authored moment... not scattered effects"), the rest
+      needs actual triage, not reflexive motion everywhere. Candidates
+      flagged for the next round: the schedule picker's field↔pills swap
       (`render_process_row`) has no transition; `bulk_action_bar` and the
       inline complete-with-subtasks confirm banner both mount instantly;
       the sidebar destination switch has no motion of its own beyond the
-      main pane's cross-fade. Don't add motion to all of these reflexively
-      — triage which ones actually read as abrupt once someone's watching.
+      main pane's cross-fade.
 - [ ] **`src/app/tasks.rs` has zero keyboard-accessible controls.** Found
-      by audit (not requested), 2026-08-19: `grep -c "track_focus\|
-      tab_index\|on_key_down" src/app/tasks.rs` → **0**, against **17**
-      `.on_click(` sites (task rows, the completion checkbox, title,
-      schedule pill, process/quick-pick pills, delete, subtask checkboxes,
-      the add-subtask row, the Undo toast button, the "Clear completed"
-      button, the complete-with-subtasks confirm). Every one of them is
-      mouse-only right now. This directly contradicts three explicit,
-      already-written requirements: `AGENTS.md`/`CLAUDE.md`'s "Every
-      control reachable by mouse must be reachable and operable by
-      keyboard," the PRD's goal of "complete keyboard operation," and
-      §11's acceptance criterion "A user can create, edit, complete,
-      reopen, move, schedule, and undo-delete a task **without leaving
-      the keyboard**" — currently false for every one of those verbs.
-      `src/app/sidebar.rs` already has the working pattern to follow (11
-      matches on the same grep) — `track_focus(&handle)`, `tab_index(N)`,
-      `focus_visible(|style| style.border_1().border_color(theme.accent))`,
-      and `on_key_down` matching `"enter" | "space"` — see
-      `render_mode_switch` there for a complete worked example.
-      **Deliberately not attempted blind tonight**, rather than rushed:
-      task rows are a *dynamic* list (unlike the sidebar's fixed seven
-      destinations), so this needs a real design decision about where
-      per-row `FocusHandle`s live (a `HashMap<String, FocusHandle>` on
-      `Flow`, most likely, pruned or left to grow boundedly — a real task
-      list doesn't have thousands of simultaneously-rendered rows, but the
-      cleanup story still deserves a decision, not a guess) and probably
-      arrow-key navigation between rows once the row itself is focusable.
-      That's exactly the kind of structural choice this session's
-      complete inability to visually verify tab order or focus rings
-      (no screen-recording permission — see the blank-main-pane incident)
-      makes a bad idea to guess at silently. Flagging precisely, with the
-      exact evidence above, is worth more than a half-correct
-      implementation nobody can check.
+      by audit (not requested), 2026-08-19: 0 matches for `track_focus|
+      tab_index|on_key_down` against 17 `.on_click(` sites (task rows, the
+      completion checkbox, title, schedule pill, process/quick-pick pills,
+      delete, subtask checkboxes, the add-subtask row, the Undo toast
+      button, "Clear completed", the complete-with-subtasks confirm) —
+      every one mouse-only. Contradicts `CLAUDE.md`'s "every mouse-
+      reachable control must be keyboard-reachable," the PRD's "complete
+      keyboard operation" goal, and §11's acceptance criterion naming a
+      task's full lifecycle "without leaving the keyboard."
+      `src/app/sidebar.rs` already has the working pattern to copy
+      (`render_mode_switch`: `track_focus(&handle)`, `tab_index(N)`,
+      `focus_visible(...)`, `on_key_down` matching `"enter" | "space"`).
+      **Deliberately not attempted blind**: task rows are a *dynamic* list
+      (unlike the sidebar's fixed seven), so this needs a real decision
+      about where per-row `FocusHandle`s live (likely a
+      `HashMap<String, FocusHandle>` on `Flow`) and probably arrow-key
+      navigation between rows — a structural choice that deserves visual
+      verification of tab order and focus rings, which this session's
+      terminal cannot currently do (no screen-recording permission).
 
 ## Where to find things
 
@@ -616,11 +167,15 @@ same list, kept current there so it doesn't drift out of sync with this
 document. In short: `PRODUCT.md` (north star), `docs/PRODUCT_REQUIREMENTS.md`
 (PRD), `docs/DESIGN_DIRECTION.md` (visual system — keep `theme.rs` matching
 it), `docs/turso.md` (DB reference), `CONTEXT.md` (glossary),
-`wayfinder/flow-map.md` + `wayfinder/tickets/*.md` (planning history).
+`wayfinder/flow-map.md` + `wayfinder/tickets/*.md` (planning history),
+`docs/main-pane-blank-regression.md` (a real incident writeup — worth
+reading before touching `flow-shell`'s layout or adding any new overlay to
+it).
 
 This session's memory is also recorded under Claude's project memory
 (`flow-project-overview`, `flow-database-choice`, `flow-doc-map`,
-`flow-ui-craft-discipline`) for any Claude session working in this
-directory — but that memory is personal to this Claude account and won't
-travel with the repo to a new machine or a different agent, which is exactly
-why this document exists as the portable, repo-committed version.
+`flow-ui-craft-discipline`, `flow-gpui-skills`) for any Claude session
+working in this directory — but that memory is personal to this Claude
+account and won't travel with the repo to a new machine or a different
+agent, which is exactly why this document exists as the portable,
+repo-committed version.
