@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `84bf5d3` — check `git status` before
+- Working tree is clean as of commit `59825d7` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -124,7 +124,20 @@ no animation at all per user feedback), and a debug event log + "Flow
 state" inspector panel (`d8d1206` — `src/debug_log.rs`,
 `crate::debug_log!(...)`, `Flow::debug_snapshot()`; see the
 `.claude/skills/flow-debug` skill, gitignored like the other project-local
-skills, for how to use both).
+skills, for how to use both), and virtualized flat-view rendering
+(`59825d7`, user-requested — GPUI's `list()`/`ListState`, proven to bound
+render cost regardless of item count in `ui/virtualized_list.rs`'s tests,
+now backing Inbox/Today/Anytime/Someday for real). Upcoming stays
+unvirtualized (date-grouped sections don't fit `list()`'s flat model
+without materially more work). **Known limitation**, disclosed in
+`task_list_states`'s own field doc: a data change resplices the whole
+range rather than diffing old vs new, so any mutation resets scroll
+position to the top, not just ones that actually change what's above the
+viewport — a minimal-diff splice is the natural follow-up if that's felt
+in practice. A real crash was found and fixed here via a macOS crash
+report (not visually) — see that commit's message for the exact
+mechanism (`sidebar.rs`'s `inbox_count` racing `render_task_view`'s
+list-state creation).
 
 **Fixed (`dea6184`, found while adding the log above): a stuck-UI bug.**
 `write_completed`/`delete_task` silently swallowed a failed DB write with
