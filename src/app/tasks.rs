@@ -183,6 +183,19 @@ impl Flow {
             .clone()
     }
 
+    /// Same as `row_focus`, for the Completed section's own rows — see
+    /// `Flow::completed_row_focuses`'s field doc for why it's a separate map.
+    pub(super) fn completed_row_focus(&mut self, task_id: &str, cx: &mut Context<Self>) -> FocusHandle {
+        self.completed_row_focuses
+            .entry(task_id.to_string())
+            .or_insert_with(|| cx.focus_handle())
+            .clone()
+    }
+
+    fn prune_completed_row_focuses(&mut self, completed: &[Task]) {
+        self.completed_row_focuses.retain(|id, _| completed.iter().any(|task| &task.id == id));
+    }
+
     /// Gets or creates the "Clear completed" button's focus handle for one
     /// view — `Flow::completed_clear_focuses`'s field doc has the full
     /// reasoning.
@@ -1022,6 +1035,7 @@ impl Flow {
         let completed = match self.read_completed(view, cx) {
             Query::Ready(tasks) => {
                 self.last_completed.insert(view, tasks.clone());
+                self.prune_completed_row_focuses(&tasks);
                 tasks
             }
             // Stale-while-revalidate: an empty completed section briefly
@@ -1409,6 +1423,7 @@ fn task_list(
                     .child(completed_section(
                         view,
                         completed,
+                        cx.entity(),
                         completed_expanded,
                         expanded,
                         schedule_picker_open,
@@ -1555,6 +1570,7 @@ fn render_upcoming_section(
 fn completed_section(
     view: View,
     completed: Arc<Vec<Task>>,
+    entity: Entity<Flow>,
     expanded: bool,
     task_expanded: Option<String>,
     schedule_picker_open: bool,
@@ -1595,6 +1611,12 @@ fn completed_section(
                     .flex_col()
                     .children(completed.iter().cloned().map(|task| {
                         let is_expanded = task_expanded.as_deref() == Some(task.id.as_str());
+                        // Completed rows render eagerly like Upcoming's
+                        // (this section's own max-height scroll, not a
+                        // virtualized list), same reasoning for why a
+                        // `completed_row_focus` lookup per row here is
+                        // cheap rather than new per-frame I/O.
+                        let focus = entity.update(cx, |flow, cx| flow.completed_row_focus(&task.id, cx));
                         render_task_row(
                             task,
                             view,
@@ -1609,10 +1631,7 @@ fn completed_section(
                             title_focus.clone(),
                             schedule_input.clone(),
                             subtask_context.clone(),
-                            // Completed-section rows aren't in this first
-                            // keyboard-access pass's scope — see
-                            // `render_task_row`'s `focus` param doc.
-                            None,
+                            Some(focus),
                             detail_delete_focus.clone(),
                             schedule_pill_focus.clone(),
                             process_pill_focuses.clone(),
@@ -1782,13 +1801,14 @@ fn render_task_row(
     title_focus: FocusHandle,
     schedule_input: Entity<ComposerInput>,
     subtask_context: Option<SubtaskContext>,
-    // `Some` from the virtualized flat-list path (Inbox/Today/Anytime/
-    // Someday's compact rows) and Upcoming's own eager render
-    // (`render_upcoming_section`) — both fetch a handle per row via
-    // `entity.update`/`Flow::row_focus`, sharing the same pruned
-    // `row_focuses` map since a task only ever appears in one view's rows
-    // at a time. `None` only from the Completed section, still mouse-only
-    // — see `Flow::row_focuses`'s field doc and `docs/HANDOFF.md`.
+    // Always `Some` now: the virtualized flat-list path (Inbox/Today/
+    // Anytime/Someday's compact rows) and Upcoming's own eager render
+    // (`render_upcoming_section`) fetch a handle via `entity.update`/
+    // `Flow::row_focus`, sharing one pruned map since a task only ever
+    // appears in one view's active rows at a time; the Completed section
+    // (`completed_section`) uses the separate `completed_row_focus`/
+    // `completed_row_focuses` for the same reason `subtask_focuses` is its
+    // own map — see that field's doc.
     focus: Option<FocusHandle>,
     // Bound to the expanded card's delete button, schedule pill, and
     // (once the picker is open) its quick-pick pills, when this row

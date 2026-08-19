@@ -106,6 +106,14 @@ pub struct Flow {
     /// session. First entry in the `CLAUDE.md`/PRD keyboard-accessibility
     /// gap this project's own audit found — see `docs/HANDOFF.md`.
     row_focuses: HashMap<String, FocusHandle>,
+    /// Same pattern as `row_focuses`, for the collapsed Completed section's
+    /// own rows — a *separate* map, not shared, since `row_focuses`'
+    /// pruning runs against a view's active task list and would delete
+    /// every completed-row handle on the very next unrelated refetch
+    /// (identical reasoning to why `subtask_focuses` is its own map too).
+    /// Pruned in `render_task_view` against whichever completed list was
+    /// just fetched.
+    completed_row_focuses: HashMap<String, FocusHandle>,
     /// Per-subtask keyboard focus handles, keyed by subtask id — a
     /// separate map from `row_focuses` even though both hold task-id-
     /// keyed `FocusHandle`s, since `row_focuses`' pruning runs against
@@ -472,6 +480,7 @@ impl Flow {
                 task_list_states: HashMap::new(),
                 task_list_scrollbars: HashMap::new(),
                 row_focuses: HashMap::new(),
+                completed_row_focuses: HashMap::new(),
                 subtask_focuses: HashMap::new(),
                 add_subtask_focus: cx.focus_handle(),
                 last_expanded_signature: None,
@@ -1280,7 +1289,7 @@ impl Flow {
              cached views (tasks/completed/last_tasks/last_completed): {}/{}/{}/{}\n\
              cached subtask parents: {}\n\
              virtualized list states/scrollbars: {}/{}\n\
-             keyboard focus handles (row/subtask): {}/{}\n\
+             keyboard focus handles (row/subtask/completed): {}/{}/{}\n\
              calendar_auth: {:?} (connecting: {}, today events cached: {})",
             self.destination,
             self.capturing,
@@ -1321,6 +1330,7 @@ impl Flow {
             self.task_list_scrollbars.len(),
             self.row_focuses.len(),
             self.subtask_focuses.len(),
+            self.completed_row_focuses.len(),
             self.calendar_auth,
             self.calendar_connecting,
             self.today_calendar_events.is_some(),
