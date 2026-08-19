@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `f4a264f` — check `git status` before
+- Working tree is clean as of commit `64b0f36` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -214,6 +214,20 @@ both of `app.rs`'s capture success/failure log lines, and
 instead of `toast.title`). Every other `debug_log!` site was checked
 and already only logs ids/error messages. `cargo check`/`cargo test`
 clean (180 passing); rebuilt via the dev watcher, no new crash report.
+
+**Fixed (`64b0f36`, found via a PRD §11 acceptance-criteria audit): the
+compact row's own checkbox (and Space) could complete a parent with
+open subtasks with zero confirmation.** §6.2's "Complete parent and
+all subtasks? / Cancel" confirm only ever ran through the detail
+card's checkbox, which has its subtasks already loaded to decide
+`has_open_subtasks`. The compact row — the primary completion path for
+every task — called `toggle_completed` directly with no gate. New
+`request_complete_from_row`: a background `list_subtasks` fetch
+on-click (a one-shot action, not a render path, so this doesn't
+reopen the render-path-I/O question — see that method's own doc), then
+either completes immediately (no open subtasks, the common case) or
+expands the card into the same confirm banner the detail card already
+has. Reopening is untouched.
 
 **Fixed (`f4a264f`, found via a PRD §8 data-model constraints audit):
 a completed parent could still accept a new subtask.** §8 says "A
