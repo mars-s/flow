@@ -142,7 +142,6 @@ impl Flow {
             .gap(px(8.0))
             .hover(|el| el.bg(theme.overlay))
             .focus_visible(|style| style.border_1().border_color(theme.accent))
-            .when(hidden, |row| row.opacity(0.4))
             .on_click(cx.listener(move |flow, _, _, cx| {
                 flow.toggle_calendar_visibility(id_for_click.clone(), cx);
             }))
@@ -155,14 +154,29 @@ impl Flow {
                     cx.stop_propagation();
                 }
             }))
-            .child(div().flex_none().size(px(8.0)).rounded_full().bg(color))
+            .child(
+                // Shown = filled dot; hidden = hollow (border only, no
+                // fill) — a shape change, not just a dimmer color, so
+                // on/off reads without relying on contrast sensitivity
+                // (CLAUDE.md: "never encode meaning in color... alone").
+                // The calendar's own color stays the border either way, so
+                // which calendar this is never disappears with it.
+                div()
+                    .flex_none()
+                    .size(px(8.0))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(color)
+                    .when(!hidden, |dot| dot.bg(color)),
+            )
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .truncate()
                     .text_size(px(12.5))
-                    .text_color(theme.text)
+                    .when(hidden, |el| el.text_color(theme.text_ghost))
+                    .when(!hidden, |el| el.text_color(theme.text))
                     .child(calendar.title),
             )
             .into_any_element()
