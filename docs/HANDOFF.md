@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `51105df` — check `git status` before
+- Working tree is clean as of commit `041d301` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -293,6 +293,14 @@ cycle's own new code): four Calendar tab controls were under the app's own
 the Day/Week/Month/Year mode buttons were 20–24px against a 28px floor the
 rest of the app already respects (`sidebar.rs`'s `ROW_HEIGHT`). Bumped all
 four, extending the hit region rather than the glyph.
+
+**Fixed (`041d301`, found via a self-review sweep): Settings' "Connect
+Calendar" and "Open System Settings" buttons were mouse-only** — no
+`track_focus`/`tab_index`/`on_key_down` at all, and no explicit height
+(close to but not reliably at the 28px minimum). Both fixed the same way
+as every other button this session: single-stable `FocusHandle`s
+(`settings_connect_calendar_focus`, `settings_open_privacy_focus`),
+`focus_visible`, Enter/Space handling, `h(px(28.0))`.
 
 **Not done yet**: whether calendar visibility toggles should persist
 across launches (currently don't — no settings-persistence infrastructure
