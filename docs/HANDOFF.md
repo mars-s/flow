@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `85cbc31` — check `git status` before
+- Working tree is clean as of commit `2a37a88` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -152,6 +152,22 @@ the same root cause (the shrink-wrapped detail card likely misaligned its
 delete button's hit target from what was visible), but **not
 independently confirmed** — worth the user re-testing delete specifically
 now that this is fixed, rather than assuming it's resolved.
+
+**Fixed (`2a37a88`, found by reading further, not a new report): a
+second, subtler width bug in the same area.** `gpui::list()`'s own
+`.px()` is a no-op for item positioning — `prepaint_items` always places
+each item at `bounds.origin.x + 0`, ignoring horizontal padding entirely
+(only vertical padding, via `item_origin.y += padding.top`, actually
+does anything). The immediately preceding fix's `.px(px(24.0))` directly
+on the `list()` element compiled clean and looked reasonable but was
+silently inert — rows would have hugged the pane's true left edge with
+no inset. Fixed by wrapping `list()` in a plain padded div instead, so
+normal box-model layout (not `list()`'s special item-positioning code)
+does the insetting; the overlay scrollbar moved to be a sibling of that
+wrapper, not a child, so it still hugs the pane's true edge rather than
+getting pulled in by the wrapper's own padding. **Worth watching this
+specific spot** (`gpui::list()` + padding) if it ever comes up again
+elsewhere in this codebase — it's an easy trap that compiles silently.
 
 **Fixed (`dea6184`, found while adding the log above): a stuck-UI bug.**
 `write_completed`/`delete_task` silently swallowed a failed DB write with
