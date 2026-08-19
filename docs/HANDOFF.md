@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `5b0d807` — check `git status` before
+- Working tree is clean as of commit `57c2b1d` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -330,6 +330,18 @@ reopen the render-path-I/O question — see that method's own doc), then
 either completes immediately (no open subtasks, the common case) or
 expands the card into the same confirm banner the detail card already
 has. Reopening is untouched.
+
+**Fixed (`57c2b1d`, found via a data-integrity audit): deleting a parent
+task orphaned its subtasks instead of deleting them.** `delete_task` only
+ever touched the one row by id; a subtask never appears in any top-level
+view (`list_view` always filters `parent_id IS NULL`), so the subtasks
+vanished from the UI along with their parent but stayed
+`deleted_at IS NULL` in the database forever — permanently unreachable,
+never cleaned up. `delete_task` now cascades to every non-deleted row with
+that `parent_id`; `restore_task` (Undo) symmetrically un-cascades, so
+Undo-ing a parent's delete brings the whole family back. New tests:
+`deleting_a_parent_cascades_to_its_subtasks`,
+`undoing_a_parent_delete_restores_its_subtasks_too`.
 
 **Fixed (`58fc090`, found via a PRD §8/§10 constraints audit): a bare
 parsed time ("8am") wrote invalid data instead of the supported form PRD
