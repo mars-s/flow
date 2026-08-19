@@ -182,7 +182,9 @@ impl<K: Clone + Eq + Hash, V> QueryCache<K, V> {
         self.entries.clear();
     }
 
-    #[cfg(test)]
+    // Also used by `app::debug_snapshot` (the Cmd-Option-I inspector's
+    // "Flow state" panel), not just tests.
+    #[cfg(any(test, debug_assertions))]
     pub fn len(&self) -> usize {
         self.entries.len()
     }

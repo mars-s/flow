@@ -25,6 +25,7 @@ mod app;
 mod assets;
 mod browser;
 mod db;
+mod debug_log;
 mod input;
 mod md;
 mod parse;

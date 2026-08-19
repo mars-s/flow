@@ -182,7 +182,7 @@ struct UndoToast {
 /// share the toast UI and the 10-second dismiss timer (PRD §6.1 names that
 /// window for deletion specifically; completion's own spec doesn't state a
 /// different one), but need different DB writes to undo.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum UndoKind {
     Complete,
     Delete,
@@ -190,6 +190,11 @@ pub(super) enum UndoKind {
 
 impl Flow {
     pub fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        // A session-boundary marker in the debug log, not just a state
+        // transition — makes it obvious where one run ends and the next
+        // (post-rebuild) run starts when reading the log after several
+        // watcher relaunches.
+        crate::debug_log!("--- Flow starting ---");
         // Opening a local file is a one-time, sub-millisecond startup cost,
         // not a per-frame one — unlike render-path I/O, this is exactly the
         // "one-shot user action" CLAUDE.md carves out as fine to do
@@ -263,6 +268,8 @@ impl Flow {
             }
         });
         window.set_window_title(&window_title(Destination::Inbox));
+        #[cfg(debug_assertions)]
+        cx.set_global(FlowDebugHandle(flow.clone()));
         flow
     }
 
@@ -366,7 +373,8 @@ impl Flow {
                     anyhow::Ok(())
                 })
                 .await;
-            if created.is_err() {
+            if let Err(error) = &created {
+                crate::debug_log!("capture {original_title:?}: FAILED: {error:#}");
                 // PRD §6.1: "show a non-blocking error with Retry on
                 // failure, and never discard typed content." The field
                 // already self-cleared on submit (Composer-mode Enter), so
@@ -381,6 +389,7 @@ impl Flow {
                 });
                 return;
             }
+            crate::debug_log!("capture {original_title:?}: created");
             let _ = flow.update(cx, |flow, cx| {
                 flow.capture_error = None;
                 for view in [View::Inbox, View::Today, View::Upcoming, View::Anytime] {
@@ -653,11 +662,64 @@ impl Flow {
         if self.destination == destination {
             return;
         }
+        crate::debug_log!("destination: {:?} -> {destination:?}", self.destination);
         self.destination = destination;
         window.set_window_title(&window_title(destination));
         cx.notify();
     }
+
+    /// A plain-text dump of the fields most worth seeing while debugging
+    /// blind (no screen-recording access): what's open, what's mid-flight,
+    /// what's cached. Read by `app::inspector`'s Cmd-Option-I panel via
+    /// [`FlowDebugHandle`] — this is the "app state" half of that panel,
+    /// alongside GPUI's own per-element style dump.
+    #[cfg(debug_assertions)]
+    pub(crate) fn debug_snapshot(&self) -> String {
+        format!(
+            "destination: {:?}\n\
+             capturing: {} (error: {:?})\n\
+             expanded_task_id: {:?}\n\
+             schedule_picker_open: {} scheduling: {} adding_subtask: {}\n\
+             pending_complete_confirm: {:?}\n\
+             selected_task_ids: {}\n\
+             completing_ids: {}\n\
+             undo_toast: {}\n\
+             cached views (tasks/completed/last_tasks/last_completed): {}/{}/{}/{}\n\
+             cached subtask parents: {}",
+            self.destination,
+            self.capturing,
+            self.capture_error,
+            self.expanded_task_id,
+            self.schedule_picker_open,
+            self.scheduling,
+            self.adding_subtask,
+            self.pending_complete_confirm,
+            self.selected_task_ids.len(),
+            self.completing_ids.len(),
+            match &self.undo_toast {
+                Some(toast) => format!(
+                    "{:?} of {:?} ({:?})",
+                    toast.kind, toast.title, toast.origin_view
+                ),
+                None => "none".to_string(),
+            },
+            self.tasks.len(),
+            self.completed_tasks.len(),
+            self.last_tasks.len(),
+            self.last_completed.len(),
+            self.last_subtasks.len(),
+        )
+    }
 }
+
+/// A handle to the running `Flow` entity, set once in `Flow::new` — lets a
+/// debug-only surface with no `Flow` of its own (the Cmd-Option-I inspector
+/// is a separate GPUI overlay entity) read live app state for display. Not
+/// read by any product code path.
+#[cfg(debug_assertions)]
+pub(crate) struct FlowDebugHandle(pub Entity<Flow>);
+#[cfg(debug_assertions)]
+impl gpui::Global for FlowDebugHandle {}
 
 fn window_title(destination: Destination) -> String {
     format!("{} — Flow", destination.label())

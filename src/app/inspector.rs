@@ -93,10 +93,45 @@ fn render_panel(
                 .py(px(8.0))
                 .text_size(px(11.0))
                 .line_height(px(16.0))
+                .child(render_flow_state(theme, cx))
                 .when_some(inspector_id, |el, id| el.child(render_element_id(&id, theme)))
                 .children(inspector.render_inspector_states(window, cx)),
         )
         .into_any_element()
+}
+
+/// The "Flow state" section: a plain-text dump of `Flow::debug_snapshot`,
+/// read via `FlowDebugHandle` — the Inspector is its own GPUI entity, not a
+/// `Flow`, so it has no direct access to the app's own state without this.
+/// Always shown (not gated on picking anything), since app state is worth
+/// having on screen whether or not an element is currently selected.
+#[cfg(debug_assertions)]
+fn render_flow_state(theme: Theme, cx: &App) -> impl IntoElement {
+    let snapshot = cx
+        .try_global::<super::FlowDebugHandle>()
+        .map(|handle| handle.0.read(cx).debug_snapshot())
+        .unwrap_or_else(|| "(no Flow entity yet)".to_string());
+
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.0))
+        .pb(px(8.0))
+        .mb(px(8.0))
+        .border_b_1()
+        .border_color(theme.border)
+        .child(
+            div()
+                .text_size(px(10.0))
+                .text_color(theme.text_tertiary)
+                .child("FLOW STATE"),
+        )
+        .child(
+            div()
+                .text_color(theme.text_secondary)
+                .whitespace_normal()
+                .child(snapshot),
+        )
 }
 
 #[cfg(debug_assertions)]

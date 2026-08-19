@@ -131,6 +131,7 @@ impl Flow {
     /// every write that moves a task in or out of one can also move it in or
     /// out of the other, so the two caches always travel together.
     fn invalidate_view(&mut self, view: View) {
+        crate::debug_log!("cache: invalidate {view:?}");
         self.tasks.invalidate(&view);
         self.completed_tasks.invalidate(&view);
     }
@@ -212,6 +213,9 @@ impl Flow {
     /// than guessed from the task's bucket, since Today and Upcoming both
     /// read `Bucket::Active` and either could be the row the click came from.
     fn write_completed(&mut self, id: String, completed: bool, origin_view: View, cx: &mut Context<Self>) {
+        crate::debug_log!(
+            "task {id}: write completed={completed} (origin {origin_view:?})"
+        );
         // Reopening — whether from the checkbox or the Undo toast — is
         // always an immediate, deliberate reversal, so it clears
         // `completing_ids` synchronously here rather than waiting for
@@ -553,6 +557,7 @@ impl Flow {
     /// exposed action. Soft-deletes via `Db::delete_task`, which every
     /// `list_view` query already filters out.
     fn delete_task(&mut self, id: String, title: String, origin_view: View, cx: &mut Context<Self>) {
+        crate::debug_log!("task {id} ({title:?}): delete requested");
         let Some(db) = self.db.clone() else { return };
         self.set_expanded_task(None, cx);
         self.schedule_picker_open = false;
