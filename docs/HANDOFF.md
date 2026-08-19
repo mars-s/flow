@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `f7e45bb` — check `git status` before
+- Working tree is clean as of commit `f4a264f` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -214,6 +214,16 @@ both of `app.rs`'s capture success/failure log lines, and
 instead of `toast.title`). Every other `debug_log!` site was checked
 and already only logs ids/error messages. `cargo check`/`cargo test`
 clean (180 passing); rebuilt via the dev watcher, no new crash report.
+
+**Fixed (`f4a264f`, found via a PRD §8 data-model constraints audit):
+a completed parent could still accept a new subtask.** §8 says "A
+deleted or completed parent cannot accept a new open subtask" —
+`create_subtask`'s parent lookup only ever checked `deleted_at IS
+NULL`, so the completed half was silently unenforced (a completed
+task's detail card and its "+ Add subtask" row are both still
+reachable in the UI). Fixed by adding `completed_at IS NULL` to the
+same lookup query. New test:
+`a_completed_parent_cannot_accept_a_new_subtask`.
 
 **Fixed (`346c2b6`, found by self-reviewing the commit above): title
 edits could be silently lost.** The field only saved on Enter — exactly
