@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `8f0040b` — check `git status` before
+- Working tree is clean as of commit `fe173a6` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -576,6 +576,24 @@ both already-embedded assets. Built without loading the checklist first,
 same lesson this project already learned once before
 (`flow-ui-craft-discipline` memory) — this pass ran it against my own work
 rather than assuming it was clean.
+
+**Fixed (`fe173a6`, found sweeping `.github/workflows/`): CI's own test
+workflow has failed unconditionally on every push since Milestone 0.**
+`.github/workflows/test.yml`'s "Check generated protocol and browser
+client" step ran `bun run protocol:check` (no such script anywhere in the
+repo) and `bun run --filter @waku/client check/test` (no such package —
+this workspace's client is `@flow/client`, itself one of the orphaned
+packages flagged below). Unlike the release scripts, nothing here depends
+on unknown external secrets/config, so this was safe to actually fix
+rather than just flag — removed the step and the now-unused "Install Bun"
+step ahead of it (confirmed nothing else in the job needs bun: no
+`build.rs` anywhere, `cargo test --locked` is pure Rust). Left
+`release.yml`/`sync-release.yml`/`bundle-linux.sh` alone — still stale
+(`sync-release.yml` defaults to a `waku-releases` R2 bucket where
+`RELEASING.md`/`Info.plist`/`appcast.ts` all say `flow-releases`, though
+that default may already be overridden by a real secret I can't see), but
+those involve codesigning/notarization/artifact-naming I have no way to
+verify blind.
 
 **Active blocker, not just dormant dead code — found in the same sweep,
 worth fixing before the next real release attempt**: `scripts/release.ts`
