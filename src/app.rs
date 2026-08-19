@@ -795,7 +795,9 @@ impl Flow {
              completing_ids: {}\n\
              undo_toast: {}\n\
              cached views (tasks/completed/last_tasks/last_completed): {}/{}/{}/{}\n\
-             cached subtask parents: {}",
+             cached subtask parents: {}\n\
+             virtualized list states/scrollbars: {}/{}\n\
+             keyboard focus handles (row/subtask): {}/{}",
             self.destination,
             self.capturing,
             self.capture_error,
@@ -818,6 +820,18 @@ impl Flow {
             self.last_tasks.len(),
             self.last_completed.len(),
             self.last_subtasks.len(),
+            // Added alongside the virtualized-list and keyboard-
+            // accessibility work later this session — kept here so this
+            // snapshot doesn't quietly go stale against Flow's actual
+            // field list again. task_list_states/scrollbars are bounded
+            // to the 4 flat views (Upcoming excluded, see their own field
+            // docs); row_focuses is bounded to visible rows, subtask_focuses
+            // to the one expanded task's subtasks — see each field's doc
+            // for the exact pruning contract if either grows unexpectedly.
+            self.task_list_states.len(),
+            self.task_list_scrollbars.len(),
+            self.row_focuses.len(),
+            self.subtask_focuses.len(),
         )
     }
 }
