@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `ad95f6f` — check `git status` before
+- Working tree is clean as of commit `7af22a4` — check `git status` before
   assuming that's still true.
 - A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
   of 2026-08-19, continuing this session's work autonomously. Auto-expires
@@ -330,6 +330,20 @@ reopen the render-path-I/O question — see that method's own doc), then
 either completes immediately (no open subtasks, the common case) or
 expands the card into the same confirm banner the detail card already
 has. Reopening is untouched.
+
+**Fixed (`7af22a4`, found via a doc-staleness sweep): `docs/performance.md`
+and two spots in `AGENTS.md` still described the Waku coding-agent
+product.** `docs/performance.md` is entirely about streaming-transcript
+performance (provider chunks, a reasoning veil, pane caching under a
+stream) — mechanisms Milestone 0's strip deleted; confirmed via grep
+(zero references anywhere in `src/`) and clippy (the pulse-clock functions
+it governs are all dead code). Added a staleness banner rather than
+deleting it — the counter-based measurement playbook in its own
+"Measuring" section is still real, reusable technique. `AGENTS.md`'s own
+Performance section rewritten to match, plus two more stale spots caught
+in the same pass: the top-line description still said "Google Calendar
+glance," and the `turso.md` pointer still said "once the local task store
+is being built."
 
 **Fixed (`ad95f6f`, found via a PRD §10 idempotency audit — a correction
 of a dismissal made earlier the same night): Capture's create+schedule
