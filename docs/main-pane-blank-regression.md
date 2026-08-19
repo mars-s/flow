@@ -38,4 +38,5 @@ layout. The existing main-pane fade remains unchanged.
   `bun ./scripts/dev.ts` when it is not running.
 - After touching shell or window-chrome layout, verify both a task view and a
   non-task view. Inbox should show tasks (or its empty state), and Calendar
-  should show its placeholder.
+  should show its own tab content (or Settings' "no calendar connected"
+  state — whichever destination you check, it must not be blank).
