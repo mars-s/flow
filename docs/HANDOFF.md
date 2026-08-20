@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `371d31c` — check `git status` before
+- Working tree is clean as of commit `046124d` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -836,6 +836,40 @@ questions.
       Not yet visually verified — this session has no screen-recording
       access; worth an actual Tab/Enter/Space walkthrough of a real task
       list before trusting the feel of it.
+
+**Fixed (`046124d`, 2026-08-20, direct user feedback with a Things 3
+comparison screenshot): the expanded task card no longer has anywhere to
+go except by clicking a row or its own header.** Two complaints, one
+commit:
+
+1. **Click outside the card now closes it.** `Flow::collapse_expanded_task`
+   (a no-op if nothing's expanded) is wired to the main pane's own
+   `on_click` and to `set_destination` (leaving a view no longer leaves
+   `expanded_task_id` stale — a real, separate gap: it wasn't cleared on
+   navigation before this). Deliberately **not** built as an
+   `on_mouse_down_out` on the card itself, despite that being `menu.rs`'s
+   own established dismiss pattern for popovers — a popover is an overlay
+   that doesn't move anything else when it closes; this card is inline in
+   normal flow, so collapsing it on the down-phase (before the paired
+   mouse-up) can shift every row below it before that up-event resolves.
+   GPUI's own `on_click` only fires when the same hitbox is still under the
+   cursor at mouse-up (`div.rs`'s `pending_mouse_down`/`is_hovered` check),
+   so a card that dismisses itself on down risks swallowing the very click
+   the user meant to land on a different row. Used a plain bubble-phase
+   `on_click` on the main pane instead, with `cx.stop_propagation()` added
+   to both of the row-toggle handlers (the compact row's own click, the
+   card header's own click) so a row opening or switching can't bubble up
+   and immediately collapse itself back closed on the same click.
+2. **The row-to-card jump is gone.** The card's title was `text_size(px(
+   15.0))` against the compact row's `px(13.0)`, and the card's `p(px(
+   12.0))` against the row's `px(8.0)` — both now match exactly, so the
+   title and left inset hold still on expand; only the card's own chrome
+   (rounded corners, extra sections) visibly changes. In its place: GPUI's
+   `Div` has no scale/transform style to animate, so the reveal fakes the
+   same "settle into place" read the row's own collapse animation already
+   gets from animating `h()` directly (a technique this file already
+   established) — the card's top padding eases down to its resting value
+   in step with the existing opacity fade, instead of a flat cross-fade.
 
 ## Where to find things
 
