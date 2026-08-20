@@ -133,16 +133,29 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   Tauri has its own bundler and updater plugin; not yet decided whether
   to adopt Tauri's or keep Sparkle wired to a Tauri-built binary.
 
+## Progress log (most recent first)
+
+- **`parse.rs` extracted to `flow-data`, real NLP capture wired**
+  (`1d13944` in `flow`, `f6565d4` in the prototype). Same verified-move
+  pattern as `db.rs`: confirmed `gpui`-free by grep before touching
+  anything, moved with `git mv`, `src/lib.rs` re-exports it so nothing
+  else in the GPUI app changed, all 186 tests still pass post-move. The
+  prototype's Capture field now calls a real `capture_task` command
+  that parses date/time and schedules the task, matching the GPUI
+  app's `submit_capture` behavior exactly (including its deliberate
+  PRD-14 override and the time-without-date-defaults-to-today rule) —
+  not the bare-title `create_task` it used before.
+
 ## Not started
 
-`eventkit.rs`/calendar wiring, `parse.rs`/NLP capture wiring, subtasks,
-the Calendar view itself, Settings' real "Connect Calendar" flow, undo,
-bulk actions, keyboard-first operation (PRD §7's own acceptance
-criterion for the GPUI app), accessibility, and release/distribution
-tooling. Task CRUD (create/list/complete/note/delete) across all five
-task views is the one slice actually done, and even that's missing
-schedule editing, subtask creation, and delete/undo from the UI itself
-(the `delete_task` command exists; nothing calls it yet).
+`eventkit.rs`/calendar wiring, subtasks, the Calendar view itself,
+Settings' real "Connect Calendar" flow, undo, bulk actions, scheduling
+from the UI (the picker, not just Capture's own parsing), keyboard-first
+operation (PRD §7's own acceptance criterion for the GPUI app),
+accessibility, and release/distribution tooling. Task CRUD (create via
+Capture with real parsing, list/complete/note/delete) across all five
+task views is the actual state of things — delete exists as a command
+but nothing in the UI calls it yet.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
 the user asked to delete the GPUI code now that the Tauri app is
