@@ -135,6 +135,30 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Scheduling picker wired to the "Schedule…" pill** (`30de752`):
+  new `SchedulePicker` popover with Today/Anytime/Someday/Clear
+  quick-picks plus a free-text field that reuses the real NLP parser
+  via new `schedule_task`/`schedule_task_from_text` Tauri commands.
+  Found and fixed a real bug while building it: Today/Upcoming were
+  comparing `task.scheduled_date` against the literal string `"today"`
+  — a leftover from early mock data — so neither view ever matched
+  anything once real backend data (actual ISO date strings) was wired
+  in; both views had been silently empty since that point. Fixed with
+  a new `lib/date.ts::todayIso()` that builds the date from local
+  `Date` components rather than `toISOString()` (UTC, drifts a day off
+  depending on the user's offset).
+
+- **Leading date/time phrases now recognized, not just trailing**
+  (`375c15c` in `flow`), from a direct user report that "in 8 days
+  take out trash" didn't parse. PRD §6.4 only specified trailing-
+  phrase recognition; this is a genuine extension, not a PRD override
+  — trailing patterns still try first with unchanged behavior, leading
+  patterns are a fallback. Leading patterns require mandatory
+  whitespace after the match (not just a word boundary) so "Friday's
+  report is due" doesn't false-positive on "Friday" (a word boundary
+  sits right before the apostrophe too) — covered by a dedicated
+  regression test. 6 new tests (45 in `flow-data`, 192 workspace-wide).
+
 - **`parse.rs` extracted to `flow-data`, real NLP capture wired**
   (`1d13944` in `flow`, `f6565d4` in the prototype). Same verified-move
   pattern as `db.rs`: confirmed `gpui`-free by grep before touching
@@ -224,15 +248,15 @@ in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
 ## Not started
 
 Calendar's Month/Year views and a true Week time-grid (the agenda-per-day
-Kanban view is the only one ported so far), bulk actions, scheduling from
-the UI (the picker, not just Capture's own parsing), full accessibility
-(arrow-key navigation between rows specifically — Tab order is the only
-way to move focus between tasks right now, matching the GPUI app's own
-disclosed gap there), and release/distribution tooling. Task CRUD (create
-via Capture with real parsing, list/complete/note/delete, subtasks,
-delete+undo), keyboard operation of every row/card/pill, and Calendar's
-connect flow and a real agenda view, are the actual state of things now —
-the core task-manager loop is genuinely complete and keyboard-operable,
+Kanban view is the only one ported so far), bulk actions, full
+accessibility (arrow-key navigation between rows specifically — Tab order
+is the only way to move focus between tasks right now, matching the GPUI
+app's own disclosed gap there), and release/distribution tooling. Task
+CRUD (create via Capture with real parsing, list/complete/note/delete,
+subtasks, delete+undo), scheduling from the UI picker, keyboard operation
+of every row/card/pill, and Calendar's connect flow and a real agenda
+view, are the actual state of things now — the core task-manager loop is
+genuinely complete and keyboard-operable,
 and Calendar is real but partial.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
