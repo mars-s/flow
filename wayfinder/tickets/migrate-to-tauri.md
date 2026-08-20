@@ -183,6 +183,26 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   hand-checked path boundaries instead of trusting the scoping of
   several independent watches not to collide.
 
+- **Calendar/EventKit wiring landed** (`60de4db` in `flow`, `f9c3944` +
+  `ac87a2b` in the prototype) — the other big remaining piece from the
+  "Not started" list below, now mostly done. `eventkit.rs` and the
+  `calendar_*` types/functions moved out of `platform.rs` into
+  `flow-data::calendar`, same verified pattern as `db`/`parse`. Real
+  Tauri commands (`calendar_auth_status`/`calendar_connect`/
+  `calendar_events`/`calendar_list`) call straight into it — the actual
+  EventKit permission system and the user's real macOS Calendar data,
+  not a stub. One real bug found before shipping: the permission-
+  request future bridges an Objective-C completion block and can never
+  be `Send`, which Tauri's async commands require — fixed by driving it
+  to completion inside `spawn_blocking`'s own dedicated thread, the same
+  "give the non-Send thing its own thread" shape `flow_data::db` already
+  uses. The frontend's `Calendar` view gates on real auth status, shows
+  a Connect button when not granted, and renders a 7-day agenda-per-day
+  view of real events once granted — deliberately the Kanban-style
+  layout the user liked and kept for Day mode in the GPUI app (`5be0aef`
+  there), not the full Day/Week/Month/Year grid system that app has;
+  Month/Year views and the true Week time-grid aren't ported yet.
+
 **Partial answer to "a proper agent debug/inspection feature"**: not a
 dedicated feature yet, but `scripts/dev-app.ts`'s own build/runtime log
 (piped to a file every session) already gives a real, usable way to
@@ -193,14 +213,15 @@ in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
 
 ## Not started
 
-`eventkit.rs`/calendar wiring, the Calendar view itself, Settings' real
-"Connect Calendar" flow, bulk actions, scheduling from the UI (the
-picker, not just Capture's own parsing), keyboard-first operation (PRD
-§7's own acceptance criterion for the GPUI app), accessibility, and
-release/distribution tooling. Task CRUD (create via Capture with real
-parsing, list/complete/note/delete, subtasks, delete+undo) across all
-five task views is the actual state of things now — this is genuinely
-the core task-manager loop, complete.
+Calendar's Month/Year views and a true Week time-grid (the agenda-per-day
+Kanban view is the only one ported so far), bulk actions, scheduling from
+the UI (the picker, not just Capture's own parsing), keyboard-first
+operation (PRD §7's own acceptance criterion for the GPUI app),
+accessibility, and release/distribution tooling. Task CRUD (create via
+Capture with real parsing, list/complete/note/delete, subtasks,
+delete+undo) across all five task views, plus Calendar's connect flow and
+a real agenda view, are the actual state of things now — the core
+task-manager loop is genuinely complete, and Calendar is real but partial.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
 the user asked to delete the GPUI code now that the Tauri app is
