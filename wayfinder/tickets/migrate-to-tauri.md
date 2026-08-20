@@ -146,16 +146,22 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   PRD-14 override and the time-without-date-defaults-to-today rule) —
   not the bare-title `create_task` it used before.
 
+- **Subtasks wired** (`e345107` in the prototype): `list_subtasks`/
+  `create_subtask` commands, a real Subtasks (done/total) section in
+  the expanded card with per-subtask completion toggles and an inline
+  add row. Fetched only for the currently-expanded task, same
+  reasoning the GPUI app's own `subtask_context` uses.
+
 ## Not started
 
-`eventkit.rs`/calendar wiring, subtasks, the Calendar view itself,
-Settings' real "Connect Calendar" flow, undo, bulk actions, scheduling
-from the UI (the picker, not just Capture's own parsing), keyboard-first
-operation (PRD §7's own acceptance criterion for the GPUI app),
-accessibility, and release/distribution tooling. Task CRUD (create via
-Capture with real parsing, list/complete/note/delete) across all five
-task views is the actual state of things — delete exists as a command
-but nothing in the UI calls it yet.
+`eventkit.rs`/calendar wiring, the Calendar view itself, Settings' real
+"Connect Calendar" flow, undo, bulk actions, scheduling from the UI (the
+picker, not just Capture's own parsing), keyboard-first operation (PRD
+§7's own acceptance criterion for the GPUI app), accessibility, and
+release/distribution tooling. Task CRUD (create via Capture with real
+parsing, list/complete/note/delete, subtasks) across all five task views
+is the actual state of things — `delete_task` exists as a command but
+nothing in the UI calls it yet.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
 the user asked to delete the GPUI code now that the Tauri app is
