@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
@@ -57,6 +57,51 @@ function colorCss([r, g, b, a]: [number, number, number, number]): string {
   return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
 }
 
+// Picking white or black off the color's own HSL lightness — cheap and
+// correct for the common case (some real calendar colors, pale yellow or
+// light green, are too light for a fixed white label), without pulling in
+// real WCAG contrast math for a text/background pair that's always exactly
+// this one accent color underneath. Same rule the GPUI app's own
+// readable_text_on uses.
+function readableTextOn([r, g, b]: [number, number, number, number]): string {
+  const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
+  return lightness > 0.6 ? "#000" : "#fff";
+}
+
+const HOUR_HEIGHT = 48;
+const DEFAULT_START_HOUR = 7;
+
+function hourLabel(hour: number): string {
+  if (hour === 0) return "12 AM";
+  if (hour < 12) return `${hour} AM`;
+  if (hour === 12) return "12 PM";
+  return `${hour - 12} PM`;
+}
+
+// Greedy lane sweep: give each event the first lane whose previous occupant
+// already ended by this event's start, else open a new lane. Same
+// simplification the GPUI app's own render_calendar_grid_day_column keeps
+// deliberate — overlapping events share a uniform lane width, not Apple's
+// true interval-packing layout.
+function assignLanes(events: CalendarEvent[]): { event: CalendarEvent; lane: number; laneCount: number }[] {
+  const sorted = [...events].sort((a, b) => a.start.localeCompare(b.start));
+  const laneEnd: number[] = [];
+  const placed = sorted.map((event) => {
+    const start = new Date(event.start).getTime();
+    const end = new Date(event.end).getTime();
+    let lane = laneEnd.findIndex((laneEndTime) => laneEndTime <= start);
+    if (lane === -1) {
+      lane = laneEnd.length;
+      laneEnd.push(end);
+    } else {
+      laneEnd[lane] = end;
+    }
+    return { event, lane };
+  });
+  const laneCount = Math.max(laneEnd.length, 1);
+  return placed.map(({ event, lane }) => ({ event, lane, laneCount }));
+}
+
 // The Month grid's own range: the full calendar weeks (Monday-start) that
 // cover the month, same "grid_start"/"grid_end" shape the GPUI app's
 // render_calendar_year_grid uses per-month — a month grid always shows
@@ -107,6 +152,110 @@ function DayColumn({ day, events, isToday }: { day: Date; events: CalendarEvent[
             )}
           </motion.div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// A real time-grid week: a fixed hour gutter, one column per day, all-day
+// events in their own strip above the grid, timed events absolutely
+// positioned by time-of-day and duration — mirrors the GPUI app's own
+// render_calendar_week_grid. Day mode deliberately keeps the simpler
+// agenda-per-day DayColumn instead (the GPUI app's own comment: Day kept
+// its Kanban-board look on purpose when Week moved to a real grid).
+function WeekTimeGrid({ days, events, today }: { days: Date[]; events: CalendarEvent[]; today: Date }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Jump to a sensible starting hour on mount instead of opening on
+  // midnight — mostly empty for almost everyone. Only once per mount,
+  // same "seed it, then let the user's own scrolling take over" reasoning
+  // the GPUI app's own calendar_week_scrolled_once flag uses.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: DEFAULT_START_HOUR * HOUR_HEIGHT });
+  }, []);
+
+  const allDayByDay = days.map((day) => events.filter((event) => event.all_day && sameDay(new Date(event.start), day)));
+  const hasAllDay = allDayByDay.some((dayEvents) => dayEvents.length > 0);
+
+  return (
+    <div className="calendar-grid">
+      <div className="calendar-grid-header">
+        <div className="calendar-grid-gutter" />
+        {days.map((day) => (
+          <div className="calendar-grid-header-cell" key={day.toISOString()}>
+            <span className="calendar-grid-header-weekday">{day.toLocaleDateString(undefined, { weekday: "short" })}</span>
+            <span className={sameDay(day, today) ? "calendar-grid-header-number today" : "calendar-grid-header-number"}>
+              {day.getDate()}
+            </span>
+          </div>
+        ))}
+      </div>
+      {hasAllDay && (
+        <div className="calendar-grid-all-day">
+          <div className="calendar-grid-gutter" />
+          {allDayByDay.map((dayEvents, i) => (
+            <div className="calendar-grid-all-day-cell" key={days[i].toISOString()}>
+              {dayEvents.map((event) => (
+                <div
+                  className="calendar-grid-all-day-event"
+                  key={event.id}
+                  style={{ background: colorCss(event.color), color: readableTextOn(event.color) }}
+                >
+                  {event.title}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="calendar-grid-body" ref={scrollRef}>
+        <div className="calendar-grid-gutter">
+          {Array.from({ length: 24 }, (_, hour) => (
+            <div className="calendar-grid-hour-row" key={hour}>
+              <span className="calendar-grid-hour-label">{hourLabel(hour)}</span>
+            </div>
+          ))}
+        </div>
+        {days.map((day) => {
+          const dayEvents = events.filter((event) => !event.all_day && sameDay(new Date(event.start), day));
+          const midnight = new Date(day);
+          midnight.setHours(0, 0, 0, 0);
+          return (
+            <div className="calendar-grid-day-column" key={day.toISOString()}>
+              {Array.from({ length: 24 }, (_, hour) => (
+                <div className="calendar-grid-hour-row" key={hour} />
+              ))}
+              {assignLanes(dayEvents).map(({ event, lane, laneCount }) => {
+                const startMinutes = Math.max(0, (new Date(event.start).getTime() - midnight.getTime()) / 60000);
+                const durationMinutes = Math.max(15, (new Date(event.end).getTime() - new Date(event.start).getTime()) / 60000);
+                const top = (startMinutes / 60) * HOUR_HEIGHT;
+                const height = Math.max(18, (durationMinutes / 60) * HOUR_HEIGHT);
+                const textColor = readableTextOn(event.color);
+                return (
+                  <div
+                    className="calendar-grid-event"
+                    key={event.id}
+                    style={{
+                      top,
+                      height,
+                      left: `${(lane / laneCount) * 100}%`,
+                      width: `${(1 / laneCount) * 100}%`,
+                    }}
+                  >
+                    <div className="calendar-grid-event-card" style={{ background: colorCss(event.color), color: textColor }}>
+                      <span className="calendar-grid-event-title">{event.title}</span>
+                      {height >= 32 && (
+                        <span className="calendar-grid-event-time">
+                          {new Date(event.start).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -345,11 +494,11 @@ export function Calendar() {
             setMode("day");
           }}
         />
+      ) : mode === "week" ? (
+        <WeekTimeGrid days={daysBetween(startOfWeek(cursor), 7)} events={events} today={today} />
       ) : (
         <div className="calendar-week">
-          {(mode === "day" ? [cursor] : daysBetween(startOfWeek(cursor), 7)).map((day) => (
-            <DayColumn key={day.toISOString()} day={day} events={events} isToday={sameDay(day, today)} />
-          ))}
+          <DayColumn day={cursor} events={events} isToday={sameDay(cursor, today)} />
         </div>
       )}
     </div>
