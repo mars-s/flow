@@ -136,6 +136,35 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Repo consolidation: flow-tauri-prototype merged into this repo as
+  `apps/desktop/`** (`5645da5`/`360c04e`, direct user request: "i want
+  the flow repo on github to be the tauri one. can we keep the main
+  one"). The app previously lived in its own `flow-tauri-prototype`
+  GitHub repo, path-depending on this repo's `crates/flow-data` across
+  the repo boundary — a deliberate split for the length of the
+  migration (see the Context section above), which stopped serving a
+  purpose once the migration was done. Merged via `git subtree add
+  --prefix=apps/desktop`, preserving flow-tauri-prototype's full commit
+  history as real parents of the merge commit (not squashed). Placed in
+  `apps/desktop/` rather than the repo root: this repo's root turned out
+  to already be a live Bun workspace monorepo (`apps/web`,
+  `packages/flow-client`, `website/`, drizzle db tooling) that a
+  root-level merge would have silently clobbered (colliding
+  `package.json`, `tsconfig.json`, `scripts/`, `vite.config.ts`) — caught
+  before touching anything, corrected the plan with the user rather than
+  pushing through. `apps/desktop` is picked up automatically by the
+  existing root workspaces glob (`"apps/*"`). Follow-up fixes:
+  `flow-data`'s path dependency updated from the old cross-repo
+  `../../flow/crates/flow-data` to the same-repo
+  `../../../crates/flow-data`; `apps/desktop/src-tauri` added to the
+  root `Cargo.toml` workspace members so `cargo check --workspace` /
+  `cargo test --workspace` exercise it too (verified clean); `AGENTS.md`
+  (the `CLAUDE.md` symlink's source) and `apps/desktop/.agent/README.md`
+  rewritten to describe the merged layout. The `flow-tauri-prototype`
+  GitHub repo is to be archived (read-only) now that this repo has
+  everything — this `flow` repo is the single canonical home for Flow
+  going forward: the app, its shared crates, and its product/planning
+  docs all in one place.
 - **Seventh and final AI backlog item: Smart scheduling** (`2f2e08b`
   in the prototype) — the full 7-item backlog Settings originally listed
   is now built out (6 model-backed blocks: Today briefing, Checklist
