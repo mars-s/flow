@@ -136,6 +136,17 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **dev-app.ts fixed for the workspace-target-path change** (`199836a`):
+  a real bug the consolidation itself introduced, found by actually
+  running the watcher afterward rather than trusting the merge. Once
+  `apps/desktop/src-tauri` joined the root Cargo workspace, Cargo builds
+  it into the workspace root's `target/` instead of a `target/` local to
+  `src-tauri/` — the watcher was still looking in the old place, so
+  `open` silently failed against a path that never existed and the
+  watcher mistook that for the app quitting and stopped itself. Fixed by
+  pointing `appPath` at the workspace root's `target/` (two levels up
+  from `apps/desktop`); confirmed the app actually launches and stays
+  running via `ps`, not just a clean-looking build log.
 - **Repo consolidation: flow-tauri-prototype merged into this repo as
   `apps/desktop/`** (`5645da5`/`360c04e`, direct user request: "i want
   the flow repo on github to be the tauri one. can we keep the main
