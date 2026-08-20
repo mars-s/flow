@@ -25,6 +25,7 @@ export default function App() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [completing, setCompleting] = useState<Set<string>>(new Set());
   const [capturing, setCapturing] = useState(false);
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
 
   // Every task view Flow actually has lives under one of these five real
   // View values — fetched together on mount/refresh rather than one at a
@@ -47,6 +48,21 @@ export default function App() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Only the expanded task's card ever needs its subtasks — same reasoning
+  // the GPUI app's own subtask_context comment gives for fetching this only
+  // when something is actually expanded, not per row.
+  const refreshSubtasks = useCallback((parentId: string) => {
+    api
+      .listSubtasks(parentId)
+      .then(setSubtasks)
+      .catch((error) => setLoadError(String(error)));
+  }, []);
+
+  useEffect(() => {
+    if (expanded) refreshSubtasks(expanded);
+    else setSubtasks([]);
+  }, [expanded, refreshSubtasks]);
 
   const inboxCount = useMemo(() => tasks.filter((task) => task.bucket === "Inbox").length, [tasks]);
 
@@ -100,6 +116,21 @@ export default function App() {
     api.setNote(id, note).catch((error) => setLoadError(String(error)));
   };
 
+  const addSubtask = (parentId: string, title: string) => {
+    api
+      .createSubtask(parentId, title)
+      .then(() => refreshSubtasks(parentId))
+      .catch((error) => setLoadError(String(error)));
+  };
+
+  const toggleSubtask = (id: string, completed: boolean) => {
+    if (!expanded) return;
+    api
+      .setCompleted(id, completed)
+      .then(() => refreshSubtasks(expanded))
+      .catch((error) => setLoadError(String(error)));
+  };
+
   return (
     <div
       className="app"
@@ -131,9 +162,12 @@ export default function App() {
                 tasks={upcomingTasks}
                 expanded={expanded}
                 completing={completing}
+                subtasks={subtasks}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
                 onNoteChange={changeNote}
+                onAddSubtask={addSubtask}
+                onToggleSubtask={toggleSubtask}
               />
             ) : (
               <TaskList
@@ -141,9 +175,12 @@ export default function App() {
                 tasks={visibleTasks}
                 expanded={expanded}
                 completing={completing}
+                subtasks={subtasks}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
                 onNoteChange={changeNote}
+                onAddSubtask={addSubtask}
+                onToggleSubtask={toggleSubtask}
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
               />
             )}

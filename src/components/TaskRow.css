@@ -113,11 +113,41 @@
   margin-left: 4px;
 }
 
-.subtask-row {
+.subtasks-header {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-ghost);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding-left: 8px;
+  margin-bottom: 2px;
+}
+
+.subtask-row,
+.subtask-add-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding-left: 8px;
+}
+
+.subtask-add-row {
+  margin: 0;
+}
+
+.subtask-add-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.subtask-add-input::placeholder {
+  color: var(--text-ghost);
 }
 
 .subtask-title {

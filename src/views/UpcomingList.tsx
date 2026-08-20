@@ -10,9 +10,12 @@ type Props = {
   tasks: Task[];
   expanded: string | null;
   completing: Set<string>;
+  subtasks: Task[];
   onToggleExpanded: (id: string) => void;
   onComplete: (id: string) => void;
   onNoteChange: (id: string, note: string) => void;
+  onAddSubtask: (parentId: string, title: string) => void;
+  onToggleSubtask: (id: string, completed: boolean) => void;
 };
 
 function groupByDate(tasks: Task[]): [string, Task[]][] {
@@ -26,7 +29,17 @@ function groupByDate(tasks: Task[]): [string, Task[]][] {
   return [...groups.entries()];
 }
 
-export function UpcomingList({ tasks, expanded, completing, onToggleExpanded, onComplete, onNoteChange }: Props) {
+export function UpcomingList({
+  tasks,
+  expanded,
+  completing,
+  subtasks,
+  onToggleExpanded,
+  onComplete,
+  onNoteChange,
+  onAddSubtask,
+  onToggleSubtask,
+}: Props) {
   const groups = groupByDate(tasks);
 
   return (
@@ -44,6 +57,7 @@ export function UpcomingList({ tasks, expanded, completing, onToggleExpanded, on
               <AnimatePresence initial={false}>
                 {group.map((task) => {
                   const isCompleting = completing.has(task.id);
+                  const isExpanded = expanded === task.id;
                   return (
                     <motion.div
                       key={task.id}
@@ -56,11 +70,14 @@ export function UpcomingList({ tasks, expanded, completing, onToggleExpanded, on
                     >
                       <TaskRow
                         task={task}
-                        expanded={expanded === task.id}
+                        expanded={isExpanded}
                         completing={isCompleting}
+                        subtasks={isExpanded ? subtasks : []}
                         onToggleExpanded={() => onToggleExpanded(task.id)}
                         onComplete={() => onComplete(task.id)}
                         onNoteChange={(note) => onNoteChange(task.id, note)}
+                        onAddSubtask={(title) => onAddSubtask(task.id, title)}
+                        onToggleSubtask={onToggleSubtask}
                       />
                     </motion.div>
                   );

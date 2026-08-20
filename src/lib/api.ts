@@ -14,5 +14,7 @@ export const api = {
   captureTask: (title: string) => invoke<Task>("capture_task", { title }),
   setCompleted: (id: string, completed: boolean) => invoke<void>("set_completed", { id, completed }),
   setNote: (id: string, note: string) => invoke<void>("set_note", { id, note }),
+  listSubtasks: (parentId: string) => invoke<Task[]>("list_subtasks", { parentId }),
+  createSubtask: (parentId: string, title: string) => invoke<Task>("create_subtask", { parentId, title }),
   deleteTask: (id: string) => invoke<void>("delete_task", { id }),
 };

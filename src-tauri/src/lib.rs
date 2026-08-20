@@ -96,6 +96,24 @@ async fn set_note(db: tauri::State<'_, Db>, id: String, note: String) -> Result<
 }
 
 #[tauri::command]
+async fn list_subtasks(db: tauri::State<'_, Db>, parent_id: String) -> Result<Vec<Task>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.list_subtasks(parent_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn create_subtask(db: tauri::State<'_, Db>, parent_id: String, title: String) -> Result<Task, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.create_subtask(parent_id, title))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn delete_task(db: tauri::State<'_, Db>, id: String) -> Result<(), String> {
     let db = db.inner().clone();
     tokio::task::spawn_blocking(move || db.delete_task(id))
@@ -121,6 +139,8 @@ pub fn run() {
             capture_task,
             set_completed,
             set_note,
+            list_subtasks,
+            create_subtask,
             delete_task,
         ])
         .run(tauri::generate_context!())

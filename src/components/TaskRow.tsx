@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Tag, ListTree, Flag } from "lucide-react";
+import { Tag, ListTree, Flag, Plus } from "lucide-react";
 import type { Task } from "../lib/types";
 import "./TaskRow.css";
 
@@ -19,13 +19,28 @@ type Props = {
   task: Task;
   expanded: boolean;
   completing: boolean;
+  subtasks: Task[];
   onToggleExpanded: () => void;
   onComplete: () => void;
   onNoteChange: (note: string) => void;
+  onAddSubtask: (title: string) => void;
+  onToggleSubtask: (id: string, completed: boolean) => void;
 };
 
-export function TaskRow({ task, expanded, completing, onToggleExpanded, onComplete, onNoteChange }: Props) {
+export function TaskRow({
+  task,
+  expanded,
+  completing,
+  subtasks,
+  onToggleExpanded,
+  onComplete,
+  onNoteChange,
+  onAddSubtask,
+  onToggleSubtask,
+}: Props) {
   const [pressed, setPressed] = useState(false);
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const subtaskInputRef = useRef<HTMLInputElement>(null);
 
   const checkbox = (
     <motion.div
@@ -51,6 +66,7 @@ export function TaskRow({ task, expanded, completing, onToggleExpanded, onComple
   );
 
   if (expanded) {
+    const openCount = subtasks.filter((subtask) => !subtask.completed_at).length;
     return (
       <motion.div
         layoutId={`row-${task.id}`}
@@ -73,15 +89,68 @@ export function TaskRow({ task, expanded, completing, onToggleExpanded, onComple
             defaultValue={task.note ?? ""}
             onBlur={(event) => onNoteChange(event.target.value)}
           />
-          {/* Subtasks aren't wired yet — flow-data's Task has no embedded
-              subtasks field (they're a separate list_subtasks call per
-              parent, matching the real GPUI app's own architecture), and
-              this prototype doesn't call it yet. Open work, not a design
-              decision to drop them. */}
+
+          {(subtasks.length > 0 || addingSubtask) && (
+            <div className="card-subtasks">
+              {subtasks.length > 0 && (
+                <div className="subtasks-header">
+                  Subtasks ({subtasks.length - openCount}/{subtasks.length})
+                </div>
+              )}
+              {subtasks.map((subtask) => (
+                <div className="subtask-row" key={subtask.id}>
+                  <motion.div
+                    className={`checkbox small ${subtask.completed_at ? "checked" : ""}`}
+                    whileTap={{ scale: 0.82 }}
+                    onClick={() => onToggleSubtask(subtask.id, !subtask.completed_at)}
+                  >
+                    {subtask.completed_at && <Check />}
+                  </motion.div>
+                  <span className={subtask.completed_at ? "subtask-title done" : "subtask-title"}>
+                    {subtask.title}
+                  </span>
+                </div>
+              ))}
+              {addingSubtask && (
+                <form
+                  className="subtask-add-row"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const value = subtaskInputRef.current?.value.trim();
+                    if (value) onAddSubtask(value);
+                    if (subtaskInputRef.current) subtaskInputRef.current.value = "";
+                    setAddingSubtask(false);
+                  }}
+                >
+                  <div className="checkbox small" />
+                  <input
+                    ref={subtaskInputRef}
+                    className="subtask-add-input"
+                    placeholder="New subtask"
+                    autoFocus
+                    onBlur={() => setAddingSubtask(false)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") setAddingSubtask(false);
+                    }}
+                  />
+                </form>
+              )}
+            </div>
+          )}
+
           <div className="card-pills">
             <motion.div className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
               <Tag size={11} />
               {task.scheduled_date ?? "Schedule…"}
+            </motion.div>
+            <motion.div
+              className="pill"
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => setAddingSubtask(true)}
+            >
+              <Plus size={11} />
+              Subtask
             </motion.div>
             <motion.div className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
               <ListTree size={11} />
