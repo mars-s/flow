@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `9256b58` — check `git status` before
+- Working tree is clean as of commit `182ce17` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -911,6 +911,22 @@ resurface the next time any task — not necessarily the same one — got
 expanded. `collapse_expanded_task` now does the full reset;
 `handle_cancel_turn_action` calls it instead of keeping its own copy, so
 there's exactly one path left to maintain.
+
+**Fixed (`182ce17`, found while writing the fix directly above, not a user
+report): Escape while renaming a task silently dropped the rename — a
+real pre-existing bug, not something this session introduced.**
+`handle_cancel_turn_action` (and the `collapse_expanded_task` reset just
+copied from it) set `self.editing_title = false` *before* calling
+`set_expanded_task`, which calls `flush_title` — and `flush_title` reads
+`editing_title` to decide whether there's an unsubmitted rename worth
+saving. Clearing it first makes `flush_title` see "nothing was being
+edited" and abandon whatever was typed, no error, no trace.
+`toggle_expanded`'s own collapse branch already documented and avoided
+this exact trap (its own comment names the mechanism precisely); this
+reset just hadn't followed it. Fixed by removing the premature clear —
+`flush_title` clears the flag itself once it actually runs. Since
+`handle_cancel_turn_action` now delegates to `collapse_expanded_task`,
+one fix covers both Escape and click-outside.
 
 ## Where to find things
 
