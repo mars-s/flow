@@ -15,7 +15,7 @@ import { todayIso } from "./lib/date";
 import { usePersistedString } from "./lib/persisted";
 import type { ThemeId } from "./lib/theme";
 import { VIEW_FOR } from "./lib/types";
-import type { Bucket, Destination, Task, View } from "./lib/types";
+import type { Bucket, Destination, SubtaskCount, Task, View } from "./lib/types";
 import "./theme.css";
 import "./App.css";
 
@@ -53,6 +53,10 @@ export default function App() {
     Anytime: false,
     Someday: false,
   });
+  // A collapsed row's own subtask-count badge (direct user request,
+  // matching Things 3's row indicators) — keyed by parent id so any row,
+  // in any view, can look its own count up without a per-row fetch.
+  const [subtaskCounts, setSubtaskCounts] = useState<Record<string, SubtaskCount>>({});
   const [theme, setTheme] = usePersistedString("flow.theme", "default");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"tasks" | "calendar">("tasks");
@@ -87,6 +91,14 @@ export default function App() {
           next[view] = lists[i];
         });
         setCompletedTasks(next);
+      })
+      .catch((error) => setLoadError(String(error)));
+    api
+      .subtaskCounts()
+      .then((counts) => {
+        const byParent: Record<string, SubtaskCount> = {};
+        for (const count of counts) byParent[count.parent_id] = count;
+        setSubtaskCounts(byParent);
       })
       .catch((error) => setLoadError(String(error)));
   }, []);
@@ -395,6 +407,7 @@ export default function App() {
                 expanded={expanded}
                 completing={completing}
                 subtasks={subtasks}
+                subtaskCounts={subtaskCounts}
                 selectedIds={selectedIds}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
@@ -424,6 +437,7 @@ export default function App() {
                 expanded={expanded}
                 completing={completing}
                 subtasks={subtasks}
+                subtaskCounts={subtaskCounts}
                 selectedIds={selectedIds}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}

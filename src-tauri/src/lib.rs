@@ -18,7 +18,7 @@
 //! requirement in itself.
 
 use flow_data::calendar::{self, CalendarAuth, CalendarEvent, CalendarInfo};
-use flow_data::db::{Bucket, Db, Task, View};
+use flow_data::db::{Bucket, Db, SubtaskCount, Task, View};
 use flow_data::parse;
 use serde::Serialize;
 use tauri::Manager;
@@ -275,6 +275,18 @@ async fn list_subtasks(db: tauri::State<'_, Db>, parent_id: String) -> Result<Ve
         .map_err(|error| error.to_string())
 }
 
+/// Every parent's open/total subtask counts in one call — a collapsed
+/// row's own subtask-count badge (direct user request, matching Things
+/// 3's row indicators), not gated to a particular view.
+#[tauri::command]
+async fn subtask_counts(db: tauri::State<'_, Db>) -> Result<Vec<SubtaskCount>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.subtask_counts())
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 async fn create_subtask(db: tauri::State<'_, Db>, parent_id: String, title: String) -> Result<Task, String> {
     let db = db.inner().clone();
@@ -376,6 +388,7 @@ pub fn run() {
             schedule_task_from_text,
             list_subtasks,
             create_subtask,
+            subtask_counts,
             delete_task,
             restore_task,
             calendar_auth_status,

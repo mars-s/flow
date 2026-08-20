@@ -65,11 +65,30 @@
   text-decoration: line-through;
 }
 
-.row-schedule,
-.row-subtask-count {
+.row-schedule {
   flex: none;
   font-size: 11px;
   color: var(--text-tertiary);
+}
+
+.row-indicators {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-ghost);
+}
+
+.row-indicator {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-indicator-icon {
+  flex: none;
 }
 
 .card {

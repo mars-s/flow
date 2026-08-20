@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Tag, Trash2, Square, SquareCheckBig } from "lucide-react";
-import type { Task } from "../lib/types";
+import { Tag, Trash2, Square, SquareCheckBig, FileText, ListChecks } from "lucide-react";
+import type { SubtaskCount, Task } from "../lib/types";
 import { linkify } from "../lib/linkify";
 import { formatSchedule } from "../lib/date";
 import { splitHighlight, stripHighlight, useNlpPreview } from "../lib/nlpPreview";
@@ -24,6 +24,7 @@ type Props = {
   expanded: boolean;
   completing: boolean;
   subtasks: Task[];
+  subtaskCount?: SubtaskCount;
   onToggleExpanded: () => void;
   onComplete: () => void;
   onRename: (id: string, title: string) => void;
@@ -234,6 +235,7 @@ export function TaskRow({
   expanded,
   completing,
   subtasks,
+  subtaskCount,
   onToggleExpanded,
   onComplete,
   onRename,
@@ -487,6 +489,21 @@ export function TaskRow({
     >
       {checkbox}
       <div className={`row-title ${completing ? "checked" : ""}`}>{linkify(task.title)}</div>
+      {/* Direct user request, matching Things 3's own row indicators: a
+          note icon when the task has one, a checklist icon + open/total
+          count when it has subtasks — both readable without opening the
+          card. task.note is already on every row (no extra fetch); the
+          subtask count comes from the one-shot subtask_counts map
+          (App.tsx), not a per-row fetch. */}
+      <div className="row-indicators">
+        {task.note && <FileText size={12} className="row-indicator-icon" />}
+        {subtaskCount && subtaskCount.total > 0 && (
+          <span className="row-indicator">
+            <ListChecks size={12} className="row-indicator-icon" />
+            {subtaskCount.total - subtaskCount.open}/{subtaskCount.total}
+          </span>
+        )}
+      </div>
       {task.scheduled_date && (
         <div className="row-schedule">{formatSchedule(task.scheduled_date, task.scheduled_time)}</div>
       )}

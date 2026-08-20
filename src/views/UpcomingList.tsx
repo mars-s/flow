@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TaskRow } from "../components/TaskRow";
 import { dayLabel } from "../lib/date";
-import type { Task } from "../lib/types";
+import type { SubtaskCount, Task } from "../lib/types";
 import "./TaskList.css";
 import "./UpcomingList.css";
 
@@ -13,6 +13,7 @@ type Props = {
   expanded: string | null;
   completing: Set<string>;
   subtasks: Task[];
+  subtaskCounts: Record<string, SubtaskCount>;
   selectedIds: Set<string>;
   onToggleExpanded: (id: string) => void;
   onComplete: (id: string) => void;
@@ -44,6 +45,7 @@ export function UpcomingList({
   expanded,
   completing,
   subtasks,
+  subtaskCounts,
   selectedIds,
   onToggleExpanded,
   onComplete,
@@ -91,6 +93,7 @@ export function UpcomingList({
                         expanded={isExpanded}
                         completing={isCompleting}
                         subtasks={isExpanded ? subtasks : []}
+                        subtaskCount={subtaskCounts[task.id]}
                         selected={selectedIds.has(task.id)}
                         onToggleExpanded={() => onToggleExpanded(task.id)}
                         onComplete={() => onComplete(task.id)}

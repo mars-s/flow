@@ -22,6 +22,13 @@ export type Task = {
   updated_at: string;
 };
 
+// Mirrors flow-data's real db::SubtaskCount exactly.
+export type SubtaskCount = {
+  parent_id: string;
+  open: number;
+  total: number;
+};
+
 export type Destination = "inbox" | "today" | "upcoming" | "anytime" | "someday" | "calendar" | "settings";
 
 // Mirrors flow-data's real calendar::{CalendarAuth, CalendarEvent,
