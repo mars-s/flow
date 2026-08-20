@@ -2107,6 +2107,14 @@ fn render_task_row(
                 .border_color(if checked { theme.accent } else { theme.border_strong })
                 .cursor_default()
                 .hover(|el| el.border_color(theme.accent))
+                // Real tactile "give" on press — GPUI's own `:active`-style
+                // pseudo-class (`sidebar.rs`'s nav rows already use it, just
+                // for color, not size), applied instantly while the mouse
+                // is held, no animation curve needed for a press to feel
+                // right. Springs back to rest the instant it releases via
+                // the completion pop below, or just the plain resting style
+                // if released without completing.
+                .active(|el| el.w(px(15.0)).h(px(15.0)))
                 .on_click(cx.listener(move |flow, _, _, cx| {
                     if is_completing {
                         return; // Already animating out from an earlier click.
@@ -2301,6 +2309,8 @@ fn render_detail_card(
                         .border_color(theme.border_strong)
                         .cursor_default()
                         .hover(|el| el.border_color(theme.accent))
+                        // Same press-give as the compact row's own checkbox.
+                        .active(|el| el.w(px(15.0)).h(px(15.0)))
                         .on_click(cx.listener(move |flow, _, _, cx| {
                             if completed {
                                 flow.toggle_completed(
