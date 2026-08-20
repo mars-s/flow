@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
-import type { CalendarAuth, CalendarEvent } from "../lib/types";
+import type { CalendarAuth, CalendarEvent, CalendarInfo } from "../lib/types";
 import "./Calendar.css";
 
 type Mode = "day" | "week" | "month" | "year";
@@ -371,13 +371,77 @@ function YearGrid({
   );
 }
 
+// Mirrors the GPUI app's own render_calendar_sidebar: grouped by account
+// (source_title), matching Apple Calendar's own sidebar sectioning. Each
+// row toggles that calendar's events on/off — shown = filled dot, hidden =
+// hollow (a shape change, not just a dimmer color, so on/off reads without
+// relying on contrast sensitivity — CLAUDE.md: "never encode meaning in
+// color alone"). The calendar's own color stays the dot's border either
+// way, so which calendar this is never disappears with it.
+function CalendarSidebar({
+  calendars,
+  hiddenIds,
+  onToggle,
+}: {
+  calendars: CalendarInfo[];
+  hiddenIds: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  const groups = useMemo(() => {
+    const map = new Map<string, CalendarInfo[]>();
+    for (const calendar of calendars) {
+      const key = calendar.source_title || "Other";
+      const list = map.get(key) ?? [];
+      list.push(calendar);
+      map.set(key, list);
+    }
+    return [...map.entries()];
+  }, [calendars]);
+
+  return (
+    <div className="calendar-sidebar">
+      {groups.map(([source, group]) => (
+        <div className="calendar-sidebar-group" key={source}>
+          <div className="calendar-sidebar-group-label">{source}</div>
+          {group.map((calendar) => {
+            const hidden = hiddenIds.has(calendar.id);
+            return (
+              <button
+                type="button"
+                key={calendar.id}
+                className="calendar-sidebar-row"
+                onClick={() => onToggle(calendar.id)}
+              >
+                <span
+                  className={`calendar-sidebar-dot ${hidden ? "" : "filled"}`}
+                  style={{ borderColor: colorCss(calendar.color), background: hidden ? "transparent" : colorCss(calendar.color) }}
+                />
+                <span className={hidden ? "calendar-sidebar-title hidden" : "calendar-sidebar-title"}>
+                  {calendar.title}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Calendar() {
   const [auth, setAuth] = useState<CalendarAuth | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [calendars, setCalendars] = useState<CalendarInfo[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("week");
   const [cursor, setCursor] = useState(() => new Date());
+
+  const visibleEvents = useMemo(
+    () => events.filter((event) => !hiddenIds.has(event.calendar_id)),
+    [events, hiddenIds],
+  );
 
   const range = useMemo(() => {
     if (mode === "day") return { start: cursor, end: addDays(cursor, 1) };
@@ -401,6 +465,22 @@ export function Calendar() {
       .then(setEvents)
       .catch((err) => setError(String(err)));
   }, [auth, range]);
+
+  useEffect(() => {
+    if (auth !== "Granted") return;
+    api
+      .calendarList()
+      .then(setCalendars)
+      .catch((err) => setError(String(err)));
+  }, [auth]);
+
+  const toggleCalendar = (id: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  };
 
   const connect = () => {
     setConnecting(true);
@@ -444,63 +524,66 @@ export function Calendar() {
   const goToday = () => setCursor(new Date());
 
   return (
-    <div className="calendar-view">
-      <div className="view-header calendar-header">
-        <h1>{headerLabel(mode, cursor)}</h1>
-        <div className="calendar-header-controls">
-          <div className="calendar-nav">
-            <button type="button" onClick={goPrev} aria-label="Previous">
-              <ChevronLeft size={15} />
-            </button>
-            <button type="button" className="calendar-today-button" onClick={goToday}>
-              Today
-            </button>
-            <button type="button" onClick={goNext} aria-label="Next">
-              <ChevronRight size={15} />
-            </button>
-          </div>
-          <div className="calendar-mode-toggle">
-            {(["day", "week", "month", "year"] as const).map((m) => (
-              <button
-                type="button"
-                key={m}
-                className={mode === m ? "active" : ""}
-                onClick={() => setMode(m)}
-              >
-                {m[0].toUpperCase() + m.slice(1)}
+    <div className="calendar-shell">
+      <CalendarSidebar calendars={calendars} hiddenIds={hiddenIds} onToggle={toggleCalendar} />
+      <div className="calendar-view">
+        <div className="view-header calendar-header">
+          <h1>{headerLabel(mode, cursor)}</h1>
+          <div className="calendar-header-controls">
+            <div className="calendar-nav">
+              <button type="button" onClick={goPrev} aria-label="Previous">
+                <ChevronLeft size={15} />
               </button>
-            ))}
+              <button type="button" className="calendar-today-button" onClick={goToday}>
+                Today
+              </button>
+              <button type="button" onClick={goNext} aria-label="Next">
+                <ChevronRight size={15} />
+              </button>
+            </div>
+            <div className="calendar-mode-toggle">
+              {(["day", "week", "month", "year"] as const).map((m) => (
+                <button
+                  type="button"
+                  key={m}
+                  className={mode === m ? "active" : ""}
+                  onClick={() => setMode(m)}
+                >
+                  {m[0].toUpperCase() + m.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+        {error && <div className="calendar-error">{error}</div>}
+        {mode === "year" ? (
+          <YearGrid
+            year={cursor.getFullYear()}
+            events={visibleEvents}
+            today={today}
+            onPickMonth={(month) => {
+              setCursor(month);
+              setMode("month");
+            }}
+          />
+        ) : mode === "month" ? (
+          <MonthGrid
+            cursor={cursor}
+            events={visibleEvents}
+            today={today}
+            onPickDay={(day) => {
+              setCursor(day);
+              setMode("day");
+            }}
+          />
+        ) : mode === "week" ? (
+          <WeekTimeGrid days={daysBetween(startOfWeek(cursor), 7)} events={visibleEvents} today={today} />
+        ) : (
+          <div className="calendar-week">
+            <DayColumn day={cursor} events={visibleEvents} isToday={sameDay(cursor, today)} />
+          </div>
+        )}
       </div>
-      {error && <div className="calendar-error">{error}</div>}
-      {mode === "year" ? (
-        <YearGrid
-          year={cursor.getFullYear()}
-          events={events}
-          today={today}
-          onPickMonth={(month) => {
-            setCursor(month);
-            setMode("month");
-          }}
-        />
-      ) : mode === "month" ? (
-        <MonthGrid
-          cursor={cursor}
-          events={events}
-          today={today}
-          onPickDay={(day) => {
-            setCursor(day);
-            setMode("day");
-          }}
-        />
-      ) : mode === "week" ? (
-        <WeekTimeGrid days={daysBetween(startOfWeek(cursor), 7)} events={events} today={today} />
-      ) : (
-        <div className="calendar-week">
-          <DayColumn day={cursor} events={events} isToday={sameDay(cursor, today)} />
-        </div>
-      )}
     </div>
   );
 }
