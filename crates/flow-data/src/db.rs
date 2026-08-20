@@ -210,7 +210,12 @@ impl Db {
         Self::open_at(database_path()?)
     }
 
-    fn open_at(path: PathBuf) -> Result<Self> {
+    /// Same as `open`, but at a caller-chosen path instead of Flow's own
+    /// app-data location — for anything that needs its own database file
+    /// rather than sharing the real one two independent processes could
+    /// otherwise open at once (the Tauri migration's dev backend, tests
+    /// below, ...).
+    pub fn open_at(path: PathBuf) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("creating {}", parent.display()))?;
