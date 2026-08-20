@@ -203,6 +203,16 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   there), not the full Day/Week/Month/Year grid system that app has;
   Month/Year views and the true Week time-grid aren't ported yet.
 
+- **Keyboard accessibility pass** (`87346cc`): task rows (tabIndex,
+  Enter/Space matching the GPUI app's exact convention — no separate tab
+  stop for the checkbox), card headers, and card pills (converted from
+  styled `<div>`s to real `<button>`s) are all keyboard-reachable now,
+  with a consistent `:focus-visible` ring. Sidebar's own controls were
+  already real `<button>`s, just needed the same visible ring. Found and
+  fixed a real bug along the way: the subtask-add input's Escape handler
+  didn't stop propagation, so it also collapsed the whole card via the
+  app root's own Escape handler.
+
 **Partial answer to "a proper agent debug/inspection feature"**: not a
 dedicated feature yet, but `scripts/dev-app.ts`'s own build/runtime log
 (piped to a file every session) already gives a real, usable way to
@@ -215,13 +225,15 @@ in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
 
 Calendar's Month/Year views and a true Week time-grid (the agenda-per-day
 Kanban view is the only one ported so far), bulk actions, scheduling from
-the UI (the picker, not just Capture's own parsing), keyboard-first
-operation (PRD §7's own acceptance criterion for the GPUI app),
-accessibility, and release/distribution tooling. Task CRUD (create via
-Capture with real parsing, list/complete/note/delete, subtasks,
-delete+undo) across all five task views, plus Calendar's connect flow and
-a real agenda view, are the actual state of things now — the core
-task-manager loop is genuinely complete, and Calendar is real but partial.
+the UI (the picker, not just Capture's own parsing), full accessibility
+(arrow-key navigation between rows specifically — Tab order is the only
+way to move focus between tasks right now, matching the GPUI app's own
+disclosed gap there), and release/distribution tooling. Task CRUD (create
+via Capture with real parsing, list/complete/note/delete, subtasks,
+delete+undo), keyboard operation of every row/card/pill, and Calendar's
+connect flow and a real agenda view, are the actual state of things now —
+the core task-manager loop is genuinely complete and keyboard-operable,
+and Calendar is real but partial.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
 the user asked to delete the GPUI code now that the Tauri app is
