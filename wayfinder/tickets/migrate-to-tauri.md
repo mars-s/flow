@@ -152,16 +152,20 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   add row. Fetched only for the currently-expanded task, same
   reasoning the GPUI app's own `subtask_context` uses.
 
+- **Delete wired into the UI** (`3ebf40f`): a Delete pill in the card,
+  click-to-confirm (second click within 3s) rather than one-click,
+  since there's no Undo toast yet — see below.
+
 ## Not started
 
 `eventkit.rs`/calendar wiring, the Calendar view itself, Settings' real
-"Connect Calendar" flow, undo, bulk actions, scheduling from the UI (the
-picker, not just Capture's own parsing), keyboard-first operation (PRD
-§7's own acceptance criterion for the GPUI app), accessibility, and
-release/distribution tooling. Task CRUD (create via Capture with real
-parsing, list/complete/note/delete, subtasks) across all five task views
-is the actual state of things — `delete_task` exists as a command but
-nothing in the UI calls it yet.
+"Connect Calendar" flow, **undo** (real gap now that delete is wired —
+click-to-confirm is a stopgap, not a replacement for it), bulk actions,
+scheduling from the UI (the picker, not just Capture's own parsing),
+keyboard-first operation (PRD §7's own acceptance criterion for the GPUI
+app), accessibility, and release/distribution tooling. Task CRUD
+(create via Capture with real parsing, list/complete/note/delete,
+subtasks) across all five task views is the actual state of things now.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
 the user asked to delete the GPUI code now that the Tauri app is
