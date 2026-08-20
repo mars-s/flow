@@ -9,5 +9,8 @@
 //! `eventkit.rs`/`platform.rs`'s calendar functions and `parse.rs` are
 //! equally GPUI-free and equally movable here, just not moved yet.
 
+pub mod calendar;
 pub mod db;
+#[cfg(target_os = "macos")]
+mod eventkit;
 pub mod parse;

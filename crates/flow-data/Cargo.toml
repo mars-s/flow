@@ -10,8 +10,36 @@ anyhow = "1.0"
 chrono = "0.4"
 dirs = "6.0"
 flow-core = { path = "../flow-core" }
+futures = "0.3"
 regex = "1"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1", features = ["rt"] }
 turso = "0.7.2"
 uuid = { version = "1.18", features = ["v4"] }
+
+# EventKit calendar bridge (calendar.rs/eventkit.rs) — macOS-only, same
+# reasoning as Flow's own root Cargo.toml: PRD §6.5 reads the user's local
+# Calendar app, which has no cross-platform equivalent. Feature lists
+# mirror the root Cargo.toml's own objc2-event-kit/objc2-foundation
+# entries exactly, since eventkit.rs moved here unchanged and still needs
+# precisely the same selectors.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-event-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "block2",
+    "objc2-app-kit",
+    "EKCalendar",
+    "EKCalendarItem",
+    "EKEvent",
+    "EKEventStore",
+    "EKObject",
+    "EKSource",
+    "EKTypes",
+] }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSDate",
+    "NSError",
+] }

@@ -2308,9 +2308,14 @@ name = "flow-data"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "block2 0.6.2",
  "chrono",
  "dirs",
  "flow-core",
+ "futures",
+ "objc2 0.6.4",
+ "objc2-event-kit",
+ "objc2-foundation 0.3.2",
  "regex",
  "serde",
  "tokio",

@@ -30,8 +30,6 @@ mod browser;
 // existing `crate::db::…` reference in the app working unchanged.
 use flow_data::db;
 mod debug_log;
-#[cfg(target_os = "macos")]
-mod eventkit;
 mod input;
 mod md;
 // Same as `db` above — moved to `flow-data`, re-exported so every existing
