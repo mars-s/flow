@@ -68,6 +68,24 @@ export default function App() {
   const [undoToast, setUndoToast] = useState<UndoState | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // A collapsed row's own subtask-count badge, kept separate from refresh()
+  // below (though refresh() also calls it) so addSubtask/toggleSubtask/
+  // deleteSubtask can update just this without re-fetching all ten view
+  // lists for what's usually a single-row change — those three previously
+  // only called refreshSubtasks (the expanded card's own subtask list),
+  // leaving the collapsed row's badge stale until some unrelated refresh
+  // happened to fire, the same class of bug the note-persistence one was.
+  const refreshSubtaskCounts = useCallback(() => {
+    api
+      .subtaskCounts()
+      .then((counts) => {
+        const byParent: Record<string, SubtaskCount> = {};
+        for (const count of counts) byParent[count.parent_id] = count;
+        setSubtaskCounts(byParent);
+      })
+      .catch((error) => setLoadError(String(error)));
+  }, []);
+
   // Every task view Flow actually has lives under one of these five real
   // View values — fetched together on mount/refresh rather than one at a
   // time per destination, the same "resolve the whole collection up front"
@@ -93,15 +111,8 @@ export default function App() {
         setCompletedTasks(next);
       })
       .catch((error) => setLoadError(String(error)));
-    api
-      .subtaskCounts()
-      .then((counts) => {
-        const byParent: Record<string, SubtaskCount> = {};
-        for (const count of counts) byParent[count.parent_id] = count;
-        setSubtaskCounts(byParent);
-      })
-      .catch((error) => setLoadError(String(error)));
-  }, []);
+    refreshSubtaskCounts();
+  }, [refreshSubtaskCounts]);
 
   useEffect(() => {
     refresh();
@@ -281,7 +292,10 @@ export default function App() {
   const addSubtask = (parentId: string, title: string) => {
     api
       .createSubtask(parentId, title)
-      .then(() => refreshSubtasks(parentId))
+      .then(() => {
+        refreshSubtasks(parentId);
+        refreshSubtaskCounts();
+      })
       .catch((error) => setLoadError(String(error)));
   };
 
@@ -289,7 +303,10 @@ export default function App() {
     if (!expanded) return;
     api
       .setCompleted(id, completed)
-      .then(() => refreshSubtasks(expanded))
+      .then(() => {
+        refreshSubtasks(expanded);
+        refreshSubtaskCounts();
+      })
       .catch((error) => setLoadError(String(error)));
   };
 
@@ -302,7 +319,10 @@ export default function App() {
     if (!expanded) return;
     api
       .deleteTask(id)
-      .then(() => refreshSubtasks(expanded))
+      .then(() => {
+        refreshSubtasks(expanded);
+        refreshSubtaskCounts();
+      })
       .catch((error) => setLoadError(String(error)));
   };
 
