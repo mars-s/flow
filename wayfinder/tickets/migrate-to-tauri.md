@@ -136,6 +136,27 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Tags, Projects, Areas, global search, Logbook + a UI cleanup pass**
+  (`1d4955c`): a large feature set (Tags with case-insensitive
+  uniqueness verified by hand, Projects/Areas orthogonal to placement,
+  Cmd+K global search, Logbook, plus Cmd+Enter-to-detail, Today's
+  "This Evening" split, Upcoming drag-reschedule, weekday-prefix
+  schedule parsing, markdown notes) landed overnight and was verified
+  this session — full build/test/tauri-build-and-launch pass, plus
+  direct SQLite inspection confirming all 6 new tables and zero
+  orphaned rows. One known gap flagged rather than silently fixed: no
+  delete/rename for tags, projects, or areas anywhere. On top of that,
+  a UI cleanup pass fixed: Settings page not scrolling once the AI
+  section grew past the viewport; an icon inconsistency between the
+  Project and Area pickers; the task-row's Project/Tag pills using a
+  different visual style than the Schedule/Checklist/Delete pills
+  right below them; ad-hoc per-section margins in the task detail card
+  replaced with one flex-gap rhythm; CompletedSection removed entirely
+  now that Logbook covers the same job across every placement; and the
+  calendar week grid's day-columns given an explicit height after a
+  report that their vertical border lines stopped rendering partway
+  down a tall scrolled grid (fixed structurally, not confirmed root-
+  cause — flagged as such).
 - **dev-app.ts fixed for the workspace-target-path change** (`199836a`):
   a real bug the consolidation itself introduced, found by actually
   running the watcher afterward rather than trusting the merge. Once
