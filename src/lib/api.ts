@@ -17,4 +17,5 @@ export const api = {
   listSubtasks: (parentId: string) => invoke<Task[]>("list_subtasks", { parentId }),
   createSubtask: (parentId: string, title: string) => invoke<Task>("create_subtask", { parentId, title }),
   deleteTask: (id: string) => invoke<void>("delete_task", { id }),
+  restoreTask: (id: string) => invoke<void>("restore_task", { id }),
 };

@@ -4,6 +4,7 @@ import { CaptureField } from "./components/CaptureField";
 import { TaskList } from "./views/TaskList";
 import { UpcomingList } from "./views/UpcomingList";
 import { Settings } from "./views/Settings";
+import { UndoToast, type UndoState } from "./components/UndoToast";
 import { api } from "./lib/api";
 import { VIEW_FOR } from "./lib/types";
 import type { Destination, Task } from "./lib/types";
@@ -26,6 +27,7 @@ export default function App() {
   const [completing, setCompleting] = useState<Set<string>>(new Set());
   const [capturing, setCapturing] = useState(false);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
+  const [undoToast, setUndoToast] = useState<UndoState | null>(null);
 
   // Every task view Flow actually has lives under one of these five real
   // View values — fetched together on mount/refresh rather than one at a
@@ -132,8 +134,18 @@ export default function App() {
   };
 
   const deleteTask = (id: string) => {
+    const title = tasks.find((task) => task.id === id)?.title ?? "task";
     setExpanded((current) => (current === id ? null : current));
-    api.deleteTask(id).then(refresh).catch((error) => setLoadError(String(error)));
+    api
+      .deleteTask(id)
+      .then(() => {
+        refresh();
+        setUndoToast({
+          message: `Deleted "${title}"`,
+          onUndo: () => api.restoreTask(id).then(refresh).catch((error) => setLoadError(String(error))),
+        });
+      })
+      .catch((error) => setLoadError(String(error)));
   };
 
   return (
@@ -157,6 +169,7 @@ export default function App() {
       />
       <div className="main-pane" onClick={(event) => event.stopPropagation()}>
         {loadError && <div className="load-error">Couldn't reach the local task store: {loadError}</div>}
+        <UndoToast toast={undoToast} onDismiss={() => setUndoToast(null)} />
         {mode === "tasks" && destination !== "settings" && destination !== "calendar" ? (
           <div className="task-list-shell">
             <div className="capture-slot">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Tag, ListTree, Flag, Plus, Trash2 } from "lucide-react";
 import type { Task } from "../lib/types";
@@ -42,17 +42,7 @@ export function TaskRow({
 }: Props) {
   const [pressed, setPressed] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
-
-  // A second click within 3s actually deletes — no Undo toast built yet
-  // (a real gap, tracked in migrate-to-tauri.md), so a one-click delete
-  // with no recovery path isn't safe to ship in its place.
-  useEffect(() => {
-    if (!confirmingDelete) return;
-    const timeout = setTimeout(() => setConfirmingDelete(false), 3000);
-    return () => clearTimeout(timeout);
-  }, [confirmingDelete]);
 
   const checkbox = (
     <motion.div
@@ -172,14 +162,9 @@ export function TaskRow({
               <Flag size={11} />
               Flag
             </motion.div>
-            <motion.div
-              className={confirmingDelete ? "pill danger" : "pill"}
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
-            >
+            <motion.div className="pill danger" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} onClick={onDelete}>
               <Trash2 size={11} />
-              {confirmingDelete ? "Click to confirm" : "Delete"}
+              Delete
             </motion.div>
           </div>
         </motion.div>

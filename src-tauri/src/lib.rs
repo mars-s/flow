@@ -122,6 +122,15 @@ async fn delete_task(db: tauri::State<'_, Db>, id: String) -> Result<(), String>
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn restore_task(db: tauri::State<'_, Db>, id: String) -> Result<(), String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.restore_task(id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -142,6 +151,7 @@ pub fn run() {
             list_subtasks,
             create_subtask,
             delete_task,
+            restore_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
