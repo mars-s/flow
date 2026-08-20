@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `95f279e` — check `git status` before
+- Working tree is clean as of commit `a4ba853` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -870,6 +870,13 @@ commit:
    gets from animating `h()` directly (a technique this file already
    established) — the card's top padding eases down to its resting value
    in step with the existing opacity fade, instead of a flat cross-fade.
+   `docs/DESIGN_DIRECTION.md`'s own motion spec for this exact reveal
+   turned out to already call for "opacity and scale from 0.985 to 1.0" —
+   found while implementing this, and updated (`a4ba853`) once it was
+   clear the scale half was never achievable at all (only `Svg` takes a
+   transform in this codebase's GPUI, not a plain `Div`) and the timing
+   (160ms) predates `ui::motion::REVEAL`'s own consolidation to 140ms,
+   which this reveal already used before tonight.
 
 **Fixed (`613c107`, found by self-reviewing `046124d` above, not a user
 report): the new click-outside handler would have closed the card the
