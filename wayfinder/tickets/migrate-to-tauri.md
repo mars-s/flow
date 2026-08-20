@@ -135,6 +135,15 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Calendar Year view** (`f4b0956`): mirrors the GPUI app's own
+  `render_calendar_year_grid` — a 4-column grid of 12 mini months,
+  each day cell just a number with a dot marking "has an event" (not
+  the events themselves, unreadable at this size), today highlighted.
+  Clicking a month jumps to Month mode for it. All four of the GPUI
+  app's calendar modes now exist in the prototype; Day/Week still use
+  the agenda-per-day Kanban layout rather than a true time grid, which
+  remains the one real visual gap left in Calendar.
+
 - **Calendar Day/Month views + navigation** (`e6099c5`): a Day/Week/
   Month mode toggle and Prev/Next/Today navigation, matching the GPUI
   app's own header/toggle row. Month renders a real grid (Monday-
@@ -267,17 +276,17 @@ in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
 
 ## Not started
 
-Calendar's Year view and a true time-grid Week (Day/Week both still use
-the agenda-per-day Kanban layout — Month is now a real grid), arrow-key
-navigation between rows specifically (Tab order is the only way to move
-focus between tasks right now, matching the GPUI app's own disclosed gap
+A true time-grid Week (Day/Week still use the agenda-per-day Kanban
+layout — Month and Year are both real grids now), arrow-key navigation
+between rows specifically (Tab order is the only way to move focus
+between tasks right now, matching the GPUI app's own disclosed gap
 there), and release/distribution tooling. Task CRUD (create via Capture
 with real parsing, list/complete/note/delete, subtasks, delete+undo),
 scheduling from the UI picker, bulk actions (multi-select + bulk-action
 bar), keyboard operation of every row/card/pill, and Calendar's connect
-flow, Day/Week/Month views with real navigation, are the actual state of
-things now — the core task-manager loop is genuinely complete and
-keyboard-operable,
+flow with all four Day/Week/Month/Year views and real navigation, are the
+actual state of things now — the core task-manager loop is genuinely
+complete and keyboard-operable,
 and Calendar is real but partial.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
