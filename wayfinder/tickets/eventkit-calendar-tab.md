@@ -74,3 +74,9 @@ moved to a real hour grid — see the entry directly below.
   comprehensive-at-a-glance, the tab is where someone actually curates what
   they look at). Not yet decided either way; currently the glance ignores
   `calendar_hidden_ids` entirely.
+- **Scrollable Month/Year grids, and a collapsible calendar sidebar** —
+  requested 2026-08-20, tracked in
+  [Sidebar redesign + calendar scroll fixes + drag-to-schedule
+  write-back](sidebar-and-calendar-write-back.md) alongside the larger,
+  not-yet-confirmed drag-and-drop-to-create-a-calendar-event request from
+  the same conversation.
