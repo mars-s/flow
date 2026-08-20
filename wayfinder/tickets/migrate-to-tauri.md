@@ -136,6 +136,20 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Seventh and final AI backlog item: Smart scheduling** (`2f2e08b`
+  in the prototype) — the full 7-item backlog Settings originally listed
+  is now built out (6 model-backed blocks: Today briefing, Checklist
+  expansion, Stale task nudges, Overdue batch reschedule, Draft from
+  task, Smart scheduling; 1 local-check block: Duplicate detection).
+  Smart scheduling suggests a same-day time for an unscheduled task from
+  real calendar gaps, shown only when calendar permission is Granted and
+  a gap exists. `lib/freeSlots.ts` computes the free slots with plain
+  interval math (busy events merged and clamped to a 9am-6pm window,
+  gaps >=30min) — the model only picks an index into that already-
+  computed list plus a one-line reason, so a hallucinated response can
+  reject as invalid but can never invent a time that wasn't actually
+  free. Manual previews before writing; Auto schedules into the chosen
+  slot the moment an unscheduled task's card is first expanded.
 - **Sixth real AI block: Draft from task** (`8e73862` in the
   prototype): suggests a short message about a task (ask someone to do
   it, follow up, or report it's done — the model judges intent from
