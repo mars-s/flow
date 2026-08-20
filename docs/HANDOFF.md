@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `613c107` — check `git status` before
+- Working tree is clean as of commit `b212183` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -886,6 +886,16 @@ remembering for any *future* `on_click` added near the top of the tree:
 this app has at least two widgets whose own click handling doesn't route
 through `on_click` at all, so a new ancestor-level click handler needs the
 same check run against them.
+
+**Fixed (`b212183`, 2026-08-20, self-found while using the just-shipped
+Week grid): it opened scrolled to 12 AM, not a sensible hour.** The
+grid's scrollable container defaulted to the top of its content on every
+visit — mostly empty overnight hours for almost everyone, so opening
+Week always meant scrolling down before the actual day was visible. New
+`Flow::calendar_week_scroll` (a real `ScrollHandle`, not just a scrollable
+div) jumps to 7 AM once per session the first time Week mode shows,
+guarded by `calendar_week_scrolled_once` so it never re-fires and fights
+the user's own scrolling on a later render or week navigation.
 
 ## Where to find things
 
