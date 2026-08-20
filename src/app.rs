@@ -1083,8 +1083,17 @@ impl Flow {
         self.scheduling = false;
         self.schedule_picker_open = false;
         self.adding_subtask = false;
-        self.editing_title = false;
         self.pending_complete_confirm = None;
+        // Deliberately NOT `self.editing_title = false` here — same
+        // reasoning `toggle_expanded`'s own collapse branch already
+        // documents: `set_expanded_task` below calls `flush_title`, which
+        // reads `editing_title` to decide whether there's an unsubmitted
+        // rename worth saving. Clearing it first — which the version of
+        // this reset copied from `handle_cancel_turn_action` did, a real
+        // pre-existing bug in Escape's own handler found while reconciling
+        // the two — makes `flush_title` see "nothing was being edited" and
+        // silently drop whatever was typed. `flush_title` clears the flag
+        // itself once it's actually run.
         self.set_expanded_task(None, cx);
         self.schedule_input.update(cx, |input, cx| input.clear(cx));
         self.subtask_input.update(cx, |input, cx| input.clear(cx));
