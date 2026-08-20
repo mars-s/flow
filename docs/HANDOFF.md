@@ -37,7 +37,7 @@ migration hasn't started invalidating.
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `69a5272` — check `git status` before
+- Working tree is clean as of commit `704284f` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
