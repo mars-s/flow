@@ -135,6 +135,30 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **First real AI feature: Today briefing, model picker, per-feature
+  toggle** (`67d7d23` in the prototype): a genuinely new feature, not
+  a GPUI parity item — scoped by direct interview rather than guessed
+  (which feature first: Today briefing; trigger model: a per-feature
+  three-state Off/Manual/Auto control, the user's own spec, not a
+  single global switch; backend: whichever of Claude/custom OpenAI-
+  compatible is configured; ship the model picker before any block
+  feature, since every block needs it). New `src-tauri/src/ai.rs`
+  (`ai_list_models`/`ai_chat_completion` via reqwest, done in Rust
+  rather than a frontend `fetch()` — most third-party OpenAI-
+  compatible providers don't set permissive CORS for an arbitrary app
+  origin, and Tauri's webview still enforces CORS even with
+  `security.csp: null`). Settings' AI section rebuilt on a shared
+  `lib/aiConfig.ts`, gained a real "Test connection" → model dropdown,
+  and a Features list grouped by app area ("shiny blocks," direct user
+  framing) — Today briefing (live, in the Calendar tab specifically
+  per direct placement) plus the rest of the earlier brainstorm kept
+  visible as an explicit backlog rather than dropped, each already
+  wired to its own three-state toggle even though only one is live
+  yet. Claude OAuth is still the same honest "not wired up yet"
+  placeholder from before — no registered OAuth client exists for
+  this app, so only the custom OpenAI-compatible path is actually
+  callable right now.
+
 - **Fixed notes not persisting (visibly) after clicking out, and a
   related stale-badge bug found while fixing it** (`50735d5`,
   `6414cdd` in the prototype): direct user report, verified at the
