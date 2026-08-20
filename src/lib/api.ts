@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ParsePreview, Task, View } from "./types";
+import type { CalendarAuth, CalendarEvent, CalendarInfo, ParsePreview, Task, View } from "./types";
 
 // Thin wrapper around the real Tauri commands (src-tauri/src/lib.rs), which
 // call straight into flow-data::db — the same store the GPUI app itself
@@ -19,4 +19,9 @@ export const api = {
   createSubtask: (parentId: string, title: string) => invoke<Task>("create_subtask", { parentId, title }),
   deleteTask: (id: string) => invoke<void>("delete_task", { id }),
   restoreTask: (id: string) => invoke<void>("restore_task", { id }),
+  calendarAuthStatus: () => invoke<CalendarAuth>("calendar_auth_status"),
+  calendarConnect: () => invoke<CalendarAuth>("calendar_connect"),
+  calendarEvents: (start: Date, end: Date) =>
+    invoke<CalendarEvent[]>("calendar_events", { start: start.toISOString(), end: end.toISOString() }),
+  calendarList: () => invoke<CalendarInfo[]>("calendar_list"),
 };

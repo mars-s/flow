@@ -24,6 +24,29 @@ export type Task = {
 
 export type Destination = "inbox" | "today" | "upcoming" | "anytime" | "someday" | "calendar" | "settings";
 
+// Mirrors flow-data's real calendar::{CalendarAuth, CalendarEvent,
+// CalendarInfo} exactly — the same EventKit-backed types the GPUI app's
+// Calendar tab uses, not a Tauri-specific shape.
+export type CalendarAuth = "Unavailable" | "NotDetermined" | "Denied" | "Granted";
+
+export type CalendarEvent = {
+  id: string;
+  calendar_id: string;
+  calendar_title: string;
+  title: string;
+  start: string;
+  end: string;
+  all_day: boolean;
+  color: [number, number, number, number];
+};
+
+export type CalendarInfo = {
+  id: string;
+  title: string;
+  source_title: string;
+  color: [number, number, number, number];
+};
+
 // Mirrors src-tauri's ParsePreview DTO exactly.
 export type ParsePreview = {
   date: string | null;

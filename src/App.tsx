@@ -4,6 +4,7 @@ import { CaptureField } from "./components/CaptureField";
 import { TaskList } from "./views/TaskList";
 import { UpcomingList } from "./views/UpcomingList";
 import { Settings } from "./views/Settings";
+import { Calendar } from "./views/Calendar";
 import { UndoToast, type UndoState } from "./components/UndoToast";
 import { api } from "./lib/api";
 import { VIEW_FOR } from "./lib/types";
@@ -223,10 +224,7 @@ export default function App() {
         ) : destination === "settings" ? (
           <Settings />
         ) : (
-          <div className="placeholder-pane">
-            Calendar
-            <span className="placeholder-note">Not built in this prototype yet.</span>
-          </div>
+          <Calendar />
         )}
       </div>
     </div>
