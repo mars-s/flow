@@ -20,14 +20,17 @@ Day/Week/Month/Year scope (`src/app/calendar.rs`). **Kept open for the two
 real follow-ups below — not a placeholder ticket anymore, a tracker for
 genuine remaining decisions.**
 
-## Goal — done (`e8e910c`, `c9e6d74`)
+## Goal — done (`e8e910c`, `c9e6d74`, `5be0aef`)
 
 A real `Destination::Calendar` view, modeled on the user's Apple Calendar
 reference screenshot: a per-account sidebar with color-coded visibility
 toggles, a Day/Week/Month/Year switch, Today/‹/› navigation, and a body per
-mode — Day/Week as an agenda-per-day layout, Month as a traditional
-expanded-to-full-weeks grid with a "+N more" overflow, Year as twelve
-clickable month grids with an event-dot indicator (no per-event detail).
+mode. Month is a traditional expanded-to-full-weeks grid with a "+N more"
+overflow; Year is twelve clickable month grids with an event-dot indicator
+(no per-event detail). Day and Week diverged on 2026-08-20, by explicit user
+request: Day kept the original agenda-per-day list (the user liked its
+Kanban-board look and asked to keep it around for later reuse), while Week
+moved to a real hour grid — see the entry directly below.
 
 ## Explicit non-goals (per PRD §6.5)
 
@@ -41,14 +44,22 @@ clickable month grids with an event-dot indicator (no per-event detail).
 
 ## Still open
 
-- **Real hour-of-day positioning for Day/Week.** The shipped Day/Week body
-  is an agenda-per-day layout (each day's events listed top-to-bottom), not
-  Apple Calendar's pixel-accurate hour grid with true time-of-day vertical
-  positioning and overlap resolution for concurrent events — a separate
-  absolute-layout algorithm, disclosed as a simplification in `e8e910c`'s
-  own commit message. Worth doing if the agenda layout is felt to be
-  insufficient in practice; nothing about it blocks the upgrade later, it's
-  a rendering change only, no data-model change needed.
+- **Real hour-of-day positioning for Day.** Week got its hour grid in
+  `5be0aef` (2026-08-20) — see `render_calendar_week_grid` in
+  `src/app/calendar.rs`. Day still uses the original agenda-per-day list
+  (`render_calendar_body`/`render_calendar_day_column`), deliberately, per
+  the same commit: the user explicitly wants that Kanban-style layout kept
+  around rather than replaced. If Day is ever asked to move to the grid
+  too, `render_calendar_grid_day_column` already does the hard part (lane
+  sweep for overlaps, absolute time positioning) — reuse it for a
+  single-column Day body instead of writing a second layout algorithm.
+- **The Week grid's overlap layout is a simplification, disclosed in
+  `5be0aef`'s own commit message**: a greedy lane sweep gives every
+  overlapping event in a day a uniform lane width (first lane whose
+  previous occupant already ended, else a new lane), not Apple Calendar's
+  true interval-packing algorithm. Fine for the common case; worth
+  revisiting only if real calendars with heavy overlap make it look wrong
+  in practice.
 - **Whether per-calendar visibility toggles should persist across
   launches.** Decided for now (`Flow::calendar_hidden_ids`'s own field
   doc): no — every launch starts with every calendar visible, since there's

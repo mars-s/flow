@@ -26,11 +26,8 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `99ba31a` — check `git status` before
+- Working tree is clean as of commit `371d31c` — check `git status` before
   assuming that's still true.
-- A `/loop` (fixed 10-minute interval, cron job `0759a9f8`) is running as
-  of 2026-08-19, continuing this session's work autonomously. Auto-expires
-  after 7 days.
 - No `/loop` or other background job is currently running.
 
 ## What's built (Milestone 0 — done)
@@ -58,8 +55,9 @@ OAuth flow), `input.rs` (generic text-input widget), and a slimmed
   Inbox, Today, Upcoming, Anytime, Someday all read/write the actual
   database through `db::View`. Upcoming groups tasks by date with a
   weekday-style header. Completed tasks live in a collapsed, per-view
-  "Completed" section rather than vanishing. Calendar and Settings still
-  render `components.rs`'s "Coming soon" placeholder.
+  "Completed" section rather than vanishing. Calendar and Settings are
+  both real too (`src/app/calendar.rs`, `src/app/settings.rs`) — see the
+  EventKit entries below for the full Calendar tab story.
 - Scheduling has three real paths: typing a date phrase into Capture, the
   detail card's Today/Anytime/Someday/"Schedule…" picker (NLP field
   focused immediately, quick-picks below it), and the same picker's bulk
@@ -312,10 +310,33 @@ either way, plus `text_ghost` instead of blanket opacity on the title.
 **Not done yet**: whether calendar visibility toggles should persist
 across launches (currently don't — no settings-persistence infrastructure
 exists anywhere in this codebase yet, a real gap worth its own ticket if
-felt in practice rather than bolted on here). The true pixel-accurate
-hour-grid positioning for Day/Week (vs. the current agenda-per-day layout)
-is also still open, disclosed as a simplification in `e8e910c`'s message.
-See `wayfinder/tickets/eventkit-calendar-tab.md` for both.
+felt in practice rather than bolted on here). See
+`wayfinder/tickets/eventkit-calendar-tab.md`.
+
+**Redesigned (`5be0aef`, 2026-08-20, direct user request with an Apple
+Calendar Week screenshot): Week now renders a real hour-grid, closing the
+gap flagged just above.** New `render_calendar_week_grid` — a fixed hour
+gutter down the left, one column per day, all-day events in their own
+strip above the grid, timed events absolutely positioned by time-of-day
+and duration via a simple greedy lane sweep for overlaps (uniform lane
+width per day, not Apple's true interval-packing — a disclosed
+simplification, not a silent gap). Day keeps the original agenda-per-day
+list (`render_calendar_body`) exactly as it was: the user explicitly
+liked its Kanban-board look and asked to keep it around for later reuse
+rather than lose it when Week moved to the grid — it's still Day mode's
+body today, and the doc comment at the top of `calendar.rs` says so for
+whoever reaches for it next. A multi-day event still files under its
+start date's column only in both layouts.
+
+**Fixed (`371d31c`, 2026-08-20, found while validating the redesign
+above): a real double-lease crash in Upcoming and Completed rows.** See
+the "Every task row in every view is now keyboard-reachable" entry above
+for the full story — `entity.update(cx, ...)` was re-entering the same
+`Flow` entity this render was already inside, and it crashed the
+freshly-relaunched dev app on exactly this path the moment the watcher
+restarted after an overnight stop. Fixed by precomputing the focus-handle
+maps with `&mut self` before descending into the free-function renderers,
+instead of fetching them lazily mid-render.
 
 **Fixed (`64b0f36`, found via a PRD §11 acceptance-criteria audit): the
 compact row's own checkbox (and Space) could complete a parent with
@@ -775,16 +796,31 @@ questions.
       **Every task row in every view is now keyboard-reachable** — the
       original pass's two disclosed gaps are both closed: Upcoming
       (**`df0c882`**, `render_upcoming_section` fetching a real per-row
-      `FocusHandle` via `entity.update`/`Flow::row_focus`, the same pruned
-      map the virtualized flat views already share) and the Completed
-      section (**`76ed773`**, `completed_section` doing the same via a
-      *separate* `completed_row_focuses` map — a completed task's id never
-      appears in the active view's list, so sharing `row_focuses` would
-      have its own pruning delete the handle on the next unrelated
-      refetch, same reasoning as `subtask_focuses` being its own map).
-      Both were cheap: neither view is virtualized, so every row already
-      rendered eagerly each frame regardless — a `HashMap` lookup per row
-      is not new per-frame I/O.
+      `FocusHandle`) and the Completed section (**`76ed773`**,
+      `completed_section` doing the same via a *separate*
+      `completed_row_focuses` map — a completed task's id never appears in
+      the active view's list, so sharing `row_focuses` would have its own
+      pruning delete the handle on the next unrelated refetch, same
+      reasoning as `subtask_focuses` being its own map). Both were cheap:
+      neither view is virtualized, so every row already rendered eagerly
+      each frame regardless — a `HashMap` lookup per row is not new
+      per-frame I/O.
+      **Real crash found and fixed the morning after (`371d31c`)**: both
+      commits above fetched their handle via `entity.update(cx, |flow,
+      cx| flow.row_focus(...))`, where `entity` was `cx.entity()` — the
+      very same `Flow` entity whose `Context` this render is already
+      running inside. Re-entering it mid-render double-leases it and
+      aborts (`gpui::app::entity_map::double_lease_panic`). This wasn't
+      theoretical — it crashed the freshly-relaunched dev app on exactly
+      this path (`flow::app::tasks::render_upcoming_section`) the moment
+      the watcher restarted. Fixed by precomputing `row_focuses` and
+      `completed_focuses` in `render_task_view` (which already has
+      `&mut self`) and handing the maps down by reference instead — the
+      `subtask_focuses` pattern a few lines above it already did this
+      correctly, which is how the bug was spotted. The `list()`-based flat
+      view's own `entity.update` in its row builder is untouched and not
+      implicated: that callback runs from GPUI's own paint-time context, a
+      different re-entry boundary.
       **Genuinely out of scope, not silently dropped:**
       - Arrow-key navigation between rows — Tab order is currently the
         only way to move focus between tasks; no listbox-style arrow
