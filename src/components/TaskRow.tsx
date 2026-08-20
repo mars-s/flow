@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Tag, ListTree, Flag, Plus, Trash2 } from "lucide-react";
+import { Tag, Plus, Trash2 } from "lucide-react";
 import type { Task } from "../lib/types";
 import { SchedulePicker } from "./SchedulePicker";
 import "./TaskRow.css";
@@ -200,14 +200,6 @@ export function TaskRow({
             >
               <Plus size={11} />
               Subtask
-            </motion.button>
-            <motion.button type="button" className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
-              <ListTree size={11} />
-              Move
-            </motion.button>
-            <motion.button type="button" className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
-              <Flag size={11} />
-              Flag
             </motion.button>
             <motion.button
               type="button"
