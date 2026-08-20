@@ -11,6 +11,7 @@
 //! develop the UI. Point this at the real path once the migration is
 //! actually cutting over, not before.
 
+use flow_data::calendar::{self, CalendarAuth, CalendarEvent, CalendarInfo};
 use flow_data::db::{Db, Task, View};
 use flow_data::parse;
 use serde::Serialize;
@@ -236,6 +237,57 @@ async fn restore_task(db: tauri::State<'_, Db>, id: String) -> Result<(), String
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn calendar_auth_status() -> CalendarAuth {
+    calendar::calendar_authorization_status()
+}
+
+#[tauri::command]
+async fn calendar_connect() -> CalendarAuth {
+    // calendar::calendar_request_access()'s future bridges an EventKit
+    // completion block (an Objective-C `RcBlock`) into an .await-able
+    // future — real, useful async, but that block can never be `Send`,
+    // and Tauri's async commands require their whole future to be `Send`
+    // (it can move between tokio worker threads between polls). Driving
+    // it to completion inside spawn_blocking's own dedicated thread, on a
+    // throwaway single-thread runtime that never needs to move the future
+    // anywhere, sidesteps that — the same "give the non-Send thing its
+    // own thread" shape flow_data::db already uses for its own connection.
+    tokio::task::spawn_blocking(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("building a runtime for the calendar permission thread")
+            .block_on(calendar::calendar_request_access())
+    })
+    .await
+    .unwrap_or(CalendarAuth::Unavailable)
+}
+
+/// The frontend sends RFC3339 strings (`Date.prototype.toISOString()`,
+/// always UTC/`Z`-suffixed) — parsed as `DateTime<FixedOffset>` first since
+/// that's the form chrono's `FromStr` actually supports, then converted to
+/// `Local` (what `calendar::calendar_events_between` takes), rather than
+/// parsing straight into `DateTime<Local>`, which isn't derivable from a
+/// string alone (it needs the system's own timezone database, not just
+/// what's written in the string).
+#[tauri::command]
+fn calendar_events(start: String, end: String) -> Result<Vec<CalendarEvent>, String> {
+    let start: chrono::DateTime<chrono::FixedOffset> =
+        start.parse().map_err(|error| format!("bad start date: {error}"))?;
+    let end: chrono::DateTime<chrono::FixedOffset> =
+        end.parse().map_err(|error| format!("bad end date: {error}"))?;
+    Ok(calendar::calendar_events_between(
+        start.with_timezone(&chrono::Local),
+        end.with_timezone(&chrono::Local),
+    ))
+}
+
+#[tauri::command]
+fn calendar_list() -> Vec<CalendarInfo> {
+    calendar::calendar_list()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -258,6 +310,10 @@ pub fn run() {
             create_subtask,
             delete_task,
             restore_task,
+            calendar_auth_status,
+            calendar_connect,
+            calendar_events,
+            calendar_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
