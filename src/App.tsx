@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Sidebar } from "./components/Sidebar";
 import { CaptureField } from "./components/CaptureField";
@@ -62,6 +62,7 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"tasks" | "calendar">("tasks");
   const [destination, setDestination] = useState<Destination>("inbox");
+  const lastNonSettingsDestination = useRef<Destination>("inbox");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [completing, setCompleting] = useState<Set<string>>(new Set());
   const [capturing, setCapturing] = useState(false);
@@ -130,6 +131,14 @@ export default function App() {
     else document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
+  // Tracks whatever destination was showing before Settings, so Cmd+,
+  // can toggle back to it — same as clicking Settings again in the
+  // sidebar returned you nowhere before; a real "close preferences"
+  // needs somewhere to close back to.
+  useEffect(() => {
+    if (destination !== "settings") lastNonSettingsDestination.current = destination;
+  }, [destination]);
+
   // A window-level listener, not the root div's own onKeyDown (used below
   // for Escape) — Cmd+N has to open Capture from anywhere in the app,
   // including when focus is inside a task's note field or nowhere at all,
@@ -143,9 +152,12 @@ export default function App() {
       }
       // Cmd+, is the standard macOS "open preferences" shortcut — every
       // native app honors it, so Settings shouldn't be sidebar-click-only.
+      // Pressing it again while already in Settings closes back to
+      // wherever you were, matching how real macOS Preferences windows
+      // toggle rather than just re-opening themselves.
       if (event.metaKey && event.key === ",") {
         event.preventDefault();
-        setDestination("settings");
+        setDestination(destination === "settings" ? lastNonSettingsDestination.current : "settings");
         return;
       }
       // Bare space opens Capture too, scoped to task views only (not
@@ -187,6 +199,10 @@ export default function App() {
   }, [expanded, refreshSubtasks]);
 
   const inboxCount = viewTasks.Inbox.length;
+  // Flattened once per viewTasks change — used by the Capture field's
+  // duplicate-detection check, which needs every active task regardless
+  // of which view is currently on screen.
+  const allTasks = useMemo(() => Object.values(viewTasks).flat(), [viewTasks]);
   // Falls back to "Inbox" only in the impossible case destination is
   // Settings/Calendar here — TaskList never renders for those (guarded in
   // the JSX below), this just satisfies VIEW_FOR's Partial<> type.
@@ -472,7 +488,12 @@ export default function App() {
         {mode === "tasks" && destination !== "settings" && destination !== "calendar" ? (
           <div className="task-list-shell">
             <div className="capture-slot">
-              <CaptureField open={capturing} onSubmit={capture} onClose={() => setCapturing(false)} />
+              <CaptureField
+                open={capturing}
+                onSubmit={capture}
+                onClose={() => setCapturing(false)}
+                existingTasks={allTasks}
+              />
             </div>
             {destination === "upcoming" ? (
               <UpcomingList
