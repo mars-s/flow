@@ -244,8 +244,15 @@ export default function App() {
     api.captureTask(title).then(refresh).catch((error) => setLoadError(String(error)));
   };
 
+  // Real bug, direct user report: the write succeeded in the database the
+  // whole time, but nothing here ever called refresh() afterward, so the
+  // note view (which reads task.note straight off viewTasks state) kept
+  // showing the stale pre-edit value until some unrelated refresh
+  // happened to fire — indistinguishable from "it doesn't persist" from
+  // the user's side of the screen, since clicking out of the field
+  // visibly reverted to the old text.
   const changeNote = (id: string, note: string) => {
-    api.setNote(id, note).catch((error) => setLoadError(String(error)));
+    api.setNote(id, note).then(refresh).catch((error) => setLoadError(String(error)));
   };
 
   // Renames a task or a subtask — same command either way (set_title
