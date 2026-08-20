@@ -135,6 +135,29 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Checklist v2, schedule picker fixed, NLP-aware rename, unfocus
+  bug fixed** (`de0870e` in the prototype): direct user feedback round
+  on last turn's own checklist redesign — checkbox icons switched to
+  Square/SquareCheckBig (a real checkbox glyph, not a circle), more
+  row spacing, a single continuous connector line behind every
+  checkbox (Things 3's own look), and the "Checklist" pill now only
+  exists while the list is empty — growing it past the first item is
+  Enter-only chaining (commit a row, a fresh draft opens right after
+  it), Backspace on an empty row deletes it. Also fixed a real bug,
+  not a hypothetical, in the schedule picker the user reported as
+  "horrible": its quick-pick/clear buttons sat next to an autoFocus'd
+  input whose onBlur closed the whole picker, so clicking any button
+  blurred the input and unmounted the picker before the click ever
+  fired — most of its buttons silently did nothing. Fixed with
+  onMouseDown preventDefault, plus a real anchor position and NLP
+  highlight/preview on its own free-text field. Renaming a task now
+  gets the same live NLP highlight/preview Capture has (new
+  lib/nlpPreview.ts, shared with CaptureField) and reschedules on
+  commit if a date/time was recognized. Fixed main-pane's own blind
+  `stopPropagation()`, which had been swallowing every click in the
+  main content area before it could reach the root's own "click
+  elsewhere collapses the expanded task" handler.
+
 - **Completed section landed** (`64c6e8d` in the prototype): real gap
   found by re-checking `tasks.rs`'s own `completed_section` —
   `list_completed` was wired into `api.ts` back when Capture/CRUD
