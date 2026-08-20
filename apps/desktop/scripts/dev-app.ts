@@ -14,8 +14,20 @@ import { watch, type FSWatcher } from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
+// src-tauri is a member of the flow repo's own root Cargo workspace
+// (added when flow-tauri-prototype was merged into apps/desktop) — Cargo
+// builds a workspace member into the *workspace root's* target/, not a
+// target/ local to the member crate, so the bundle lands two levels up
+// from here (apps/desktop/.. = flow root) rather than under src-tauri/
+// itself. Confirmed by a real failure: the watcher kept reporting
+// "Launching ... Flow Debug.app" against the old apps/desktop/src-tauri/
+// target path while the actual build log showed Cargo writing to
+// /Users/avi/Developer/vibe/flow/target/ instead — `open` then failed
+// silently since that path never existed, and the launched-app-exited
+// handler mistook the failure for the (nonexistent) app quitting.
+const workspaceRoot = resolve(root, "..", "..");
 const appName = "Flow Debug";
-const appPath = join(root, "src-tauri/target/debug/bundle/macos", `${appName}.app`);
+const appPath = join(workspaceRoot, "target/debug/bundle/macos", `${appName}.app`);
 // The bundle's own CFBundleExecutable stays the Cargo package name
 // (tauri.conf.json's `bundle.mainBinaryName` isn't a real schema field in
 // this Tauri version — checked, not guessed, after `pkill -x "Flow Debug"`
