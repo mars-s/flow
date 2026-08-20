@@ -135,6 +135,16 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Fixed the Denied-calendar dead end** (`186b050`): real gap found
+  by re-checking against GPUI's `settings.rs` — PRD §6.5 requires a
+  way to reach System Settings → Privacy & Security → Calendars, since
+  Flow can't re-request a denied permission itself. The Denied state
+  previously just showed a disabled Connect button with no way
+  forward. Added `lib/system.ts::openCalendarPrivacyPane()` (same
+  `x-apple.systempreferences` deep link the GPUI app uses) via the
+  already-installed `tauri-plugin-opener`, wired into both Settings
+  and Calendar's own not-connected state.
+
 - **Calendar sidebar: per-calendar show/hide** (`bece23f`): a real gap
   found by re-checking the migration ticket against GPUI's actual
   `calendar.rs`, not from a user report — the GPUI app has a whole
