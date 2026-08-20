@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Tag, Plus, Trash2 } from "lucide-react";
 import type { Task } from "../lib/types";
+import { linkify } from "../lib/linkify";
 import { SchedulePicker } from "./SchedulePicker";
 import "./TaskRow.css";
 
@@ -50,7 +51,9 @@ export function TaskRow({
   const [pressed, setPressed] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState(false);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   const checkbox = (
     <motion.div
@@ -97,16 +100,46 @@ export function TaskRow({
           }}
         >
           {checkbox}
-          <div className="card-title">{task.title}</div>
+          <div className="card-title">{linkify(task.title)}</div>
         </div>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.05, duration: 0.14 }}>
-          <textarea
-            className="card-note"
-            placeholder="Notes"
-            rows={1}
-            defaultValue={task.note ?? ""}
-            onBlur={(event) => onNoteChange(event.target.value)}
-          />
+          {editingNote ? (
+            <textarea
+              ref={noteRef}
+              className="card-note"
+              placeholder="Notes"
+              rows={1}
+              autoFocus
+              defaultValue={task.note ?? ""}
+              onBlur={(event) => {
+                onNoteChange(event.target.value);
+                setEditingNote(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  noteRef.current?.blur();
+                }
+              }}
+            />
+          ) : (
+            // A rendered view mode, not the textarea itself — a native
+            // <textarea> can't render some of its content as a clickable
+            // link, so notes containing a URL (PRD-adjacent user request:
+            // "links should highlight") show here instead, and clicking
+            // into it switches to the real editable textarea above.
+            <div
+              className={task.note ? "card-note-view" : "card-note-view placeholder"}
+              tabIndex={0}
+              role="button"
+              onClick={() => setEditingNote(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") setEditingNote(true);
+              }}
+            >
+              {task.note ? linkify(task.note) : "Notes"}
+            </div>
+          )}
 
           {(subtasks.length > 0 || addingSubtask) && (
             <div className="card-subtasks">
@@ -249,7 +282,7 @@ export function TaskRow({
       }}
     >
       {checkbox}
-      <div className={`row-title ${completing ? "checked" : ""}`}>{task.title}</div>
+      <div className={`row-title ${completing ? "checked" : ""}`}>{linkify(task.title)}</div>
       {task.scheduled_date && <div className="row-schedule">{task.scheduled_date}</div>}
     </motion.div>
   );
