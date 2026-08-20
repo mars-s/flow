@@ -1,0 +1,89 @@
+.checklist-expansion-auto-status {
+  font-size: 11px;
+  color: var(--text-ghost);
+}
+
+.checklist-expansion-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--overlay);
+  border: 1px solid var(--accent-wash);
+}
+
+.checklist-expansion-preview-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.checklist-expansion-item {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.checklist-expansion-empty {
+  font-size: 11px;
+  color: var(--text-ghost);
+}
+
+.checklist-expansion-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.checklist-expansion-dismiss,
+.checklist-expansion-add {
+  border: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+
+.checklist-expansion-dismiss {
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.checklist-expansion-dismiss:hover,
+.checklist-expansion-dismiss:focus-visible {
+  background: var(--overlay-strong);
+  color: var(--text);
+}
+
+.checklist-expansion-add {
+  background: var(--accent);
+  color: var(--canvas);
+}
+
+.checklist-expansion-add:hover,
+.checklist-expansion-add:focus-visible {
+  opacity: 0.9;
+}
+
+.checklist-expansion-error {
+  font-size: 10.5px;
+  color: var(--danger);
+}
+
+.ai-spin {
+  animation: ai-spin 0.8s linear infinite;
+}
+
+@keyframes ai-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

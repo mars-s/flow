@@ -6,6 +6,7 @@ import { linkify } from "../lib/linkify";
 import { formatSchedule } from "../lib/date";
 import { splitHighlight, stripHighlight, useNlpPreview } from "../lib/nlpPreview";
 import { SchedulePicker } from "./SchedulePicker";
+import { ChecklistExpansion } from "./ChecklistExpansion";
 import "./TaskRow.css";
 
 const spring = { type: "spring" as const, stiffness: 520, damping: 34, mass: 0.7 };
@@ -399,6 +400,14 @@ export function TaskRow({
               )}
             </div>
           )}
+
+          <ChecklistExpansion
+            taskId={task.id}
+            title={task.title}
+            note={task.note}
+            hasSubtasks={subtasks.length > 0}
+            onAddSubtask={onAddSubtask}
+          />
 
           {/* PRD §6.2/§11: "Completing a parent with incomplete children
               asks: 'Complete parent and all subtasks' or 'Cancel.' It

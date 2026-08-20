@@ -30,7 +30,7 @@ const FEATURE_GROUPS: { group: string; features: { id: string; name: string; des
         id: "checklist-expansion",
         name: "Checklist expansion",
         description: "Suggest a subtask breakdown for a vague task title.",
-        live: false,
+        live: true,
       },
       {
         id: "smart-scheduling",
@@ -114,8 +114,8 @@ export function AISettingsSection() {
         <div className="settings-row-body">
           <div className="settings-row-title">AI features</div>
           <div className="settings-row-note">
-            Off by default. Only "Today briefing" is wired to a real model call — everything else below is the
-            backlog, kept visible rather than dropped once brainstormed.
+            Off by default. "Today briefing" and "Checklist expansion" are wired to a real model call —
+            everything else below is the backlog, kept visible rather than dropped once brainstormed.
           </div>
         </div>
         <button
