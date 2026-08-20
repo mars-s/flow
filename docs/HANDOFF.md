@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `bfa14c1` — check `git status` before
+- Working tree is clean as of commit `69a5272` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -1003,7 +1003,37 @@ scrollable Month/Year grids) — **not started**, both because of their
 size and because the calendar-write request is a direct reversal of
 PRD §6.5's explicit "no event creation/editing — read-only, always"
 principle that needs its own explicit confirmation, not silent
-building. Capture these as their own ticket(s) before any of it starts.
+building. Captured as `wayfinder/tickets/sidebar-and-calendar-write-back.md`
+(`bfa14c1`) — nothing in it built yet, including the two pieces marked
+safe to just pick up (scrollable Month/Year grids, a collapsible calendar
+sidebar).
+
+**Also landed (`69a5272`) from the same motion push: real press feedback
+on both checkboxes** (compact row and detail card) — GPUI's `.active()`
+pseudo-class (already used in `sidebar.rs`, just for color before this)
+shrinks the circle to 15px the instant the mouse is held, no animation
+curve needed since a press-snap is supposed to be instant.
+
+**Explicitly not attempted yet, and the biggest remaining gap toward
+matching the Tauri prototype's own strongest moment**: a true row→card
+"morph" on expand. Framer Motion's `layoutId` did this as one continuous
+box smoothly growing from a 40px row into the full card (position, size,
+and border-radius all interpolating together); `render_task_row` today
+still returns two *structurally separate* elements (the `is_expanded`
+branch swaps `render_detail_card`'s whole tree in for the compact row's),
+so the current reveal — even with the padding-settle and checkbox
+polish above — is still fundamentally a swap-and-crossfade, not a morph.
+Getting a real one would mean unifying both branches into one
+continuously-mounted element whose height/padding/radius animate between
+two states (a distinct-id-per-state timeline restart, the same technique
+this file already uses elsewhere), which runs into `height: auto`'s
+usual problem: the card's target height depends on its content (note
+length, subtask count, ...), so it needs measuring before it can be
+animated *to* rather than just cut to. Worth a dedicated pass if the
+smaller improvements landed tonight don't close the gap — not started
+because it's a real architecture change to `render_task_row`, not a
+tweak, and deserved its own explicit go-ahead rather than getting
+bundled into this one.
 
 ## Where to find things
 
