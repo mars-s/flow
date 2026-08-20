@@ -2,6 +2,7 @@
 members = [
     "crates/flow-core",
     "crates/flow-data",
+    "apps/desktop/src-tauri",
 ]
 resolver = "2"
 

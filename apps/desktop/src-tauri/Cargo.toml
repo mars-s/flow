@@ -22,12 +22,13 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Flow's real task store — see /Users/avi/Developer/vibe/flow/wayfinder/
-# tickets/migrate-to-tauri.md for why this is a path dep across two
-# separate repos (deliberate, not a mistake) rather than one workspace:
-# this app and the GPUI app it's migrating away from are meant to keep
-# existing independently for the length of the migration.
-flow-data = { path = "../../flow/crates/flow-data" }
+# Flow's real task store. Used to be a path dep across two separate
+# repos (flow-tauri-prototype -> ../../flow/crates/flow-data) while this
+# app and the archived GPUI app were migrating independently; now that
+# flow-tauri-prototype has been merged into this repo as apps/desktop,
+# it's a same-repo path dep instead — three levels up from src-tauri/ to
+# the repo root, then into crates/flow-data.
+flow-data = { path = "../../../crates/flow-data" }
 chrono = "0.4"
 tokio = { version = "1", features = ["rt"] }
 # AI settings' "test connection" model picker and the first real AI
