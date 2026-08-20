@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `b212183` — check `git status` before
+- Working tree is clean as of commit `9256b58` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -896,6 +896,21 @@ Week always meant scrolling down before the actual day was visible. New
 div) jumps to 7 AM once per session the first time Week mode shows,
 guarded by `calendar_week_scrolled_once` so it never re-fires and fights
 the user's own scrolling on a later render or week navigation.
+
+**Fixed (`9256b58`, found by comparing `collapse_expanded_task` against
+`handle_cancel_turn_action`/Escape, not a user report): clicking outside
+a card mid-schedule, mid-title-edit, or mid-add-subtask left the wrong
+state behind.** `collapse_expanded_task` (`046124d`) only cleared
+`expanded_task_id` — Escape's own handler already did the full job
+(`scheduling`/`schedule_picker_open`/`editing_title`/`adding_subtask`/
+`pending_complete_confirm`, plus clearing `schedule_input`/
+`subtask_input`/`title_input`). Those four inputs are single shared
+instances reused across *every* task, not per-task state, so a click-away
+mid-edit would have left whatever was typed sitting there ready to
+resurface the next time any task — not necessarily the same one — got
+expanded. `collapse_expanded_task` now does the full reset;
+`handle_cancel_turn_action` calls it instead of keeping its own copy, so
+there's exactly one path left to maintain.
 
 ## Where to find things
 
