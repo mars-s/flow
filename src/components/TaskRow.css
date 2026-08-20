@@ -210,32 +210,27 @@
 
 /* Things 3-style checklist: no section header/count label (the
    "Checklist" pill's own label carries the count, and disappears
-   entirely once a subtask exists — direct user request). A single
-   continuous connector line threads behind every checkbox rather than a
-   left-border rail, same "one line running through the whole list"
-   look Things 3's own checklist has, not a per-row segment. */
+   entirely once a subtask exists — direct user request). Rows get a
+   thin horizontal divider, not a connector between checkboxes — a real
+   Things 3 screenshot showed these as row borders (the first attempt
+   at this read "lines between the subtasks" as vertical and got it
+   wrong). No divider under the last row/open draft, since there's
+   nothing below it to separate from. */
 .card-subtasks {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.subtask-connector {
-  position: absolute;
-  left: 7.5px;
-  top: 13px;
-  bottom: 13px;
-  width: 1px;
-  background: var(--border-strong);
-  pointer-events: none;
 }
 
 .subtask-row {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.subtask-row:last-child {
+  border-bottom: none;
 }
 
 .subtask-checkbox {

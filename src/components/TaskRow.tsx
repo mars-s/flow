@@ -364,15 +364,15 @@ export function TaskRow({
             </div>
           )}
 
-          {/* Things 3-style checklist: a continuous connector line thrown
-              behind every checkbox (drawn once, not per row) rather than
-              a left-border rail, no section header — the "Checklist"
-              pill itself only exists while the list is empty, gone the
-              moment a subtask exists (direct user request: "gets rid of
-              unnecessary ui"). */}
+          {/* Things 3-style checklist: a thin horizontal divider under
+              each row (a real Things 3 screenshot showed these as row
+              borders, not a vertical connector between checkboxes — the
+              first attempt at this got that wrong), no section header —
+              the "Checklist" pill itself only exists while the list is
+              empty, gone the moment a subtask exists (direct user
+              request: "gets rid of unnecessary ui"). */}
           {showChecklist && (
             <div className="card-subtasks">
-              {(subtasks.length > 1 || (subtasks.length === 1 && draftOpen)) && <div className="subtask-connector" />}
               {subtasks.map((subtask) => (
                 <SubtaskRow
                   key={subtask.id}
