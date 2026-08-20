@@ -135,6 +135,21 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Row indicator icons for notes and subtasks** (`a72fea2` in `flow`,
+  `b98d002` in the prototype): direct user request, matching Things
+  3's own row indicators — a collapsed row now shows a note icon when
+  the task has one, and a checklist icon + "N/M" open/total count when
+  it has subtasks. A real new feature, not a parity gap: grepped both
+  `tasks.rs` and `db.rs` first and confirmed neither the GPUI app nor
+  flow-data's own `Task` struct carries a subtask count anywhere.
+  Added `flow-data::db::SubtaskCount`/`Db::subtask_counts()` — one
+  GROUP BY query for every parent's counts, not a widened `Task`
+  struct (would touch every query that returns one, GPUI's own
+  included, for a UI-only affordance its rows don't show) or a
+  per-row fetch. Purely additive to the shared crate; verified GPUI
+  still compiles clean and flow-data's own suite still passes
+  (46/46) after the change.
+
 - **Checklist divider direction fixed** (`515bec1` in the prototype):
   direct user correction with a real Things 3 screenshot — "the lines
   are horizontal and are borders of the subtasks checklists." The
