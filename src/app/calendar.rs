@@ -34,12 +34,29 @@ impl Flow {
         let events = self.calendar_range_events.clone().unwrap_or_default();
         let calendars = self.calendar_list.clone();
 
+        // Jump the grid to a sensible starting hour the first time Week is
+        // ever shown this session, instead of opening on 12 AM — mostly
+        // empty for almost everyone, and it made every single visit start
+        // with a scroll. Only once: `render_calendar_week_grid`'s own
+        // `.track_scroll()` keeps the handle in sync with the user's own
+        // scrolling from here on, and re-jumping on every render (or every
+        // navigation) would fight that instead of just seeding it.
+        if mode == CalendarViewMode::Week && !self.calendar_week_scrolled_once {
+            self.calendar_week_scroll
+                .set_offset(gpui::point(px(0.0), -px(WEEK_GRID_DEFAULT_START_HOUR * HOUR_HEIGHT)));
+            self.calendar_week_scrolled_once = true;
+        }
+
         let (range_start, range_end) = self.calendar_visible_range();
         let body = match mode {
             CalendarViewMode::Day => render_calendar_body(days_in(range_start, range_end), &events, &hidden, theme),
-            CalendarViewMode::Week => {
-                render_calendar_week_grid(days_in(range_start, range_end), &events, &hidden, theme)
-            }
+            CalendarViewMode::Week => render_calendar_week_grid(
+                days_in(range_start, range_end),
+                &events,
+                &hidden,
+                theme,
+                &self.calendar_week_scroll,
+            ),
             CalendarViewMode::Month => {
                 render_calendar_month_grid(cursor, range_start, range_end, &events, &hidden, theme)
             }
@@ -549,6 +566,9 @@ fn render_calendar_event_card(event: &CalendarEvent, theme: Theme) -> AnyElement
 
 const HOUR_HEIGHT: f32 = 48.0;
 const GRID_GUTTER_WIDTH: f32 = 44.0;
+/// Where the grid scrolls to the first time it's shown each session —
+/// `Flow::calendar_week_scrolled_once`'s own doc has the full reasoning.
+const WEEK_GRID_DEFAULT_START_HOUR: f32 = 7.0;
 
 /// The week grid fills each event block with the calendar's own color
 /// (matching Apple Calendar's own look), unlike the agenda/month/year
@@ -586,6 +606,7 @@ fn render_calendar_week_grid(
     events: &[CalendarEvent],
     hidden: &std::collections::HashSet<String>,
     theme: Theme,
+    scroll: &gpui::ScrollHandle,
 ) -> AnyElement {
     let today = chrono::Local::now().date_naive();
     let visible: Vec<&CalendarEvent> = events.iter().filter(|event| !hidden.contains(&event.calendar_id)).collect();
@@ -687,6 +708,7 @@ fn render_calendar_week_grid(
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
+                .track_scroll(scroll)
                 .flex()
                 .child(
                     // Hour gutter — a label pinned to the bottom of each hour

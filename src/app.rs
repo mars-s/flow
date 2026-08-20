@@ -342,6 +342,17 @@ pub struct Flow {
     /// `QueryCache` itself since a calendar fetch's key (mode + cursor)
     /// isn't naturally `View`-shaped.
     calendar_fetch_generation: u64,
+    /// The Week grid's own scroll position (`ui::calendar`'s
+    /// `render_calendar_week_grid`) — a real `ScrollHandle`, not just a
+    /// scrollable div, specifically so the tab can jump it to a sensible
+    /// starting hour once, rather than opening on 12 AM (mostly empty for
+    /// almost everyone) and making every visit start with a scroll.
+    calendar_week_scroll: gpui::ScrollHandle,
+    /// Whether that initial jump has already happened this session —
+    /// checked once per Calendar-tab arrival in Week mode, then left
+    /// alone, so it never fights the user's own scrolling on a later
+    /// render (navigating weeks, resizing the window, ...).
+    calendar_week_scrolled_once: bool,
     /// One focus handle per calendar row in the tab's sidebar, keyed by
     /// calendar id — same pruned-map pattern as `row_focuses`, pruned
     /// against `calendar_list` whenever it's refetched.
@@ -528,6 +539,8 @@ impl Flow {
                 calendar_list: None,
                 calendar_range_events: None,
                 calendar_fetch_generation: 0,
+                calendar_week_scroll: gpui::ScrollHandle::new(),
+                calendar_week_scrolled_once: false,
                 calendar_row_focuses: HashMap::new(),
                 calendar_day_focus: cx.focus_handle(),
                 calendar_week_focus: cx.focus_handle(),
