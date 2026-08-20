@@ -20,12 +20,17 @@ use std::thread;
 
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use turso::Row;
 use uuid::Uuid;
 
 /// The three persisted placements from `docs/PRODUCT_REQUIREMENTS.md` §5.
 /// Today/Upcoming/Anytime are computed views over `Active`, not stored.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+///
+/// `Serialize`/`Deserialize` here (and on `View`/`Task` below) exist for the
+/// Tauri migration's IPC boundary (`wayfinder/tickets/migrate-to-tauri.md`)
+/// — the GPUI app never serializes these, so this costs it nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Bucket {
     Inbox,
     Active,
@@ -56,7 +61,7 @@ impl Bucket {
 /// `Bucket`, the storage placement underneath. Inbox and Someday map to one
 /// bucket each; Today/Upcoming/Anytime all read `Bucket::Active`, sliced by
 /// `scheduled_date`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum View {
     Inbox,
     Today,
@@ -68,7 +73,7 @@ pub enum View {
 /// Mirrors the `tasks` table from `docs/PRODUCT_REQUIREMENTS.md` §8. No
 /// `user_id`: Flow's local phase is single-user, so a `users` table would be
 /// speculative multi-tenancy nothing here needs yet.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
     pub parent_id: Option<String>,
