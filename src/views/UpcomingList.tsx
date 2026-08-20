@@ -11,6 +11,7 @@ type Props = {
   expanded: string | null;
   completing: Set<string>;
   subtasks: Task[];
+  selectedIds: Set<string>;
   onToggleExpanded: (id: string) => void;
   onComplete: (id: string) => void;
   onNoteChange: (id: string, note: string) => void;
@@ -18,6 +19,7 @@ type Props = {
   onToggleSubtask: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onScheduled: () => void;
+  onToggleSelected: (id: string) => void;
 };
 
 function groupByDate(tasks: Task[]): [string, Task[]][] {
@@ -36,6 +38,7 @@ export function UpcomingList({
   expanded,
   completing,
   subtasks,
+  selectedIds,
   onToggleExpanded,
   onComplete,
   onNoteChange,
@@ -43,6 +46,7 @@ export function UpcomingList({
   onToggleSubtask,
   onDelete,
   onScheduled,
+  onToggleSelected,
 }: Props) {
   const groups = groupByDate(tasks);
 
@@ -77,6 +81,7 @@ export function UpcomingList({
                         expanded={isExpanded}
                         completing={isCompleting}
                         subtasks={isExpanded ? subtasks : []}
+                        selected={selectedIds.has(task.id)}
                         onToggleExpanded={() => onToggleExpanded(task.id)}
                         onComplete={() => onComplete(task.id)}
                         onNoteChange={(note) => onNoteChange(task.id, note)}
@@ -84,6 +89,7 @@ export function UpcomingList({
                         onToggleSubtask={onToggleSubtask}
                         onDelete={() => onDelete(task.id)}
                         onScheduled={onScheduled}
+                        onToggleSelected={() => onToggleSelected(task.id)}
                       />
                     </motion.div>
                   );

@@ -28,6 +28,8 @@ type Props = {
   onToggleSubtask: (id: string, completed: boolean) => void;
   onDelete: () => void;
   onScheduled: () => void;
+  selected: boolean;
+  onToggleSelected: () => void;
 };
 
 export function TaskRow({
@@ -42,6 +44,8 @@ export function TaskRow({
   onToggleSubtask,
   onDelete,
   onScheduled,
+  selected,
+  onToggleSelected,
 }: Props) {
   const [pressed, setPressed] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
@@ -224,8 +228,13 @@ export function TaskRow({
   return (
     <motion.div
       layoutId={`row-${task.id}`}
-      className="row"
-      onClick={onToggleExpanded}
+      className={`row ${selected ? "selected" : ""}`}
+      onClick={(event) => {
+        // Cmd+click toggles multi-select instead of opening the row — same
+        // interaction as the GPUI app's own toggle_selected.
+        if (event.metaKey) onToggleSelected();
+        else onToggleExpanded();
+      }}
       whileHover={{ x: 1 }}
       transition={softSpring}
       // Enter opens the row, Space completes it — no separate tab stop for

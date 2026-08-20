@@ -11,6 +11,7 @@ type Props = {
   expanded: string | null;
   completing: Set<string>;
   subtasks: Task[];
+  selectedIds: Set<string>;
   onToggleExpanded: (id: string) => void;
   onComplete: (id: string) => void;
   onNoteChange: (id: string, note: string) => void;
@@ -18,6 +19,7 @@ type Props = {
   onToggleSubtask: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onScheduled: () => void;
+  onToggleSelected: (id: string) => void;
   emptyLabel: string;
 };
 
@@ -27,6 +29,7 @@ export function TaskList({
   expanded,
   completing,
   subtasks,
+  selectedIds,
   onToggleExpanded,
   onComplete,
   onNoteChange,
@@ -34,6 +37,7 @@ export function TaskList({
   onToggleSubtask,
   onDelete,
   onScheduled,
+  onToggleSelected,
   emptyLabel,
 }: Props) {
   return (
@@ -64,6 +68,7 @@ export function TaskList({
                     expanded={isExpanded}
                     completing={isCompleting}
                     subtasks={isExpanded ? subtasks : []}
+                    selected={selectedIds.has(task.id)}
                     onToggleExpanded={() => onToggleExpanded(task.id)}
                     onComplete={() => onComplete(task.id)}
                     onNoteChange={(note) => onNoteChange(task.id, note)}
@@ -71,6 +76,7 @@ export function TaskList({
                     onToggleSubtask={onToggleSubtask}
                     onDelete={() => onDelete(task.id)}
                     onScheduled={onScheduled}
+                    onToggleSelected={() => onToggleSelected(task.id)}
                   />
                 </motion.div>
               );

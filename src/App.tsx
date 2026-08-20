@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { Sidebar } from "./components/Sidebar";
 import { CaptureField } from "./components/CaptureField";
 import { TaskList } from "./views/TaskList";
@@ -6,10 +7,11 @@ import { UpcomingList } from "./views/UpcomingList";
 import { Settings } from "./views/Settings";
 import { Calendar } from "./views/Calendar";
 import { UndoToast, type UndoState } from "./components/UndoToast";
+import { BulkActionBar, type BulkTarget } from "./components/BulkActionBar";
 import { api } from "./lib/api";
 import { todayIso } from "./lib/date";
 import { VIEW_FOR } from "./lib/types";
-import type { Destination, Task } from "./lib/types";
+import type { Bucket, Destination, Task } from "./lib/types";
 import "./theme.css";
 import "./App.css";
 
@@ -30,6 +32,7 @@ export default function App() {
   const [capturing, setCapturing] = useState(false);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [undoToast, setUndoToast] = useState<UndoState | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Every task view Flow actually has lives under one of these five real
   // View values — fetched together on mount/refresh rather than one at a
@@ -166,14 +169,61 @@ export default function App() {
       .catch((error) => setLoadError(String(error)));
   };
 
+  // Cmd+click toggles a row into the multi-select set instead of expanding
+  // it — same interaction as the GPUI app's own toggle_selected.
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  };
+
+  // The bulk-action bar's Today/Anytime/Someday buttons — same
+  // schedule-every-selected-task-then-clear-selection shape as the GPUI
+  // app's own bulk_process.
+  const bulkProcess = (target: BulkTarget) => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setSelectedIds(new Set());
+    const bucket: Bucket = target === "someday" ? "Someday" : "Active";
+    const date = target === "today" ? todayIso() : null;
+    Promise.all(ids.map((id) => api.scheduleTask(id, bucket, date, null)))
+      .then(refresh)
+      .catch((error) => setLoadError(String(error)));
+  };
+
+  // The bulk-action bar's Delete button — same Undo-toast affordance as a
+  // single row's delete (PRD §6.1's undo-delete criterion doesn't
+  // distinguish single from bulk).
+  const bulkDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setSelectedIds(new Set());
+    Promise.all(ids.map((id) => api.deleteTask(id)))
+      .then(() => {
+        refresh();
+        const label = ids.length === 1 ? "1 task" : `${ids.length} tasks`;
+        setUndoToast({
+          message: `Deleted ${label}`,
+          onUndo: () => Promise.all(ids.map((id) => api.restoreTask(id))).then(refresh).catch((error) => setLoadError(String(error))),
+        });
+      })
+      .catch((error) => setLoadError(String(error)));
+  };
+
   return (
     <div
       className="app"
-      onClick={() => setExpanded(null)}
+      onClick={() => {
+        setExpanded(null);
+        setSelectedIds(new Set());
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           setExpanded(null);
           setCapturing(false);
+          setSelectedIds(new Set());
         }
       }}
     >
@@ -188,6 +238,11 @@ export default function App() {
       <div className="main-pane" onClick={(event) => event.stopPropagation()}>
         {loadError && <div className="load-error">Couldn't reach the local task store: {loadError}</div>}
         <UndoToast toast={undoToast} onDismiss={() => setUndoToast(null)} />
+        <AnimatePresence>
+          {selectedIds.size > 0 && (
+            <BulkActionBar count={selectedIds.size} onProcess={bulkProcess} onDelete={bulkDelete} />
+          )}
+        </AnimatePresence>
         {mode === "tasks" && destination !== "settings" && destination !== "calendar" ? (
           <div className="task-list-shell">
             <div className="capture-slot">
@@ -199,6 +254,7 @@ export default function App() {
                 expanded={expanded}
                 completing={completing}
                 subtasks={subtasks}
+                selectedIds={selectedIds}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
                 onNoteChange={changeNote}
@@ -206,6 +262,7 @@ export default function App() {
                 onToggleSubtask={toggleSubtask}
                 onDelete={deleteTask}
                 onScheduled={refresh}
+                onToggleSelected={toggleSelected}
               />
             ) : (
               <TaskList
@@ -214,6 +271,7 @@ export default function App() {
                 expanded={expanded}
                 completing={completing}
                 subtasks={subtasks}
+                selectedIds={selectedIds}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
                 onNoteChange={changeNote}
@@ -221,6 +279,7 @@ export default function App() {
                 onToggleSubtask={toggleSubtask}
                 onDelete={deleteTask}
                 onScheduled={refresh}
+                onToggleSelected={toggleSelected}
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
               />
             )}
