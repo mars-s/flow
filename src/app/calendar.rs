@@ -1,23 +1,25 @@
 //! The Calendar tab (PRD §6.5, `wayfinder/tickets/eventkit-calendar-tab.md`).
-//! Day/Week only for now — Month/Year are that ticket's own next slice.
 //!
-//! **Deliberate, disclosed simplification**: this is an agenda-per-day
-//! layout (each visible day's events listed top-to-bottom, sorted
-//! all-day-then-by-start-time), not Apple Calendar's pixel-accurate hour
-//! grid with true time-of-day vertical positioning and overlap resolution —
-//! that's a separate absolute-position layout algorithm the ticket doesn't
-//! scope into this first pass. A multi-day event is filed under its start
-//! date's column only, not spanned across every day it covers.
+//! Day and Week each get their own body: Day (and the agenda helpers below)
+//! is the original per-day list layout, kept on purpose — the user liked
+//! its Kanban-board look and asked to keep it around for later reuse rather
+//! than deleting it when Week moved to a real time grid. Week now renders
+//! `render_calendar_week_grid`, a proper hour-gridded view closer to Apple
+//! Calendar's own Week screen: a fixed hour gutter, one column per day, and
+//! events positioned by time-of-day and duration instead of stacked in a
+//! list. A multi-day event is still filed under its start date's column
+//! only — spanning a block across days is a separate layout problem this
+//! pass doesn't take on.
 
 use gpui::{
     AnyElement, Context, FocusHandle, Hsla, IntoElement, KeyDownEvent, ParentElement, Rgba,
-    Styled, div, prelude::*, px,
+    Styled, div, prelude::*, px, relative,
 };
 
 use super::Flow;
 use super::sidebar::Destination;
 use crate::app::CalendarViewMode;
-use crate::platform::{CalendarAuth, CalendarEvent, CalendarInfo};
+use crate::platform::{CalendarAuth, CalendarEvent, CalendarInfo, local_midnight};
 use crate::theme::Theme;
 
 impl Flow {
@@ -34,8 +36,9 @@ impl Flow {
 
         let (range_start, range_end) = self.calendar_visible_range();
         let body = match mode {
-            CalendarViewMode::Day | CalendarViewMode::Week => {
-                render_calendar_body(days_in(range_start, range_end), &events, &hidden, theme)
+            CalendarViewMode::Day => render_calendar_body(days_in(range_start, range_end), &events, &hidden, theme),
+            CalendarViewMode::Week => {
+                render_calendar_week_grid(days_in(range_start, range_end), &events, &hidden, theme)
             }
             CalendarViewMode::Month => {
                 render_calendar_month_grid(cursor, range_start, range_end, &events, &hidden, theme)
@@ -409,6 +412,9 @@ fn days_in(start: chrono::NaiveDate, end: chrono::NaiveDate) -> Vec<chrono::Naiv
     days
 }
 
+/// The Kanban-board-style agenda view (one column per day, events listed
+/// top to bottom) — Day mode's body, and saved here on request rather than
+/// replaced when Week moved to [`render_calendar_week_grid`]'s time grid.
 fn render_calendar_body(
     days: Vec<chrono::NaiveDate>,
     events: &[CalendarEvent],
@@ -538,6 +544,232 @@ fn render_calendar_event_card(event: &CalendarEvent, theme: Theme) -> AnyElement
                     )),
             )
         })
+        .into_any_element()
+}
+
+const HOUR_HEIGHT: f32 = 48.0;
+const GRID_GUTTER_WIDTH: f32 = 44.0;
+
+fn hour_label(hour: u32) -> String {
+    match hour {
+        0 => "12 AM".to_string(),
+        h if h < 12 => format!("{h} AM"),
+        12 => "12 PM".to_string(),
+        h => format!("{} PM", h - 12),
+    }
+}
+
+/// A real time-grid week view: a fixed hour gutter down the left, one
+/// column per day, all-day events in their own strip above the grid,
+/// timed events absolutely positioned by time-of-day and duration.
+///
+/// **Simplification kept deliberate**: overlapping events in a day share a
+/// uniform lane width from a simple greedy sweep (assign each event the
+/// first lane whose previous occupant has already ended, else a new lane),
+/// not Apple's true interval-packing layout — good enough for the common
+/// case and much less code.
+fn render_calendar_week_grid(
+    days: Vec<chrono::NaiveDate>,
+    events: &[CalendarEvent],
+    hidden: &std::collections::HashSet<String>,
+    theme: Theme,
+) -> AnyElement {
+    let today = chrono::Local::now().date_naive();
+    let visible: Vec<&CalendarEvent> = events.iter().filter(|event| !hidden.contains(&event.calendar_id)).collect();
+
+    let all_day_by_day: Vec<Vec<&CalendarEvent>> = days
+        .iter()
+        .map(|day| {
+            let mut day_events: Vec<&CalendarEvent> =
+                visible.iter().copied().filter(|event| event.all_day && event.start.date_naive() == *day).collect();
+            day_events.sort_by(|a, b| a.title.cmp(&b.title));
+            day_events
+        })
+        .collect();
+    let has_all_day = all_day_by_day.iter().any(|day_events| !day_events.is_empty());
+
+    div()
+        .flex_1()
+        .min_h_0()
+        .flex()
+        .flex_col()
+        .child(
+            // Day-of-week header row, fixed above the scrollable grid.
+            div()
+                .flex_none()
+                .flex()
+                .border_b_1()
+                .border_color(theme.border)
+                .child(div().flex_none().w(px(GRID_GUTTER_WIDTH)))
+                .children(days.iter().map(|day| {
+                    let is_today = *day == today;
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .py(px(6.0))
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .gap(px(2.0))
+                        .border_l_1()
+                        .border_color(theme.border)
+                        .child(
+                            div()
+                                .text_size(px(10.5))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme.text_ghost)
+                                .child(day.format("%a").to_string()),
+                        )
+                        .child(
+                            div()
+                                .when(is_today, |el| {
+                                    el.rounded_full().bg(theme.accent).text_color(theme.canvas)
+                                })
+                                .when(!is_today, |el| el.text_color(theme.text))
+                                .px(px(6.0))
+                                .text_size(px(12.5))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .child(day.format("%-d").to_string()),
+                        )
+                })),
+        )
+        .when(has_all_day, |grid| {
+            grid.child(
+                div()
+                    .flex_none()
+                    .flex()
+                    .border_b_1()
+                    .border_color(theme.border)
+                    .child(div().flex_none().w(px(GRID_GUTTER_WIDTH)))
+                    .children(all_day_by_day.iter().map(|day_events| {
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .p(px(3.0))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.0))
+                            .border_l_1()
+                            .border_color(theme.border)
+                            .children(day_events.iter().map(|event| {
+                                let (r, g, b, a) = event.color;
+                                let color: Hsla = Rgba { r, g, b, a }.into();
+                                div()
+                                    .px(px(5.0))
+                                    .py(px(2.0))
+                                    .rounded(px(4.0))
+                                    .bg(color)
+                                    .text_size(px(10.5))
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(gpui::white())
+                                    .truncate()
+                                    .child(event.title.clone())
+                            }))
+                    }))
+            )
+        })
+        .child(
+            div()
+                .id("calendar-week-grid")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .flex()
+                .child(
+                    // Hour gutter — a label pinned to the bottom of each hour
+                    // row, matching how Apple Calendar labels its grid lines.
+                    div().flex_none().w(px(GRID_GUTTER_WIDTH)).flex().flex_col().children((0..24).map(|hour| {
+                        div().h(px(HOUR_HEIGHT)).flex_none().relative().child(
+                            div()
+                                .absolute()
+                                .bottom(px(-6.0))
+                                .right(px(6.0))
+                                .text_size(px(9.5))
+                                .text_color(theme.text_ghost)
+                                .child(hour_label(hour)),
+                        )
+                    })),
+                )
+                .children(days.iter().map(|day| render_calendar_grid_day_column(*day, &visible, theme))),
+        )
+        .into_any_element()
+}
+
+fn render_calendar_grid_day_column(day: chrono::NaiveDate, visible: &[&CalendarEvent], theme: Theme) -> AnyElement {
+    let mut day_events: Vec<&CalendarEvent> =
+        visible.iter().copied().filter(|event| !event.all_day && event.start.date_naive() == day).collect();
+    day_events.sort_by_key(|event| event.start);
+
+    // Greedy lane sweep: give each event the first lane whose previous
+    // occupant already ended by this event's start, else open a new lane.
+    let mut lane_end: Vec<chrono::DateTime<chrono::Local>> = Vec::new();
+    let lanes: Vec<usize> = day_events
+        .iter()
+        .map(|event| {
+            for (lane, end) in lane_end.iter_mut().enumerate() {
+                if *end <= event.start {
+                    *end = event.end;
+                    return lane;
+                }
+            }
+            lane_end.push(event.end);
+            lane_end.len() - 1
+        })
+        .collect();
+    let lane_count = lane_end.len().max(1) as f32;
+    let midnight = local_midnight(day);
+
+    div()
+        .flex_1()
+        .min_w_0()
+        .relative()
+        .border_l_1()
+        .border_color(theme.border)
+        .children((0..24).map(|_| div().h(px(HOUR_HEIGHT)).flex_none().border_b_1().border_color(theme.border)))
+        .children(day_events.into_iter().zip(lanes).map(|(event, lane)| {
+            let start_minutes = (event.start - midnight).num_minutes().max(0) as f32;
+            let duration_minutes = (event.end - event.start).num_minutes().max(15) as f32;
+            let top = start_minutes / 60.0 * HOUR_HEIGHT;
+            let height = (duration_minutes / 60.0 * HOUR_HEIGHT).max(18.0);
+            let (r, g, b, a) = event.color;
+            let color: Hsla = Rgba { r, g, b, a }.into();
+
+            div()
+                .id(gpui::SharedString::from(format!("calendar-grid-event-{}", event.id)))
+                .absolute()
+                .top(px(top))
+                .left(relative(lane as f32 / lane_count))
+                .w(relative(1.0 / lane_count))
+                .h(px(height))
+                .p(px(1.0))
+                .child(
+                    div()
+                        .size_full()
+                        .p(px(4.0))
+                        .rounded(px(4.0))
+                        .overflow_hidden()
+                        .bg(color)
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .text_size(px(10.5))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(gpui::white())
+                                .truncate()
+                                .child(event.title.clone()),
+                        )
+                        .when(height >= 32.0, |card| {
+                            card.child(
+                                div()
+                                    .text_size(px(9.5))
+                                    .text_color(gpui::white())
+                                    .opacity(0.85)
+                                    .child(event.start.format("%-I:%M %p").to_string()),
+                            )
+                        }),
+                )
+        }))
         .into_any_element()
 }
 
