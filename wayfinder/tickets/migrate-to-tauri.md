@@ -135,6 +135,17 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Calendar Day/Month views + navigation** (`e6099c5`): a Day/Week/
+  Month mode toggle and Prev/Next/Today navigation, matching the GPUI
+  app's own header/toggle row. Month renders a real grid (Monday-
+  start, spilling into neighboring months to fill whole weeks, same
+  shape as the GPUI app's own month-grid range math) with up to 3
+  events per cell and a "+N more" overflow; clicking a day jumps to
+  Day view for it. Event range now follows the active mode/cursor
+  instead of always being "this week from now". Year view and the
+  true time-grid Week (Day/Week both still use the agenda-per-day
+  Kanban layout) remain open.
+
 - **Bulk actions landed** (`f0693ce`): Cmd+click a compact row to
   toggle it into a multi-select set instead of opening it (same
   `toggle_selected` interaction as the GPUI app), a floating bulk-
@@ -256,16 +267,17 @@ in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
 
 ## Not started
 
-Calendar's Month/Year views and a true Week time-grid (the agenda-per-day
-Kanban view is the only one ported so far), arrow-key navigation between
-rows specifically (Tab order is the only way to move focus between tasks
-right now, matching the GPUI app's own disclosed gap there), and
-release/distribution tooling. Task CRUD (create via Capture with real
-parsing, list/complete/note/delete, subtasks, delete+undo), scheduling
-from the UI picker, bulk actions (multi-select + bulk-action bar),
-keyboard operation of every row/card/pill, and Calendar's connect flow and
-a real agenda view, are the actual state of things now — the core
-task-manager loop is genuinely complete and keyboard-operable,
+Calendar's Year view and a true time-grid Week (Day/Week both still use
+the agenda-per-day Kanban layout — Month is now a real grid), arrow-key
+navigation between rows specifically (Tab order is the only way to move
+focus between tasks right now, matching the GPUI app's own disclosed gap
+there), and release/distribution tooling. Task CRUD (create via Capture
+with real parsing, list/complete/note/delete, subtasks, delete+undo),
+scheduling from the UI picker, bulk actions (multi-select + bulk-action
+bar), keyboard operation of every row/card/pill, and Calendar's connect
+flow, Day/Week/Month views with real navigation, are the actual state of
+things now — the core task-manager loop is genuinely complete and
+keyboard-operable,
 and Calendar is real but partial.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
