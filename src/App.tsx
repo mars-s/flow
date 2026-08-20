@@ -10,6 +10,7 @@ import { UndoToast, type UndoState } from "./components/UndoToast";
 import { BulkActionBar, type BulkTarget } from "./components/BulkActionBar";
 import { CalendarGlance } from "./components/CalendarGlance";
 import { CompletedSection } from "./components/CompletedSection";
+import { StaleTaskNudges } from "./components/StaleTaskNudges";
 import { api } from "./lib/api";
 import { todayIso } from "./lib/date";
 import { usePersistedString } from "./lib/persisted";
@@ -531,7 +532,13 @@ export default function App() {
                   />
                 }
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
-                topSlot={destination === "today" ? <CalendarGlance /> : undefined}
+                topSlot={
+                  destination === "today" ? (
+                    <CalendarGlance />
+                  ) : destination === "inbox" || destination === "anytime" ? (
+                    <StaleTaskNudges tasks={visibleTasks} />
+                  ) : undefined
+                }
               />
             )}
           </div>

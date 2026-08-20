@@ -8,9 +8,9 @@ import "./AISettingsSection.css";
 // Every AI feature this app has, grouped by the area of the app they
 // show up in ("shiny blocks around the app," direct user framing) — one
 // row per block, each with its own independent Off/Manual/Auto state.
-// Today briefing is the only one actually wired to a real model call so
-// far; the rest are the backlog the user asked to keep visible rather
-// than dropped once brainstormed.
+// Today briefing, checklist expansion, and stale task nudges are wired to
+// a real model call so far; the rest are the backlog the user asked to
+// keep visible rather than dropped once brainstormed.
 const FEATURE_GROUPS: { group: string; features: { id: string; name: string; description: string; live: boolean }[] }[] = [
   {
     group: "Calendar",
@@ -42,7 +42,7 @@ const FEATURE_GROUPS: { group: string; features: { id: string; name: string; des
         id: "stale-task-nudges",
         name: "Stale task nudges",
         description: "Flag Inbox/Anytime tasks that have sat untouched a long time.",
-        live: false,
+        live: true,
       },
       {
         id: "duplicate-detection",
@@ -114,8 +114,9 @@ export function AISettingsSection() {
         <div className="settings-row-body">
           <div className="settings-row-title">AI features</div>
           <div className="settings-row-note">
-            Off by default. "Today briefing" and "Checklist expansion" are wired to a real model call —
-            everything else below is the backlog, kept visible rather than dropped once brainstormed.
+            Off by default. "Today briefing," "Checklist expansion," and "Stale task nudges" are wired to
+            a real model call — everything else below is the backlog, kept visible rather than dropped once
+            brainstormed.
           </div>
         </div>
         <button

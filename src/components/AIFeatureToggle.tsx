@@ -12,15 +12,16 @@ type Props = {
   onChange: (state: AiFeatureState) => void;
 };
 
-// The per-feature vertical three-state control every AI block gets
-// (direct user request) — Auto on top, Off on bottom, reading top-to-
-// bottom as "most to least autonomous."
+// The per-feature three-state control every AI block gets (originally
+// built vertical per an initial request, corrected to horizontal — the
+// user's actual intent all along). Auto, Manual, Off reading left-to-
+// right as "most to least autonomous."
 export function AIFeatureToggle({ value, onChange }: Props) {
   const activeIndex = STATES.findIndex((state) => state.id === value);
 
   return (
     <div className="ai-feature-toggle" role="radiogroup" aria-label="AI feature mode">
-      <div className="ai-feature-toggle-thumb" style={{ transform: `translateY(${activeIndex * 100}%)` }} />
+      <div className="ai-feature-toggle-thumb" style={{ transform: `translateX(${activeIndex * 100}%)` }} />
       {STATES.map((state) => (
         <button
           key={state.id}
