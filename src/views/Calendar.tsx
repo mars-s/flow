@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import type { CalendarAuth, CalendarEvent } from "../lib/types";
 import "./Calendar.css";
 
-type Mode = "day" | "week" | "month";
+type Mode = "day" | "week" | "month" | "year";
 
 function startOfWeek(date: Date): Date {
   const day = date.getDay(); // 0 = Sunday
@@ -27,6 +27,22 @@ function addMonths(date: Date, months: number): Date {
   next.setDate(1);
   next.setMonth(date.getMonth() + months);
   return next;
+}
+
+function addYears(date: Date, years: number): Date {
+  const next = new Date(date);
+  next.setDate(1);
+  next.setFullYear(date.getFullYear() + years);
+  return next;
+}
+
+// A single month's own grid range (Monday-start, spilling into neighboring
+// months to fill whole weeks) — same math monthGridRange uses, just for an
+// arbitrary month rather than the cursor's own.
+function gridRangeFor(year: number, month: number): { start: Date; end: Date } {
+  const firstOfMonth = new Date(year, month, 1);
+  const lastOfMonth = new Date(year, month + 1, 0);
+  return { start: startOfWeek(firstOfMonth), end: startOfWeek(addDays(lastOfMonth, 7)) };
 }
 
 function daysBetween(start: Date, count: number): Date[] {
@@ -54,6 +70,7 @@ function monthGridRange(cursor: Date): { start: Date; end: Date } {
 
 function headerLabel(mode: Mode, cursor: Date): string {
   if (mode === "day") return cursor.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  if (mode === "year") return String(cursor.getFullYear());
   if (mode === "month") return cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const start = startOfWeek(cursor);
   const end = addDays(start, 6);
@@ -151,6 +168,60 @@ function MonthGrid({
   );
 }
 
+// Mirrors the GPUI app's own render_calendar_year_grid: a 4-column grid of
+// 12 mini months, each day cell just a number (a dot marks "has an event",
+// not the events themselves — a full agenda per day would be unreadable at
+// this size), clicking a month jumps to Month mode for it.
+function YearGrid({
+  year,
+  events,
+  today,
+  onPickMonth,
+}: {
+  year: number;
+  events: CalendarEvent[];
+  today: Date;
+  onPickMonth: (month: Date) => void;
+}) {
+  const eventDates = useMemo(() => new Set(events.map((event) => new Date(event.start).toDateString())), [events]);
+
+  return (
+    <div className="calendar-year">
+      {Array.from({ length: 12 }, (_, month) => {
+        const firstOfMonth = new Date(year, month, 1);
+        const { start, end } = gridRangeFor(year, month);
+        const weeks = Math.round((end.getTime() - start.getTime()) / (7 * 86400000));
+        const cells = daysBetween(start, weeks * 7);
+        return (
+          <button
+            type="button"
+            key={month}
+            className="calendar-year-month"
+            onClick={() => onPickMonth(firstOfMonth)}
+          >
+            <div className="calendar-year-month-name">
+              {firstOfMonth.toLocaleDateString(undefined, { month: "long" })}
+            </div>
+            <div className="calendar-year-month-days">
+              {cells.map((day) => {
+                const inMonth = day.getMonth() === month;
+                return (
+                  <div className={`calendar-year-day ${inMonth ? "" : "outside"}`} key={day.toISOString()}>
+                    <span className={sameDay(day, today) ? "calendar-year-day-number today" : "calendar-year-day-number"}>
+                      {day.getDate()}
+                    </span>
+                    {inMonth && eventDates.has(day.toDateString()) && <span className="calendar-year-day-dot" />}
+                  </div>
+                );
+              })}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Calendar() {
   const [auth, setAuth] = useState<CalendarAuth | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -162,6 +233,7 @@ export function Calendar() {
   const range = useMemo(() => {
     if (mode === "day") return { start: cursor, end: addDays(cursor, 1) };
     if (mode === "month") return monthGridRange(cursor);
+    if (mode === "year") return { start: new Date(cursor.getFullYear(), 0, 1), end: new Date(cursor.getFullYear() + 1, 0, 1) };
     const start = startOfWeek(cursor);
     return { start, end: addDays(start, 7) };
   }, [mode, cursor]);
@@ -216,8 +288,10 @@ export function Calendar() {
 
   const today = new Date();
   const step = mode === "day" ? 1 : mode === "week" ? 7 : 0;
-  const goPrev = () => setCursor((c) => (mode === "month" ? addMonths(c, -1) : addDays(c, -step)));
-  const goNext = () => setCursor((c) => (mode === "month" ? addMonths(c, 1) : addDays(c, step)));
+  const goPrev = () =>
+    setCursor((c) => (mode === "month" ? addMonths(c, -1) : mode === "year" ? addYears(c, -1) : addDays(c, -step)));
+  const goNext = () =>
+    setCursor((c) => (mode === "month" ? addMonths(c, 1) : mode === "year" ? addYears(c, 1) : addDays(c, step)));
   const goToday = () => setCursor(new Date());
 
   return (
@@ -237,7 +311,7 @@ export function Calendar() {
             </button>
           </div>
           <div className="calendar-mode-toggle">
-            {(["day", "week", "month"] as const).map((m) => (
+            {(["day", "week", "month", "year"] as const).map((m) => (
               <button
                 type="button"
                 key={m}
@@ -251,7 +325,17 @@ export function Calendar() {
         </div>
       </div>
       {error && <div className="calendar-error">{error}</div>}
-      {mode === "month" ? (
+      {mode === "year" ? (
+        <YearGrid
+          year={cursor.getFullYear()}
+          events={events}
+          today={today}
+          onPickMonth={(month) => {
+            setCursor(month);
+            setMode("month");
+          }}
+        />
+      ) : mode === "month" ? (
         <MonthGrid
           cursor={cursor}
           events={events}

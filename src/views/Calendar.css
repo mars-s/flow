@@ -326,3 +326,75 @@
   font-size: 10px;
   color: var(--text-ghost);
 }
+
+.calendar-year {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 4px 0 16px;
+}
+
+.calendar-year-month {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  text-align: left;
+}
+
+.calendar-year-month:hover,
+.calendar-year-month:focus-visible {
+  background: var(--overlay);
+}
+
+.calendar-year-month-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.calendar-year-month-days {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.calendar-year-day {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.calendar-year-day.outside {
+  opacity: 0.3;
+}
+
+.calendar-year-day-number {
+  font-size: 9px;
+  color: var(--text-secondary);
+  padding: 0 3px;
+}
+
+.calendar-year-day-number.today {
+  background: var(--accent);
+  color: var(--canvas);
+  border-radius: 999px;
+}
+
+.calendar-year-day-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+}
