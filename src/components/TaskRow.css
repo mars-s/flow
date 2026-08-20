@@ -6,10 +6,15 @@
   padding: 0 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  outline: none;
 }
 
 .row:hover {
   background: var(--overlay);
+}
+
+.row:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .checkbox {
@@ -79,6 +84,12 @@
   align-items: center;
   gap: 10px;
   cursor: pointer;
+  outline: none;
+  border-radius: 4px;
+}
+
+.card-header:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .card-title {
@@ -170,17 +181,23 @@
   font-size: 11px;
   padding: 4px 9px;
   border-radius: 999px;
+  border: none;
   background: var(--overlay);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   gap: 5px;
   cursor: pointer;
+  outline: none;
 }
 
 .pill:hover {
   background: var(--overlay-strong);
   color: var(--text);
+}
+
+.pill:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .pill.danger {

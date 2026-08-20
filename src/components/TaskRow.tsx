@@ -79,7 +79,15 @@ export function TaskRow({
         transition={spring}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="card-header" onClick={onToggleExpanded}>
+        <div
+          className="card-header"
+          onClick={onToggleExpanded}
+          tabIndex={0}
+          role="button"
+          onKeyDown={(event) => {
+            if (event.key === "Enter") onToggleExpanded();
+          }}
+        >
           {checkbox}
           <div className="card-title">{task.title}</div>
         </div>
@@ -132,7 +140,14 @@ export function TaskRow({
                     autoFocus
                     onBlur={() => setAddingSubtask(false)}
                     onKeyDown={(event) => {
-                      if (event.key === "Escape") setAddingSubtask(false);
+                      if (event.key === "Escape") {
+                        // Cancels just the subtask-add row, not the whole
+                        // card — stopPropagation so this doesn't also
+                        // bubble to the app root's own Escape handler
+                        // (which collapses the expanded task entirely).
+                        event.stopPropagation();
+                        setAddingSubtask(false);
+                      }
                     }}
                   />
                 </form>
@@ -141,11 +156,15 @@ export function TaskRow({
           )}
 
           <div className="card-pills">
-            <motion.div className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
+            {/* Real <button>s, not styled <div>s — free keyboard operability
+                (native tabIndex, Enter/Space activation) instead of
+                hand-rolling onKeyDown on each one. */}
+            <motion.button type="button" className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
               <Tag size={11} />
               {task.scheduled_date ?? "Schedule…"}
-            </motion.div>
-            <motion.div
+            </motion.button>
+            <motion.button
+              type="button"
               className="pill"
               whileHover={{ y: -1 }}
               whileTap={{ scale: 0.96 }}
@@ -153,19 +172,25 @@ export function TaskRow({
             >
               <Plus size={11} />
               Subtask
-            </motion.div>
-            <motion.div className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
+            </motion.button>
+            <motion.button type="button" className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
               <ListTree size={11} />
               Move
-            </motion.div>
-            <motion.div className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
+            </motion.button>
+            <motion.button type="button" className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
               <Flag size={11} />
               Flag
-            </motion.div>
-            <motion.div className="pill danger" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} onClick={onDelete}>
+            </motion.button>
+            <motion.button
+              type="button"
+              className="pill danger"
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={onDelete}
+            >
               <Trash2 size={11} />
               Delete
-            </motion.div>
+            </motion.button>
           </div>
         </motion.div>
       </motion.div>
@@ -173,7 +198,31 @@ export function TaskRow({
   }
 
   return (
-    <motion.div layoutId={`row-${task.id}`} className="row" onClick={onToggleExpanded} whileHover={{ x: 1 }} transition={softSpring}>
+    <motion.div
+      layoutId={`row-${task.id}`}
+      className="row"
+      onClick={onToggleExpanded}
+      whileHover={{ x: 1 }}
+      transition={softSpring}
+      // Enter opens the row, Space completes it — no separate tab stop for
+      // the checkbox itself, matching the GPUI app's own deliberate choice
+      // (its own tasks.rs comment: doubling tab stops across a long list
+      // is a real cost, not just a style call). preventDefault on Space
+      // stops the page from scrolling on it, the same reason a plain
+      // <button> needs it for a bare Space press.
+      tabIndex={0}
+      role="button"
+      aria-pressed={completing}
+      onKeyDown={(event) => {
+        if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+        if (event.key === "Enter") {
+          onToggleExpanded();
+        } else if (event.key === " ") {
+          event.preventDefault();
+          if (!completing) onComplete();
+        }
+      }}
+    >
       {checkbox}
       <div className={`row-title ${completing ? "checked" : ""}`}>{task.title}</div>
       {task.scheduled_date && <div className="row-schedule">{task.scheduled_date}</div>}

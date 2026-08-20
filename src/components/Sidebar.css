@@ -32,6 +32,17 @@
   cursor: pointer;
   margin-bottom: 12px;
   transition: background 120ms var(--ease-out-quint);
+  outline: none;
+}
+
+/* One focus-visible treatment shared by every keyboard-reachable control
+   in the sidebar, instead of the browser's own default ring (WebKit's
+   default blue doesn't match the rest of the app's accent color, and
+   would be the one inconsistent focus treatment in the whole UI). */
+.capture-row:focus-visible,
+.mode-tab:focus-visible,
+.nav-row:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .capture-row:hover {
@@ -69,6 +80,7 @@
   height: 24px;
   border-radius: 5px;
   color: var(--text-secondary);
+  outline: none;
 }
 
 .mode-tab.active {
@@ -110,6 +122,7 @@
   font-size: 12.5px;
   cursor: pointer;
   text-align: left;
+  outline: none;
 }
 
 .nav-row:hover:not(.active) {

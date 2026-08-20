@@ -92,7 +92,10 @@ export function CaptureField({ open, onSubmit, onClose }: Props) {
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Escape") onClose();
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              onClose();
+            }
           }}
           onBlur={onClose}
         />
