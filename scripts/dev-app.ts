@@ -23,6 +23,14 @@ const appPath = join(root, "src-tauri/target/debug/bundle/macos", `${appName}.ap
 // process that was never actually going to exit) — `pkill` has to target
 // the real running process name, not the bundle's display name.
 const processName = "flow-tauri-prototype";
+// The release build (installed at /Applications/Flow.app once shipped)
+// shares this exact same binary name — Cargo's package name never
+// changes with tauri.conf.json's productName override. A bare
+// `pkill -x processName` matched *both* bundles and silently killed the
+// user's real installed Flow.app on every dev rebuild — a real incident,
+// not a hypothetical. `stopApp` below matches on the full executable
+// path instead (`pkill -f`), scoped to this debug bundle specifically.
+const debugExecutablePath = join(appPath, "Contents/MacOS", processName);
 // A single recursive watch on the repo root, filtered by hand in the
 // callback below — not one `fs.watch` per directory (`src`, `src-tauri/
 // src`, ...), which is what this originally tried and is what actually
@@ -87,7 +95,7 @@ async function build(): Promise<boolean> {
 async function stopApp(): Promise<void> {
   const waiter = app;
   app = undefined;
-  await $`pkill -TERM -x ${processName}`.quiet().nothrow();
+  await $`pkill -TERM -f ${debugExecutablePath}`.quiet().nothrow();
   if (waiter?.exitCode === null) {
     await waiter.exited;
   }
