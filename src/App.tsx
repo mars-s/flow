@@ -141,6 +141,13 @@ export default function App() {
         setCapturing(true);
         return;
       }
+      // Cmd+, is the standard macOS "open preferences" shortcut — every
+      // native app honors it, so Settings shouldn't be sidebar-click-only.
+      if (event.metaKey && event.key === ",") {
+        event.preventDefault();
+        setDestination("settings");
+        return;
+      }
       // Bare space opens Capture too, scoped to task views only (not
       // Calendar/Settings) so it doesn't hijack space's native meaning
       // there — same handle_space_capture_action the GPUI app has. The
