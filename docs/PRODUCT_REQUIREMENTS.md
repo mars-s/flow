@@ -146,7 +146,11 @@ case. The code (`Flow::on_capture_event`) is the source of truth here.
 - Pressing Enter saves a valid task. `Shift+Enter` inserts a line break in the
   note field. Escape dismisses an empty composer or abandons unsaved changes
   after confirmation.
-- A task has a required nonempty title, optional plain-text note, placement,
+- `⌘Enter` saves through the same atomic capture path, navigates to the task's
+  computed placement, and opens its detail editor for notes, tags, projects,
+  and checklist items.
+- A task has a required nonempty title, optional note with headings, emphasis,
+  lists, and links, placement, an optional project, zero or more tags, an
   optional schedule date, optional time, and optional parent task.
 - Inline editing is available from the task row. Expanding a row opens the
   detail editor without navigation away from the list.
@@ -155,6 +159,14 @@ case. The code (`Flow::on_capture_event`) is the source of truth here.
 - A task can be moved among the five placements, rescheduled, completed,
   reopened, or deleted. Deletion shows an undo toast for 10 seconds; storage
   uses a soft-delete timestamp until a future permanent-delete policy exists.
+- Tags are reusable, case-insensitive labels. A task can carry multiple tags;
+  every task view can filter by one tag without changing the task's placement.
+- `⌘K` opens global search across active task titles, notes, and tags. Opening
+  a result navigates to its computed view and expands the task in place.
+- Projects group related tasks without replacing placement. A project can
+  contain Inbox, Today, Upcoming, Anytime, and Someday tasks at once.
+- Areas group projects in the sidebar. A project belongs to at most one area,
+  and moving it between areas does not change any task.
 
 ### 6.2 Tasks and subtasks
 
@@ -177,13 +189,16 @@ case. The code (`Flow::on_capture_event`) is the source of truth here.
 metadata. It has an inline “Process” action that offers Today, Anytime, Someday,
 and schedule.
 
-**Today** shows overdue tasks first, then today’s active tasks. A compact
-calendar-glance card precedes the tasks when a calendar is connected. The card
-shows all-day items and timed events for the local day, sorted by start time.
+**Today** shows overdue tasks first, then today’s daytime tasks, then tasks
+scheduled from 18:00 under This Evening. A compact calendar-glance card precedes
+the tasks when a calendar is connected. The card shows all-day items and timed
+events for the local day, sorted by start time.
 
 **Upcoming** groups active tasks by local date from tomorrow onward. Each date
 section includes that day’s calendar events. Empty days with events still show;
 empty days with neither tasks nor events do not.
+Tasks can be dragged from one dated section to another. The same reschedule
+remains available from the keyboard through the task detail's schedule control.
 
 **Anytime** lists active undated tasks, ordered by manual position then creation
 time. It is the default place for non-urgent active work.
@@ -191,6 +206,10 @@ time. It is the default place for non-urgent active work.
 **Someday** lists deferred tasks. It is intentionally visually quieter and does
 not show its scheduled dates until a task is activated, preventing Someday from
 becoming a disguised upcoming queue.
+
+**Logbook** combines completed tasks from every placement, grouped by completion
+day and ordered newest first. Reopen restores a task to its existing placement,
+project, tags, schedule, and note.
 
 ### 6.4 Natural-language date and time parsing
 
@@ -214,6 +233,8 @@ Parsing behavior:
   source phrase is retained in `parse_source` until the task is saved.
 - The composer renders a clickable preview: `Tomorrow · 8:00 AM`. Clicking it
   opens a date/time picker; Backspace restores the original text.
+- Typing a weekday prefix such as `Mon` in the schedule picker lists the next
+  three matching local dates with their relative day offsets.
 - “At 8” without am/pm, “next week”, dates without a year that have already
   passed, and impossible dates are ambiguous. Keep the title unchanged and
   show a concise clarification control rather than making a date up.
@@ -295,6 +316,24 @@ tasks
   scheduled_date?, scheduled_time?, scheduled_timezone?,
   position, completed_at?, deleted_at?, created_at, updated_at
 
+tags
+  id, name, created_at
+
+task_tags
+  task_id, tag_id
+
+projects
+  id, title, position, created_at, updated_at
+
+task_projects
+  task_id, project_id
+
+areas
+  id, title, position, created_at, updated_at
+
+project_areas
+  project_id, area_id
+
 calendar_connections
   id, user_id, provider, encrypted_refresh_token, scopes,
   calendar_account_email?, connected_at, last_sync_at?, last_error?
@@ -323,6 +362,11 @@ Constraints:
 - `scheduled_time` requires `scheduled_date`; scheduled time is a local wall
   time in `HH:mm` format.
 - Client-provided `position` is normalized server-side within its sibling list.
+- Tag names are unique case-insensitively. Replacing a task's tags is atomic;
+  unused tags remain available for reuse.
+- A task belongs to at most one project. Project assignment never changes its
+  bucket or schedule.
+- A project belongs to at most one area.
 
 ## 9. Technical direction
 
@@ -440,10 +484,27 @@ microservice in v1.
 - A user can create, edit, complete, reopen, move, schedule, and undo-delete a
   task without leaving the keyboard.
 - A new plain task is visible in Inbox immediately and remains after relaunch.
+- `⌘Enter` from Capture saves and immediately opens the created task in its
+  canonical view.
 - Today shows only active tasks scheduled today or earlier; Upcoming starts
   tomorrow; Anytime shows only active unscheduled tasks.
+- Today separates overdue work and tasks scheduled from 18:00 while preserving
+  the same completion, expansion, and keyboard behavior in every section.
 - A parent cannot be completed without explicitly completing its open children.
 - Completing or reopening a task has an accessible, reduced-motion-safe result.
+- Notes render headings, emphasis, lists, and links while preserving the exact
+  editable source text.
+- Tags persist after relaunch, can be created from task detail, and filter every
+  task view.
+- Dragging an Upcoming task to another dated group reschedules it to that date.
+- Global search finds tasks by title, note text, or tag and opens the selected
+  result in its canonical view.
+- Projects persist after relaunch, appear in the sidebar, and show only their
+  assigned tasks while preserving each task's canonical placement.
+- Areas persist after relaunch, group projects in the sidebar, and support
+  moving a project without changing its tasks.
+- Logbook groups completed tasks by local completion day and can reopen one
+  without discarding its metadata.
 
 ### Parsing
 
@@ -452,6 +513,8 @@ microservice in v1.
 - A parser failure leaves the input untouched and does not prevent save.
 - A user can override every parser result before saving.
 - Stored relative-date output stays correct across daylight-saving changes.
+- A weekday prefix offers three future matching dates, and choosing one stores
+  the exact displayed local date.
 
 ### Calendar
 

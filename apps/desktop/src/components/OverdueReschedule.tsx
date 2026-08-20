@@ -91,8 +91,10 @@ export function OverdueReschedule({
   if (mode === "auto") return loading ? <div className="overdue-reschedule-auto-status">Rescheduling…</div> : null;
 
   return (
-    <div className="overdue-reschedule">
-      <CalendarClock size={13} className="overdue-reschedule-icon" />
+    <div className={`overdue-reschedule ai-surface${loading ? " is-generating" : ""}`}>
+      <span className="ai-glyph">
+        <CalendarClock size={13} className="overdue-reschedule-icon" />
+      </span>
       <div className="overdue-reschedule-body">
         <div className="overdue-reschedule-title">
           {overdue.length} overdue task{overdue.length === 1 ? "" : "s"}
@@ -111,7 +113,7 @@ export function OverdueReschedule({
       {suggestion ? (
         <button
           type="button"
-          className="overdue-reschedule-button"
+          className="overdue-reschedule-button ai-action"
           onClick={() => {
             onRescheduleAll(overdue.map((task) => task.id), suggestion.date);
             setSuggestion(null);
@@ -120,7 +122,7 @@ export function OverdueReschedule({
           Reschedule all
         </button>
       ) : (
-        <button type="button" className="overdue-reschedule-button" onClick={() => generate()} disabled={loading}>
+        <button type="button" className="overdue-reschedule-button ai-action" onClick={() => generate()} disabled={loading}>
           {loading ? <Loader2 size={12} className="ai-spin" /> : <Sparkles size={12} />}
           Suggest
         </button>

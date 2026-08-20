@@ -7,10 +7,12 @@
   padding: 16px 10px;
   gap: 4px;
   border-right: 1px solid var(--sidebar-border);
+  overflow: hidden;
   -webkit-app-region: drag;
 }
 
 .sidebar-wordmark {
+  flex: none;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -18,7 +20,17 @@
   color: var(--text);
 }
 
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
 .capture-row {
+  flex: none;
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
@@ -62,6 +74,7 @@
 }
 
 .mode-switch {
+  flex: none;
   -webkit-app-region: no-drag;
   display: flex;
   background: var(--inset);
@@ -108,6 +121,84 @@
   gap: 1px;
 }
 
+.sidebar-projects {
+  -webkit-app-region: no-drag;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 14px;
+}
+
+.sidebar-projects-heading {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 7px 0 10px;
+  color: var(--text-ghost);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.sidebar-projects-heading button {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-ghost);
+  cursor: pointer;
+  outline: none;
+}
+
+.sidebar-projects-heading button:hover,
+.sidebar-projects-heading button:focus-visible {
+  background: var(--overlay);
+  color: var(--text-secondary);
+}
+
+.sidebar-areas-heading {
+  margin-top: 12px;
+}
+
+.sidebar-area {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-area-label {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.sidebar-area .nav-row {
+  padding-left: 20px;
+}
+
+.sidebar-project-input {
+  height: 28px;
+  margin: 1px 6px;
+  padding: 0 7px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--inset);
+  color: var(--text);
+  font-size: 12px;
+}
+
 .nav-row {
   position: relative;
   display: flex;
@@ -143,7 +234,8 @@
 
 .nav-row-icon,
 .nav-row-label,
-.nav-badge {
+.nav-badge,
+.nav-shortcut {
   position: relative;
   z-index: 1;
   display: flex;
@@ -168,6 +260,10 @@
   padding: 1px 6px;
 }
 
-.sidebar-spacer {
-  flex: 1;
+.nav-shortcut {
+  position: relative;
+  z-index: 1;
+  color: var(--text-ghost);
+  font-size: 10px;
 }
+

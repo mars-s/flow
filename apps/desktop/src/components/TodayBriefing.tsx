@@ -96,8 +96,10 @@ export function TodayBriefing() {
   if (!enabled || mode === "off") return null;
 
   return (
-    <div className="today-briefing">
-      <Sparkles size={13} className="today-briefing-icon" />
+    <div className={`today-briefing ai-surface${loading ? " is-generating" : ""}`}>
+      <span className="ai-glyph">
+        <Sparkles size={13} className="today-briefing-icon" />
+      </span>
       <div className="today-briefing-body">
         {text ? (
           <div className="today-briefing-text">{text}</div>
@@ -110,7 +112,7 @@ export function TodayBriefing() {
         )}
       </div>
       {mode === "manual" && (
-        <button type="button" className="today-briefing-button" onClick={generate} disabled={loading}>
+        <button type="button" className="today-briefing-button ai-action" onClick={generate} disabled={loading}>
           {loading ? <Loader2 size={12} className="ai-spin" /> : <RotateCw size={12} />}
           {text ? "Regenerate" : "Generate"}
         </button>

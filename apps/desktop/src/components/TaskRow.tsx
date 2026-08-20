@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Tag, Trash2, Square, SquareCheckBig, FileText, ListChecks } from "lucide-react";
-import type { SubtaskCount, Task } from "../lib/types";
+import { FileText, ListChecks, Square, SquareCheckBig, Tag, Trash2 } from "lucide-react";
+import type { Project, SubtaskCount, Tag as TagDefinition, Task, TaskTag } from "../lib/types";
 import { linkify } from "../lib/linkify";
 import { formatSchedule } from "../lib/date";
 import { splitHighlight, stripHighlight, useNlpPreview } from "../lib/nlpPreview";
 import { SchedulePicker } from "./SchedulePicker";
 import { ChecklistExpansion } from "./ChecklistExpansion";
 import { DraftFromTask } from "./DraftFromTask";
+import { TaskTagEditor } from "./TaskTags";
+import { TaskProjectEditor } from "./TaskProjects";
 import { SmartScheduling } from "./SmartScheduling";
 import "./TaskRow.css";
 
@@ -22,6 +25,63 @@ function Check() {
   );
 }
 
+function renderNoteInline(text: string, keyPrefix: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*)/g).flatMap((part, index) => {
+    if (!part) return [];
+    const key = `${keyPrefix}-${index}`;
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return [<strong key={key}>{linkify(part.slice(2, -2))}</strong>];
+    }
+    if (part.startsWith("*") && part.endsWith("*")) {
+      return [<em key={key}>{linkify(part.slice(1, -1))}</em>];
+    }
+    return [<span key={key}>{linkify(part)}</span>];
+  });
+}
+
+function RichNote({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const blocks: ReactNode[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const unordered = line.match(/^\s*[-*]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
+    const heading = line.match(/^\s*(#{1,3})\s+(.+)$/);
+
+    if (heading) {
+      const Heading = heading[1].length === 1 ? "h2" : heading[1].length === 2 ? "h3" : "h4";
+      blocks.push(<Heading key={index}>{renderNoteInline(heading[2], `heading-${index}`)}</Heading>);
+      index += 1;
+      continue;
+    }
+
+    if (unordered || ordered) {
+      const items: ReactNode[] = [];
+      const orderedList = Boolean(ordered);
+      while (index < lines.length) {
+        const match = lines[index].match(orderedList ? /^\s*\d+\.\s+(.+)$/ : /^\s*[-*]\s+(.+)$/);
+        if (!match) break;
+        items.push(<li key={index}>{renderNoteInline(match[1], `item-${index}`)}</li>);
+        index += 1;
+      }
+      const List = orderedList ? "ol" : "ul";
+      blocks.push(<List key={`list-${index}`}>{items}</List>);
+      continue;
+    }
+
+    if (line.trim()) {
+      blocks.push(<p key={index}>{renderNoteInline(line, `line-${index}`)}</p>);
+    } else {
+      blocks.push(<div className="card-note-spacer" key={index} aria-hidden="true" />);
+    }
+    index += 1;
+  }
+
+  return <div className="card-note-rich">{blocks}</div>;
+}
+
 type Props = {
   task: Task;
   expanded: boolean;
@@ -30,6 +90,13 @@ type Props = {
   subtaskCount?: SubtaskCount;
   pendingCompleteConfirm: boolean;
   onConfirmComplete: () => void;
+  availableTags: TagDefinition[];
+  tags: TaskTag[];
+  onTagsChange: (names: string[]) => void;
+  projects: Project[];
+  projectId: string | null;
+  onProjectChange: (projectId: string | null) => void;
+  showProjectContext?: boolean;
   onCancelCompleteConfirm: () => void;
   onToggleExpanded: () => void;
   onComplete: () => void;
@@ -250,6 +317,13 @@ export function TaskRow({
   onRename,
   onReschedule,
   onNoteChange,
+  availableTags,
+  tags,
+  onTagsChange,
+  projects,
+  projectId,
+  onProjectChange,
+  showProjectContext = true,
   onAddSubtask,
   onToggleSubtask,
   onDeleteSubtask,
@@ -264,6 +338,13 @@ export function TaskRow({
   const [editingNote, setEditingNote] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!editingNote || !noteRef.current) return;
+    noteRef.current.style.height = "auto";
+    noteRef.current.style.height = `${noteRef.current.scrollHeight}px`;
+  }, [editingNote]);
+  const currentProject = projectId ? projects.find((project) => project.id === projectId) : undefined;
 
   const checkbox = (
     <motion.div
@@ -336,15 +417,24 @@ export function TaskRow({
             </div>
           )}
         </div>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.05, duration: 0.14 }}>
+        <motion.div
+          className="card-body"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.05, duration: 0.14 }}
+        >
           {editingNote ? (
             <textarea
               ref={noteRef}
               className="card-note"
               placeholder="Notes"
-              rows={1}
+              rows={2}
               autoFocus
               defaultValue={task.note ?? ""}
+              onInput={(event) => {
+                event.currentTarget.style.height = "auto";
+                event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
+              }}
               onBlur={(event) => {
                 onNoteChange(event.target.value);
                 setEditingNote(false);
@@ -371,9 +461,13 @@ export function TaskRow({
                 if (event.key === "Enter") setEditingNote(true);
               }}
             >
-              {task.note ? linkify(task.note) : "Notes"}
+              {task.note ? <RichNote text={task.note} /> : "Notes"}
             </div>
           )}
+          <div className="card-organizers">
+            <TaskProjectEditor projects={projects} projectId={projectId} onChange={onProjectChange} />
+            <TaskTagEditor available={availableTags} assigned={tags} onChange={onTagsChange} />
+          </div>
 
           {/* Things 3-style checklist: a thin horizontal divider under
               each row (a real Things 3 screenshot showed these as row
@@ -497,7 +591,7 @@ export function TaskRow({
   return (
     <motion.div
       layoutId={`row-${task.id}`}
-      className={`row ${selected ? "selected" : ""}`}
+      className={`row${currentProject ? " with-context" : ""}${selected ? " selected" : ""}`}
       onClick={(event) => {
         // stopPropagation so this doesn't also bubble to the app root's
         // own "click elsewhere collapses the expanded task" handler,
@@ -532,7 +626,10 @@ export function TaskRow({
       }}
     >
       {checkbox}
-      <div className={`row-title ${completing ? "checked" : ""}`}>{linkify(task.title)}</div>
+      <div className="row-main">
+        <div className={`row-title ${completing ? "checked" : ""}`}>{linkify(task.title)}</div>
+        {showProjectContext && currentProject && <div className="row-context">{currentProject.title}</div>}
+      </div>
       {/* Direct user request, matching Things 3's own row indicators: a
           note icon when the task has one, a checklist icon + open/total
           count when it has subtasks — both readable without opening the

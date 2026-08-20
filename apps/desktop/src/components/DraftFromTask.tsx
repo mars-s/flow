@@ -70,7 +70,7 @@ export function DraftFromTask({ taskId, title, note }: { taskId: string; title: 
   return (
     <div className="draft-from-task">
       {draft ? (
-        <div className="draft-from-task-preview">
+        <div className="draft-from-task-preview ai-surface">
           <div className="draft-from-task-text">{draft}</div>
           <button type="button" className="draft-from-task-copy" onClick={copy}>
             {copied ? <Check size={12} /> : <Copy size={12} />}

@@ -10,11 +10,12 @@ import "./CaptureField.css";
 type Props = {
   open: boolean;
   onSubmit: (title: string) => void;
+  onSubmitAndOpen: (title: string) => void;
   onClose: () => void;
   existingTasks: Task[];
 };
 
-export function CaptureField({ open, onSubmit, onClose, existingTasks }: Props) {
+export function CaptureField({ open, onSubmit, onSubmitAndOpen, onClose, existingTasks }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
   const { highlight, preview } = useNlpPreview(value);
@@ -82,6 +83,12 @@ export function CaptureField({ open, onSubmit, onClose, existingTasks }: Props) 
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.preventDefault();
+              const title = value.trim();
+              if (title) onSubmitAndOpen(title);
+              return;
+            }
             if (event.key === "Escape") {
               event.stopPropagation();
               onClose();
@@ -100,6 +107,10 @@ export function CaptureField({ open, onSubmit, onClose, existingTasks }: Props) 
             <Search size={13} />
           </button>
         )}
+      </div>
+      <div className="capture-keyboard-hints">
+        <span>↵ Save</span>
+        <span>⌘↵ Add details</span>
       </div>
       {preview && (
         <div className="capture-preview">

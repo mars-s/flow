@@ -10,6 +10,10 @@
 
 .view-header {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding: 40px 0 16px;
   -webkit-app-region: drag;
 }
@@ -18,6 +22,19 @@
   margin: 0;
   font-size: 20px;
   font-weight: 700;
+}
+
+.view-header-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.view-header .task-tag-filter {
+  max-width: min(60%, 420px);
+  -webkit-app-region: no-drag;
 }
 
 .list {
@@ -29,6 +46,35 @@
   gap: 2px;
 }
 
+
+.task-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-section + .task-section {
+  margin-top: 14px;
+}
+
+.task-section-heading {
+  height: 28px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 10px 5px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.task-section-heading.danger {
+  color: var(--danger);
+}
+
+.task-section-heading.quiet {
+  color: var(--accent);
+}
 .empty-state {
   flex: 1;
   display: flex;

@@ -133,7 +133,7 @@ export function SmartScheduling({
   return (
     <div className="smart-scheduling">
       {suggestion ? (
-        <div className="smart-scheduling-preview">
+        <div className="smart-scheduling-preview ai-surface">
           <div className="smart-scheduling-slot">
             <Clock size={12} />
             Today, {formatSlotLabel(suggestion.slot)}

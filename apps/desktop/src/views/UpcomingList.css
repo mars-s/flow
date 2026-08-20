@@ -4,6 +4,27 @@
 
 .upcoming-group {
   margin-bottom: 4px;
+  border-radius: var(--radius-sm);
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.upcoming-group.drop-target {
+  background: color-mix(in srgb, var(--accent-wash) 48%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent-wash);
+}
+
+.upcoming-group.drop-target .upcoming-group-label {
+  color: var(--accent);
+}
+
+.upcoming-group > [draggable="true"] {
+  cursor: grab;
+}
+
+.upcoming-group > [draggable="true"]:active {
+  cursor: grabbing;
 }
 
 .upcoming-group-label {

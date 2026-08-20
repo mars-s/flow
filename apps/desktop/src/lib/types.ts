@@ -29,7 +29,40 @@ export type SubtaskCount = {
   total: number;
 };
 
-export type Destination = "inbox" | "today" | "upcoming" | "anytime" | "someday" | "calendar" | "settings";
+export type Tag = {
+  id: string;
+  name: string;
+};
+
+export type TaskTag = {
+  task_id: string;
+  tag_id: string;
+  name: string;
+};
+
+export type Project = {
+  id: string;
+  title: string;
+  position: number;
+};
+
+export type TaskProject = {
+  task_id: string;
+  project_id: string;
+};
+
+export type Area = {
+  id: string;
+  title: string;
+  position: number;
+};
+
+export type ProjectArea = {
+  project_id: string;
+  area_id: string;
+};
+
+export type Destination = "inbox" | "today" | "upcoming" | "anytime" | "someday" | "logbook" | "calendar" | "settings";
 
 // Mirrors flow-data's real calendar::{CalendarAuth, CalendarEvent,
 // CalendarInfo} exactly — the same EventKit-backed types the GPUI app's

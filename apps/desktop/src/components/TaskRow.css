@@ -9,6 +9,10 @@
   outline: none;
 }
 
+.row.with-context {
+  height: 46px;
+}
+
 .row:hover {
   background: var(--overlay);
 }
@@ -51,13 +55,29 @@
   height: 9px;
 }
 
-.row-title {
+.row-main {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.row-title {
+  min-width: 0;
   overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-context {
+  overflow: hidden;
+  color: var(--text-ghost);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row-title.checked {
@@ -180,31 +200,107 @@
 }
 
 .card-note {
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  background: transparent;
+  width: 100%;
+  min-height: 48px;
+  overflow: hidden;
+  resize: none;
   border: none;
   outline: none;
-  resize: none;
+  background: transparent;
+  color: var(--text-secondary);
   font-family: inherit;
-  width: 100%;
-  min-height: 20px;
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 .card-note::placeholder {
   color: var(--text-ghost);
 }
 
+/* One flex column with a single gap owns the whole card body's vertical
+   rhythm (note, organizers, subtasks, the AI blocks, the confirm banner,
+   the pill toolbar) instead of each section carrying its own ad-hoc
+   margin — several of these sections render nothing at all depending on
+   task state, and gap only ever applies between children actually
+   present, so this stays even without conditional margin logic. Direct
+   user report: the organizers row and the pill toolbar below it read as
+   two mismatched clumps rather than one toolbar. */
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .card-note-view {
-  font-size: 12.5px;
-  color: var(--text-secondary);
   width: 100%;
   min-height: 20px;
-  line-height: 1.4;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
   cursor: text;
   outline: none;
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+.card-note-rich p {
+  margin: 0 0 6px;
+}
+
+.card-note-rich :is(h2, h3, h4) {
+  margin: 12px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.card-note-rich h2 {
+  font-size: 13px;
+}
+
+.card-note-rich h3 {
+  font-size: 12px;
+}
+
+.card-note-rich h4 {
+  font-size: 11.5px;
+}
+
+.card-note-rich > :first-child {
+  margin-top: 0;
+}
+
+.card-note-rich :is(ul, ol) {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+}
+
+.card-note-rich li + li {
+  margin-top: 3px;
+}
+
+.card-note-rich strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.card-note-rich em {
+  color: var(--text);
+}
+
+.card-note-rich > :last-child {
+  margin-bottom: 0;
+}
+
+.card-note-spacer {
+  height: 8px;
+}
+
+.card-organizers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
 }
 
 .card-note-view.placeholder {
@@ -364,8 +460,8 @@
 
 .card-pills {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 2px;
 }
 
 .pill-anchor {

@@ -79,8 +79,10 @@ export function StaleTaskNudges({ tasks }: { tasks: Task[] }) {
   if (!enabled || mode === "off" || stale.length === 0) return null;
 
   return (
-    <div className="stale-nudges">
-      <Sparkles size={13} className="stale-nudges-icon" />
+    <div className={`stale-nudges ai-surface${loading ? " is-generating" : ""}`}>
+      <span className="ai-glyph">
+        <Sparkles size={13} className="stale-nudges-icon" />
+      </span>
       <div className="stale-nudges-body">
         <div className="stale-nudges-title">
           {stale.length} task{stale.length === 1 ? "" : "s"} sitting {STALE_DAYS}+ days
@@ -96,7 +98,7 @@ export function StaleTaskNudges({ tasks }: { tasks: Task[] }) {
         ) : null}
       </div>
       {mode === "manual" && (
-        <button type="button" className="stale-nudges-button" onClick={generate} disabled={loading}>
+        <button type="button" className="stale-nudges-button ai-action" onClick={generate} disabled={loading}>
           {loading ? <Loader2 size={12} className="ai-spin" /> : <RotateCw size={12} />}
           {text ? "Regenerate" : "Generate"}
         </button>

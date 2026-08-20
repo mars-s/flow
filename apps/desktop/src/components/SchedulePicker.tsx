@@ -12,6 +12,33 @@ type Props = {
   onClose: () => void;
 };
 
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+function weekdaySuggestions(query: string): { date: string; label: string; relative: string }[] {
+  const normalized = query.trim().toLowerCase();
+  if (normalized.length < 2 || !/^[a-z]+$/.test(normalized)) return [];
+  const weekday = WEEKDAYS.findIndex((name) => name.startsWith(normalized));
+  if (weekday === -1) return [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let firstOffset = (weekday - today.getDay() + 7) % 7;
+  if (firstOffset === 0) firstOffset = 7;
+
+  return Array.from({ length: 3 }, (_, index) => {
+    const days = firstOffset + index * 7;
+    const date = new Date(today);
+    date.setDate(today.getDate() + days);
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return {
+      date: `${date.getFullYear()}-${month}-${day}`,
+      label: date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
+      relative: `in ${days} days`,
+    };
+  });
+}
+
 // The detail card's own Today/Anytime/Someday/Clear quick-picks, plus a
 // free-text field that reuses Capture's real NLP parsing (schedule_task_
 // from_text) instead of a calendar widget — same "reuse parse.rs on
@@ -28,6 +55,7 @@ export function SchedulePicker({ taskId, onScheduled, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { highlight, preview } = useNlpPreview(text);
   const { before, matched, after } = splitHighlight(text, highlight);
+  const suggestions = weekdaySuggestions(text);
 
   const quickPick = (bucket: "Active" | "Inbox" | "Someday", date: string | null) => {
     api
@@ -120,6 +148,22 @@ export function SchedulePicker({ taskId, onScheduled, onClose }: Props) {
           />
         </div>
       </form>
+      {suggestions.length > 0 && (
+        <div className="schedule-picker-suggestions">
+          {suggestions.map((suggestion) => (
+            <button
+              type="button"
+              key={suggestion.date}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => quickPick("Active", suggestion.date)}
+            >
+              <CalendarDays size={12} />
+              <span>{suggestion.label}</span>
+              <span>{suggestion.relative}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {preview && (
         <div className="schedule-picker-preview">
           {preview.date}

@@ -153,10 +153,16 @@ fn try_match(
 ) -> Option<ParsedTitle> {
     let caps = regex.captures(trimmed)?;
     let date = wants_date
-        .then(|| caps.name("date").and_then(|m| parse_date_phrase(m.as_str(), today)))
+        .then(|| {
+            caps.name("date")
+                .and_then(|m| parse_date_phrase(m.as_str(), today))
+        })
         .flatten();
     let time = wants_time
-        .then(|| caps.name("time").and_then(|m| parse_time_phrase(m.as_str())))
+        .then(|| {
+            caps.name("time")
+                .and_then(|m| parse_time_phrase(m.as_str()))
+        })
         .flatten();
     // A phrase that matched the pattern but failed its own semantic check
     // (an impossible date, a month/day already past with no explicit year)
@@ -364,7 +370,10 @@ mod tests {
         let title = "call mom tomorrow 5pm";
         let result = parse(title, date(2026, 8, 18));
         let range = result.source_range.expect("a match should carry a range");
-        assert_eq!(&title[range.clone()], result.source_phrase.as_deref().unwrap());
+        assert_eq!(
+            &title[range.clone()],
+            result.source_phrase.as_deref().unwrap()
+        );
         assert_eq!(&title[range], "tomorrow 5pm");
     }
 
@@ -384,7 +393,10 @@ mod tests {
 
     #[test]
     fn today_and_tomorrow() {
-        assert_eq!(parse("water plants today", date(2026, 8, 18)).date, Some(date(2026, 8, 18)));
+        assert_eq!(
+            parse("water plants today", date(2026, 8, 18)).date,
+            Some(date(2026, 8, 18))
+        );
         assert_eq!(
             parse("water plants tomorrow", date(2026, 8, 18)).date,
             Some(date(2026, 8, 19))
@@ -401,8 +413,14 @@ mod tests {
 
     #[test]
     fn explicit_dates_all_three_forms() {
-        assert_eq!(parse("renew passport Aug 23", date(2026, 1, 1)).date, Some(date(2026, 8, 23)));
-        assert_eq!(parse("renew passport 23 Aug", date(2026, 1, 1)).date, Some(date(2026, 8, 23)));
+        assert_eq!(
+            parse("renew passport Aug 23", date(2026, 1, 1)).date,
+            Some(date(2026, 8, 23))
+        );
+        assert_eq!(
+            parse("renew passport 23 Aug", date(2026, 1, 1)).date,
+            Some(date(2026, 8, 23))
+        );
         assert_eq!(
             parse("renew passport 2026-08-23", date(2026, 1, 1)).date,
             Some(date(2026, 8, 23))
@@ -429,16 +447,34 @@ mod tests {
     fn next_weekday_behaves_like_bare_weekday_when_today_does_not_match() {
         // 2026-08-18 is a Tuesday; the next Monday either way is the 24th.
         let tuesday = date(2026, 8, 18);
-        assert_eq!(parse("standup monday", tuesday).date, Some(date(2026, 8, 24)));
-        assert_eq!(parse("standup next monday", tuesday).date, Some(date(2026, 8, 24)));
+        assert_eq!(
+            parse("standup monday", tuesday).date,
+            Some(date(2026, 8, 24))
+        );
+        assert_eq!(
+            parse("standup next monday", tuesday).date,
+            Some(date(2026, 8, 24))
+        );
     }
 
     #[test]
     fn time_forms() {
-        assert_eq!(parse("call at 08:30", date(2026, 8, 18)).time, Some(time(8, 30)));
-        assert_eq!(parse("call at 8:30 pm", date(2026, 8, 18)).time, Some(time(20, 30)));
-        assert_eq!(parse("call at 12am", date(2026, 8, 18)).time, Some(time(0, 0)));
-        assert_eq!(parse("call at 12pm", date(2026, 8, 18)).time, Some(time(12, 0)));
+        assert_eq!(
+            parse("call at 08:30", date(2026, 8, 18)).time,
+            Some(time(8, 30))
+        );
+        assert_eq!(
+            parse("call at 8:30 pm", date(2026, 8, 18)).time,
+            Some(time(20, 30))
+        );
+        assert_eq!(
+            parse("call at 12am", date(2026, 8, 18)).time,
+            Some(time(0, 0))
+        );
+        assert_eq!(
+            parse("call at 12pm", date(2026, 8, 18)).time,
+            Some(time(12, 0))
+        );
     }
 
     #[test]

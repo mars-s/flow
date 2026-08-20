@@ -20,7 +20,9 @@
 mod ai;
 
 use flow_data::calendar::{self, CalendarAuth, CalendarEvent, CalendarInfo};
-use flow_data::db::{Bucket, Db, SubtaskCount, Task, View};
+use flow_data::db::{
+    Area, Bucket, Db, Project, ProjectArea, SubtaskCount, Tag, Task, TaskProject, TaskTag, View,
+};
 use flow_data::parse;
 use serde::Serialize;
 use tauri::Manager;
@@ -130,7 +132,11 @@ mod tests {
 }
 
 fn database_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    let filename = if cfg!(debug_assertions) { "flow-tauri-dev.db" } else { "flow.db" };
+    let filename = if cfg!(debug_assertions) {
+        "flow-tauri-dev.db"
+    } else {
+        "flow.db"
+    };
     app.path()
         .app_data_dir()
         .map(|dir| dir.join(filename))
@@ -179,7 +185,9 @@ async fn capture_task(db: tauri::State<'_, Db>, title: String) -> Result<Task, S
     tokio::task::spawn_blocking(move || {
         let today = chrono::Local::now().date_naive();
         let parsed = parse::parse(&title, today);
-        let date = parsed.date.or_else(|| parsed.time.is_some().then_some(today));
+        let date = parsed
+            .date
+            .or_else(|| parsed.time.is_some().then_some(today));
         db.create_task_scheduled(
             parsed.cleaned_title,
             date.map(|d| d.to_string()),
@@ -192,7 +200,11 @@ async fn capture_task(db: tauri::State<'_, Db>, title: String) -> Result<Task, S
 }
 
 #[tauri::command]
-async fn set_completed(db: tauri::State<'_, Db>, id: String, completed: bool) -> Result<(), String> {
+async fn set_completed(
+    db: tauri::State<'_, Db>,
+    id: String,
+    completed: bool,
+) -> Result<(), String> {
     let db = db.inner().clone();
     tokio::task::spawn_blocking(move || db.set_completed(id, completed))
         .await
@@ -247,12 +259,18 @@ async fn schedule_task(
 /// Active, a bare time with no date defaults to today), the one difference
 /// being this schedules an *existing* task instead of creating one.
 #[tauri::command]
-async fn schedule_task_from_text(db: tauri::State<'_, Db>, id: String, text: String) -> Result<(), String> {
+async fn schedule_task_from_text(
+    db: tauri::State<'_, Db>,
+    id: String,
+    text: String,
+) -> Result<(), String> {
     let db = db.inner().clone();
     tokio::task::spawn_blocking(move || {
         let today = chrono::Local::now().date_naive();
         let parsed = parse::parse(&text, today);
-        let date = parsed.date.or_else(|| parsed.time.is_some().then_some(today));
+        let date = parsed
+            .date
+            .or_else(|| parsed.time.is_some().then_some(today));
         if date.is_none() {
             return Err("couldn't recognize a date or time in that".to_string());
         }
@@ -290,7 +308,11 @@ async fn subtask_counts(db: tauri::State<'_, Db>) -> Result<Vec<SubtaskCount>, S
 }
 
 #[tauri::command]
-async fn create_subtask(db: tauri::State<'_, Db>, parent_id: String, title: String) -> Result<Task, String> {
+async fn create_subtask(
+    db: tauri::State<'_, Db>,
+    parent_id: String,
+    title: String,
+) -> Result<Task, String> {
     let db = db.inner().clone();
     tokio::task::spawn_blocking(move || db.create_subtask(parent_id, title))
         .await
@@ -298,6 +320,116 @@ async fn create_subtask(db: tauri::State<'_, Db>, parent_id: String, title: Stri
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn list_tags(db: tauri::State<'_, Db>) -> Result<Vec<Tag>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.list_tags())
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn list_task_tags(db: tauri::State<'_, Db>) -> Result<Vec<TaskTag>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.list_task_tags())
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn set_task_tags(
+    db: tauri::State<'_, Db>,
+    task_id: String,
+    names: Vec<String>,
+) -> Result<Vec<TaskTag>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.set_task_tags(task_id, names))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn list_projects(db: tauri::State<'_, Db>) -> Result<Vec<Project>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.list_projects())
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn create_project(db: tauri::State<'_, Db>, title: String) -> Result<Project, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.create_project(title))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn list_task_projects(db: tauri::State<'_, Db>) -> Result<Vec<TaskProject>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.list_task_projects())
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn set_task_project(
+    db: tauri::State<'_, Db>,
+    task_id: String,
+    project_id: Option<String>,
+) -> Result<Option<TaskProject>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.set_task_project(task_id, project_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn list_areas(db: tauri::State<'_, Db>) -> Result<Vec<Area>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.list_areas())
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn create_area(db: tauri::State<'_, Db>, title: String) -> Result<Area, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.create_area(title))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn list_project_areas(db: tauri::State<'_, Db>) -> Result<Vec<ProjectArea>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.list_project_areas())
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn set_project_area(
+    db: tauri::State<'_, Db>,
+    project_id: String,
+    area_id: Option<String>,
+) -> Result<Option<ProjectArea>, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.set_project_area(project_id, area_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
 #[tauri::command]
 async fn delete_task(db: tauri::State<'_, Db>, id: String) -> Result<(), String> {
     let db = db.inner().clone();
@@ -352,10 +484,12 @@ async fn calendar_connect() -> CalendarAuth {
 /// what's written in the string).
 #[tauri::command]
 fn calendar_events(start: String, end: String) -> Result<Vec<CalendarEvent>, String> {
-    let start: chrono::DateTime<chrono::FixedOffset> =
-        start.parse().map_err(|error| format!("bad start date: {error}"))?;
-    let end: chrono::DateTime<chrono::FixedOffset> =
-        end.parse().map_err(|error| format!("bad end date: {error}"))?;
+    let start: chrono::DateTime<chrono::FixedOffset> = start
+        .parse()
+        .map_err(|error| format!("bad start date: {error}"))?;
+    let end: chrono::DateTime<chrono::FixedOffset> = end
+        .parse()
+        .map_err(|error| format!("bad end date: {error}"))?;
     Ok(calendar::calendar_events_between(
         start.with_timezone(&chrono::Local),
         end.with_timezone(&chrono::Local),
@@ -391,6 +525,17 @@ pub fn run() {
             list_subtasks,
             create_subtask,
             subtask_counts,
+            list_tags,
+            list_task_tags,
+            set_task_tags,
+            list_projects,
+            create_project,
+            list_task_projects,
+            set_task_project,
+            list_areas,
+            create_area,
+            list_project_areas,
+            set_project_area,
             ai::ai_list_models,
             ai::ai_chat_completion,
             delete_task,

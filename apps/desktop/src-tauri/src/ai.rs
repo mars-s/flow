@@ -89,8 +89,14 @@ pub async fn ai_chat_completion(
     let body = ChatRequest {
         model: &model,
         messages: vec![
-            ChatMessage { role: "system", content: &system },
-            ChatMessage { role: "user", content: &user },
+            ChatMessage {
+                role: "system",
+                content: &system,
+            },
+            ChatMessage {
+                role: "user",
+                content: &user,
+            },
         ],
     };
     let response = client

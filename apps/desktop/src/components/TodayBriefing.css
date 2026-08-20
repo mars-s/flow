@@ -2,18 +2,14 @@
   flex: none;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 12px 14px;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
   border-radius: var(--radius-md);
-  background: var(--raised);
-  border: 1px solid var(--accent-wash);
 }
 
 .today-briefing-icon {
-  flex: none;
-  color: var(--accent);
-  margin-top: 2px;
+  display: block;
 }
 
 .today-briefing-body {
@@ -22,11 +18,11 @@
 }
 
 .today-briefing-text {
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--text);
+  text-wrap: pretty;
 }
-
 .today-briefing-text.muted {
   color: var(--text-ghost);
 }
@@ -62,15 +58,3 @@
   cursor: default;
 }
 
-.ai-spin {
-  animation: ai-spin 0.8s linear infinite;
-}
-
-@keyframes ai-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}

@@ -56,6 +56,11 @@ function sameDay(a: Date, b: Date): boolean {
   return a.toDateString() === b.toDateString();
 }
 
+function isWeekend(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
 function colorCss([r, g, b, a]: [number, number, number, number]): string {
   return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
 }
@@ -167,6 +172,7 @@ function DayColumn({ day, events, isToday }: { day: Date; events: CalendarEvent[
 // agenda-per-day DayColumn instead (the GPUI app's own comment: Day kept
 // its Kanban-board look on purpose when Week moved to a real grid).
 function WeekTimeGrid({ days, events, today }: { days: Date[]; events: CalendarEvent[]; today: Date }) {
+  const [now, setNow] = useState(() => new Date());
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Jump to a sensible starting hour on mount instead of opening on
@@ -175,6 +181,8 @@ function WeekTimeGrid({ days, events, today }: { days: Date[]; events: CalendarE
   // the GPUI app's own calendar_week_scrolled_once flag uses.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: DEFAULT_START_HOUR * HOUR_HEIGHT });
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const allDayByDay = days.map((day) => events.filter((event) => event.all_day && sameDay(new Date(event.start), day)));
@@ -185,7 +193,10 @@ function WeekTimeGrid({ days, events, today }: { days: Date[]; events: CalendarE
       <div className="calendar-grid-header">
         <div className="calendar-grid-gutter" />
         {days.map((day) => (
-          <div className="calendar-grid-header-cell" key={day.toISOString()}>
+          <div
+            className={`calendar-grid-header-cell${sameDay(day, today) ? " today" : ""}${isWeekend(day) ? " weekend" : ""}`}
+            key={day.toISOString()}
+          >
             <span className="calendar-grid-header-weekday">{day.toLocaleDateString(undefined, { weekday: "short" })}</span>
             <span className={sameDay(day, today) ? "calendar-grid-header-number today" : "calendar-grid-header-number"}>
               {day.getDate()}
@@ -212,7 +223,17 @@ function WeekTimeGrid({ days, events, today }: { days: Date[]; events: CalendarE
         </div>
       )}
       <div className="calendar-grid-body" ref={scrollRef}>
-        <div className="calendar-grid-gutter">
+        {/* Explicit height on the gutter and every day-column, rather than
+            letting it fall out implicitly from 24 stacked 48px rows —
+            direct user report that the day-columns' own border-left grid
+            lines (not the rows' border-bottom lines, which kept rendering
+            fine) stopped partway down a tall scrolled week grid. Giving
+            each column the same authoritative height HOUR_HEIGHT already
+            uses for event positioning removes any ambiguity between "how
+            tall this box's content naturally lays out" and "how tall the
+            box itself is for painting its own border," rather than
+            trusting the two to necessarily agree over 24 stacked children. */}
+        <div className="calendar-grid-gutter" style={{ height: 24 * HOUR_HEIGHT }}>
           {Array.from({ length: 24 }, (_, hour) => (
             <div className="calendar-grid-hour-row" key={hour}>
               <span className="calendar-grid-hour-label">{hourLabel(hour)}</span>
@@ -224,10 +245,23 @@ function WeekTimeGrid({ days, events, today }: { days: Date[]; events: CalendarE
           const midnight = new Date(day);
           midnight.setHours(0, 0, 0, 0);
           return (
-            <div className="calendar-grid-day-column" key={day.toISOString()}>
+            <div
+              className={`calendar-grid-day-column${sameDay(day, today) ? " today" : ""}${isWeekend(day) ? " weekend" : ""}`}
+              key={day.toISOString()}
+              style={{ height: 24 * HOUR_HEIGHT }}
+            >
               {Array.from({ length: 24 }, (_, hour) => (
                 <div className="calendar-grid-hour-row" key={hour} />
               ))}
+              {sameDay(day, now) && (
+                <div
+                  className="calendar-grid-now"
+                  style={{ top: ((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR_HEIGHT }}
+                  aria-hidden="true"
+                >
+                  <span className="calendar-grid-now-dot" />
+                </div>
+              )}
               {assignLanes(dayEvents).map(({ event, lane, laneCount }) => {
                 const startMinutes = Math.max(0, (new Date(event.start).getTime() - midnight.getTime()) / 60000);
                 const durationMinutes = Math.max(15, (new Date(event.end).getTime() - new Date(event.start).getTime()) / 60000);

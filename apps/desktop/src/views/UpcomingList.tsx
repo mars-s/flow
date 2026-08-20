@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type DragEvent, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TaskRow } from "../components/TaskRow";
+import { TaskTagFilter } from "../components/TaskTags";
 import { dayLabel } from "../lib/date";
-import type { SubtaskCount, Task } from "../lib/types";
+import type { Project, SubtaskCount, Tag, Task, TaskTag } from "../lib/types";
 import "./TaskList.css";
 import "./UpcomingList.css";
 
@@ -15,6 +16,14 @@ type Props = {
   subtasks: Task[];
   subtaskCounts: Record<string, SubtaskCount>;
   pendingCompleteConfirm: string | null;
+  tags: Tag[];
+  taskTags: Record<string, TaskTag[]>;
+  activeTag: string | null;
+  onTagFilterChange: (name: string | null) => void;
+  onTaskTagsChange: (taskId: string, names: string[]) => void;
+  projects: Project[];
+  taskProjects: Record<string, string>;
+  onTaskProjectChange: (taskId: string, projectId: string | null) => void;
   onConfirmComplete: (id: string) => void;
   onCancelCompleteConfirm: () => void;
   selectedIds: Set<string>;
@@ -50,6 +59,14 @@ export function UpcomingList({
   subtasks,
   subtaskCounts,
   pendingCompleteConfirm,
+  tags,
+  taskTags,
+  activeTag,
+  onTagFilterChange,
+  onTaskTagsChange,
+  projects,
+  taskProjects,
+  onTaskProjectChange,
   onConfirmComplete,
   onCancelCompleteConfirm,
   selectedIds,
@@ -67,18 +84,40 @@ export function UpcomingList({
   bottomSlot,
 }: Props) {
   const groups = groupByDate(tasks);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropDate, setDropDate] = useState<string | null>(null);
 
   return (
     <div className="task-list-view">
       <div className="view-header">
         <h1>Upcoming</h1>
+        <TaskTagFilter tags={tags} value={activeTag} onChange={onTagFilterChange} />
       </div>
       {groups.length === 0 ? (
         <div className="empty-state">Nothing scheduled yet.</div>
       ) : (
         <div className="list upcoming-list">
           {groups.map(([date, group]) => (
-            <div className="upcoming-group" key={date}>
+            <div
+              className={dropDate === date ? "upcoming-group drop-target" : "upcoming-group"}
+              key={date}
+              onDragOver={(event) => {
+                if (date === "Later" || !draggingId) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDropDate(date);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropDate(null);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const taskId = event.dataTransfer.getData("text/flow-task-id") || draggingId;
+                if (taskId && date !== "Later") onReschedule(taskId, date, null);
+                setDraggingId(null);
+                setDropDate(null);
+              }}
+            >
               <div className="upcoming-group-label">{date === "Later" ? date : dayLabel(date)}</div>
               <AnimatePresence initial={false}>
                 {group.map((task) => {
@@ -93,6 +132,16 @@ export function UpcomingList({
                       exit={{ opacity: 0, height: 0 }}
                       transition={spring}
                       style={{ overflow: "hidden" }}
+                      draggable={!isExpanded}
+                      onDragStartCapture={(event: DragEvent<HTMLDivElement>) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/flow-task-id", task.id);
+                        setDraggingId(task.id);
+                      }}
+                      onDragEndCapture={() => {
+                        setDraggingId(null);
+                        setDropDate(null);
+                      }}
                     >
                       <TaskRow
                         task={task}
@@ -100,8 +149,14 @@ export function UpcomingList({
                         completing={isCompleting}
                         subtasks={isExpanded ? subtasks : []}
                         subtaskCount={subtaskCounts[task.id]}
+                        availableTags={tags}
+                        tags={taskTags[task.id] ?? []}
+                        onTagsChange={(names) => onTaskTagsChange(task.id, names)}
                         pendingCompleteConfirm={pendingCompleteConfirm === task.id}
                         onConfirmComplete={() => onConfirmComplete(task.id)}
+                        projects={projects}
+                        projectId={taskProjects[task.id] ?? null}
+                        onProjectChange={(projectId) => onTaskProjectChange(task.id, projectId)}
                         onCancelCompleteConfirm={onCancelCompleteConfirm}
                         selected={selectedIds.has(task.id)}
                         onToggleExpanded={() => onToggleExpanded(task.id)}

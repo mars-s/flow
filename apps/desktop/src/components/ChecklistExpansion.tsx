@@ -107,7 +107,7 @@ export function ChecklistExpansion({ taskId, title, note, hasSubtasks, onAddSubt
       ) : suggestions.length === 0 ? (
         <div className="checklist-expansion-empty">No breakdown suggested — looks like one step already.</div>
       ) : (
-        <div className="checklist-expansion-preview">
+        <div className="checklist-expansion-preview ai-surface">
           <div className="checklist-expansion-preview-label">Suggested checklist</div>
           {suggestions.map((item, index) => (
             <div className="checklist-expansion-item" key={index}>

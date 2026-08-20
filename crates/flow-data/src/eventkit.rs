@@ -74,7 +74,9 @@ pub struct CalendarEvent {
 /// show before ever asking the user for anything.
 pub fn authorization_status() -> AuthStatus {
     // Safety: a plain C enum FFI call with no arguments to retain/release.
-    AuthStatus::from_ek(unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) })
+    AuthStatus::from_ek(unsafe {
+        EKEventStore::authorizationStatusForEntityType(EKEntityType::Event)
+    })
 }
 
 /// Triggers the system permission prompt. A no-op re-prompt if the user has
@@ -95,7 +97,11 @@ pub async fn request_access() -> AuthStatus {
     // sound across that boundary; there's never real contention on it.
     let tx = std::sync::Mutex::new(Some(tx));
     let completion = RcBlock::new(move |granted: Bool, _error: *mut NSError| {
-        if let Some(tx) = tx.lock().unwrap_or_else(|poison| poison.into_inner()).take() {
+        if let Some(tx) = tx
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .take()
+        {
             let _ = tx.send(granted.as_bool());
         }
     });
@@ -125,7 +131,10 @@ pub async fn request_access() -> AuthStatus {
             // completion-handler shape, so the same block and channel
             // serve both branches.
             #[allow(deprecated)]
-            store.requestAccessToEntityType_completion(EKEntityType::Event, RcBlock::as_ptr(&completion) as *mut _);
+            store.requestAccessToEntityType_completion(
+                EKEntityType::Event,
+                RcBlock::as_ptr(&completion) as *mut _,
+            );
         }
     }
     match rx.await {
@@ -165,7 +174,8 @@ pub fn events_between(start: DateTime<Local>, end: DateTime<Local>) -> Vec<Calen
     let end_ns = from_local(end);
     // Safety: plain FFI calls on freshly retained objects; no aliasing.
     unsafe {
-        let predicate = store.predicateForEventsWithStartDate_endDate_calendars(&start_ns, &end_ns, None);
+        let predicate =
+            store.predicateForEventsWithStartDate_endDate_calendars(&start_ns, &end_ns, None);
         let events = store.eventsMatchingPredicate(&predicate);
         events.iter().map(|event| convert_event(&event)).collect()
     }
@@ -197,7 +207,10 @@ unsafe fn convert_event(event: &objc2_event_kit::EKEvent) -> CalendarEvent {
             })
             .unwrap_or((0.6, 0.6, 0.6, 1.0));
         CalendarEvent {
-            id: event.eventIdentifier().map(|id| id.to_string()).unwrap_or_default(),
+            id: event
+                .eventIdentifier()
+                .map(|id| id.to_string())
+                .unwrap_or_default(),
             calendar_id,
             calendar_title,
             title: event.title().to_string(),

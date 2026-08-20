@@ -14,6 +14,7 @@
 //! every method on `Db` blocks the calling thread for its reply. Only call
 //! these from `cx.background_executor().spawn`, never from a render path.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
@@ -103,6 +104,45 @@ pub struct SubtaskCount {
     pub total: i64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Tag {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TaskTag {
+    pub task_id: String,
+    pub tag_id: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Project {
+    pub id: String,
+    pub title: String,
+    pub position: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TaskProject {
+    pub task_id: String,
+    pub project_id: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Area {
+    pub id: String,
+    pub title: String,
+    pub position: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectArea {
+    pub project_id: String,
+    pub area_id: String,
+}
+
 impl Task {
     fn from_row(row: &Row) -> Result<Self> {
         Ok(Self {
@@ -145,6 +185,41 @@ const MIGRATIONS: &[&str] = &[
     )",
     "CREATE INDEX IF NOT EXISTS tasks_bucket_idx ON tasks(bucket)",
     "CREATE INDEX IF NOT EXISTS tasks_parent_idx ON tasks(parent_id)",
+    "CREATE TABLE IF NOT EXISTS tags (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        created_at TEXT NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS task_tags (
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        tag_id TEXT NOT NULL REFERENCES tags(id),
+        PRIMARY KEY (task_id, tag_id)
+    )",
+    "CREATE INDEX IF NOT EXISTS task_tags_tag_idx ON task_tags(tag_id)",
+    "CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        position REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS task_projects (
+        task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+        project_id TEXT NOT NULL REFERENCES projects(id)
+    )",
+    "CREATE INDEX IF NOT EXISTS task_projects_project_idx ON task_projects(project_id)",
+    "CREATE TABLE IF NOT EXISTS areas (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        position REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS project_areas (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id),
+        area_id TEXT NOT NULL REFERENCES areas(id)
+    )",
+    "CREATE INDEX IF NOT EXISTS project_areas_area_idx ON project_areas(area_id)",
 ];
 
 enum Command {
@@ -210,6 +285,47 @@ enum Command {
     },
     SubtaskCounts {
         reply: mpsc::Sender<Result<Vec<SubtaskCount>>>,
+    },
+    ListTags {
+        reply: mpsc::Sender<Result<Vec<Tag>>>,
+    },
+    ListTaskTags {
+        reply: mpsc::Sender<Result<Vec<TaskTag>>>,
+    },
+    SetTaskTags {
+        task_id: String,
+        names: Vec<String>,
+        reply: mpsc::Sender<Result<Vec<TaskTag>>>,
+    },
+    ListProjects {
+        reply: mpsc::Sender<Result<Vec<Project>>>,
+    },
+    CreateProject {
+        title: String,
+        reply: mpsc::Sender<Result<Project>>,
+    },
+    ListTaskProjects {
+        reply: mpsc::Sender<Result<Vec<TaskProject>>>,
+    },
+    SetTaskProject {
+        task_id: String,
+        project_id: Option<String>,
+        reply: mpsc::Sender<Result<Option<TaskProject>>>,
+    },
+    ListAreas {
+        reply: mpsc::Sender<Result<Vec<Area>>>,
+    },
+    CreateArea {
+        title: String,
+        reply: mpsc::Sender<Result<Area>>,
+    },
+    ListProjectAreas {
+        reply: mpsc::Sender<Result<Vec<ProjectArea>>>,
+    },
+    SetProjectArea {
+        project_id: String,
+        area_id: Option<String>,
+        reply: mpsc::Sender<Result<Option<ProjectArea>>>,
     },
 }
 
@@ -426,7 +542,11 @@ impl Db {
     /// (a subtask has no independent placement of its own) and no
     /// schedule, per the same section: "a child inherits no schedule
     /// automatically."
-    pub fn create_subtask(&self, parent_id: impl Into<String>, title: impl Into<String>) -> Result<Task> {
+    pub fn create_subtask(
+        &self,
+        parent_id: impl Into<String>,
+        title: impl Into<String>,
+    ) -> Result<Task> {
         let (reply, rx) = mpsc::channel();
         self.commands
             .send(Command::CreateSubtask {
@@ -463,6 +583,124 @@ impl Db {
         let (reply, rx) = mpsc::channel();
         self.commands
             .send(Command::SubtaskCounts { reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn list_tags(&self) -> Result<Vec<Tag>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::ListTags { reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn list_task_tags(&self) -> Result<Vec<TaskTag>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::ListTaskTags { reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn set_task_tags(
+        &self,
+        task_id: impl Into<String>,
+        names: Vec<String>,
+    ) -> Result<Vec<TaskTag>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::SetTaskTags {
+                task_id: task_id.into(),
+                names,
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn list_projects(&self) -> Result<Vec<Project>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::ListProjects { reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn create_project(&self, title: impl Into<String>) -> Result<Project> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::CreateProject {
+                title: title.into(),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn list_task_projects(&self) -> Result<Vec<TaskProject>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::ListTaskProjects { reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn set_task_project(
+        &self,
+        task_id: impl Into<String>,
+        project_id: Option<impl Into<String>>,
+    ) -> Result<Option<TaskProject>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::SetTaskProject {
+                task_id: task_id.into(),
+                project_id: project_id.map(Into::into),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn list_areas(&self) -> Result<Vec<Area>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::ListAreas { reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn create_area(&self, title: impl Into<String>) -> Result<Area> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::CreateArea {
+                title: title.into(),
+                reply,
+            })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn list_project_areas(&self) -> Result<Vec<ProjectArea>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::ListProjectAreas { reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
+
+    pub fn set_project_area(
+        &self,
+        project_id: impl Into<String>,
+        area_id: Option<impl Into<String>>,
+    ) -> Result<Option<ProjectArea>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::SetProjectArea {
+                project_id: project_id.into(),
+                area_id: area_id.map(Into::into),
+                reply,
+            })
             .context("database thread is gone")?;
         rx.recv().context("database thread dropped the reply")?
     }
@@ -510,7 +748,12 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             Command::CreateTask { title, reply } => {
                 let _ = reply.send(runtime.block_on(create_task(&conn, title)));
             }
-            Command::CreateTaskScheduled { title, scheduled_date, scheduled_time, reply } => {
+            Command::CreateTaskScheduled {
+                title,
+                scheduled_date,
+                scheduled_time,
+                reply,
+            } => {
                 let _ = reply.send(runtime.block_on(create_task_scheduled(
                     &conn,
                     title,
@@ -570,6 +813,51 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             }
             Command::SubtaskCounts { reply } => {
                 let _ = reply.send(runtime.block_on(subtask_counts(&conn)));
+            }
+            Command::ListTags { reply } => {
+                let _ = reply.send(runtime.block_on(list_tags(&conn)));
+            }
+            Command::ListTaskTags { reply } => {
+                let _ = reply.send(runtime.block_on(list_task_tags(&conn)));
+            }
+            Command::SetTaskTags {
+                task_id,
+                names,
+                reply,
+            } => {
+                let _ = reply.send(runtime.block_on(set_task_tags(&conn, task_id, names)));
+            }
+            Command::ListProjects { reply } => {
+                let _ = reply.send(runtime.block_on(list_projects(&conn)));
+            }
+            Command::CreateProject { title, reply } => {
+                let _ = reply.send(runtime.block_on(create_project(&conn, title)));
+            }
+            Command::ListTaskProjects { reply } => {
+                let _ = reply.send(runtime.block_on(list_task_projects(&conn)));
+            }
+            Command::SetTaskProject {
+                task_id,
+                project_id,
+                reply,
+            } => {
+                let _ = reply.send(runtime.block_on(set_task_project(&conn, task_id, project_id)));
+            }
+            Command::ListAreas { reply } => {
+                let _ = reply.send(runtime.block_on(list_areas(&conn)));
+            }
+            Command::CreateArea { title, reply } => {
+                let _ = reply.send(runtime.block_on(create_area(&conn, title)));
+            }
+            Command::ListProjectAreas { reply } => {
+                let _ = reply.send(runtime.block_on(list_project_areas(&conn)));
+            }
+            Command::SetProjectArea {
+                project_id,
+                area_id,
+                reply,
+            } => {
+                let _ = reply.send(runtime.block_on(set_project_area(&conn, project_id, area_id)));
             }
         }
     }
@@ -680,7 +968,9 @@ async fn create_task_scheduled(
         // entirely for the common unscheduled-capture case.
         return create_task(conn, title).await;
     }
-    conn.execute("BEGIN", ()).await.context("beginning capture transaction")?;
+    conn.execute("BEGIN", ())
+        .await
+        .context("beginning capture transaction")?;
     let result = async {
         let task = create_task(conn, title).await?;
         schedule(
@@ -691,12 +981,19 @@ async fn create_task_scheduled(
             scheduled_time.clone(),
         )
         .await?;
-        Ok(Task { bucket: Bucket::Active, scheduled_date, scheduled_time, ..task })
+        Ok(Task {
+            bucket: Bucket::Active,
+            scheduled_date,
+            scheduled_time,
+            ..task
+        })
     }
     .await;
     match result {
         Ok(task) => {
-            conn.execute("COMMIT", ()).await.context("committing capture transaction")?;
+            conn.execute("COMMIT", ())
+                .await
+                .context("committing capture transaction")?;
             Ok(task)
         }
         Err(error) => {
@@ -883,6 +1180,392 @@ async fn set_note(conn: &turso::Connection, id: String, note: Option<String>) ->
     Ok(())
 }
 
+async fn list_tags(conn: &turso::Connection) -> Result<Vec<Tag>> {
+    let mut rows = conn
+        .query("SELECT id, name FROM tags ORDER BY name COLLATE NOCASE", ())
+        .await
+        .context("listing tags")?;
+    let mut tags = Vec::new();
+    while let Some(row) = rows.next().await.context("reading tag row")? {
+        tags.push(Tag {
+            id: row.get::<String>(0)?,
+            name: row.get::<String>(1)?,
+        });
+    }
+    Ok(tags)
+}
+
+async fn list_task_tags(conn: &turso::Connection) -> Result<Vec<TaskTag>> {
+    let mut rows = conn
+        .query(
+            "SELECT task_tags.task_id, tags.id, tags.name \
+             FROM task_tags JOIN tags ON tags.id = task_tags.tag_id \
+             ORDER BY tags.name COLLATE NOCASE",
+            (),
+        )
+        .await
+        .context("listing task tags")?;
+    let mut tags = Vec::new();
+    while let Some(row) = rows.next().await.context("reading task tag row")? {
+        tags.push(TaskTag {
+            task_id: row.get::<String>(0)?,
+            tag_id: row.get::<String>(1)?,
+            name: row.get::<String>(2)?,
+        });
+    }
+    Ok(tags)
+}
+
+async fn list_tags_for_task(conn: &turso::Connection, task_id: &str) -> Result<Vec<TaskTag>> {
+    let mut rows = conn
+        .query(
+            "SELECT task_tags.task_id, tags.id, tags.name \
+             FROM task_tags JOIN tags ON tags.id = task_tags.tag_id \
+             WHERE task_tags.task_id = ?1 ORDER BY tags.name COLLATE NOCASE",
+            (task_id,),
+        )
+        .await
+        .context("listing tags for task")?;
+    let mut tags = Vec::new();
+    while let Some(row) = rows.next().await.context("reading task tag row")? {
+        tags.push(TaskTag {
+            task_id: row.get::<String>(0)?,
+            tag_id: row.get::<String>(1)?,
+            name: row.get::<String>(2)?,
+        });
+    }
+    Ok(tags)
+}
+
+async fn set_task_tags(
+    conn: &turso::Connection,
+    task_id: String,
+    names: Vec<String>,
+) -> Result<Vec<TaskTag>> {
+    let mut seen = HashSet::new();
+    let names: Vec<String> = names
+        .into_iter()
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty() && seen.insert(name.to_lowercase()))
+        .collect();
+
+    conn.execute("BEGIN", ())
+        .await
+        .context("beginning tag update transaction")?;
+    let result = async {
+        let mut task_rows = conn
+            .query(
+                "SELECT id FROM tasks WHERE id = ?1 AND deleted_at IS NULL LIMIT 1",
+                (task_id.as_str(),),
+            )
+            .await
+            .context("checking tagged task")?;
+        if task_rows
+            .next()
+            .await
+            .context("reading tagged task")?
+            .is_none()
+        {
+            return Err(anyhow!("task not found: {task_id}"));
+        }
+        drop(task_rows);
+
+        conn.execute(
+            "DELETE FROM task_tags WHERE task_id = ?1",
+            (task_id.as_str(),),
+        )
+        .await
+        .context("clearing task tags")?;
+
+        for name in names {
+            let id = Uuid::new_v4().to_string();
+            let now = Utc::now().to_rfc3339();
+            conn.execute(
+                "INSERT INTO tags (id, name, created_at) VALUES (?1, ?2, ?3) \
+                 ON CONFLICT(name) DO NOTHING",
+                (id.as_str(), name.as_str(), now.as_str()),
+            )
+            .await
+            .context("creating tag")?;
+
+            let mut tag_rows = conn
+                .query(
+                    "SELECT id FROM tags WHERE name = ?1 COLLATE NOCASE LIMIT 1",
+                    (name.as_str(),),
+                )
+                .await
+                .context("finding tag")?;
+            let tag_id = tag_rows
+                .next()
+                .await
+                .context("reading tag id")?
+                .context("created tag was not found")?
+                .get::<String>(0)?;
+            drop(tag_rows);
+
+            conn.execute(
+                "INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?1, ?2)",
+                (task_id.as_str(), tag_id.as_str()),
+            )
+            .await
+            .context("assigning tag")?;
+        }
+
+        list_tags_for_task(conn, &task_id).await
+    }
+    .await;
+
+    match result {
+        Ok(tags) => {
+            conn.execute("COMMIT", ())
+                .await
+                .context("committing task tags")?;
+            Ok(tags)
+        }
+        Err(error) => {
+            let _ = conn.execute("ROLLBACK", ()).await;
+            Err(error)
+        }
+    }
+}
+
+async fn list_projects(conn: &turso::Connection) -> Result<Vec<Project>> {
+    let mut rows = conn
+        .query(
+            "SELECT id, title, position FROM projects ORDER BY position, title COLLATE NOCASE",
+            (),
+        )
+        .await
+        .context("listing projects")?;
+    let mut projects = Vec::new();
+    while let Some(row) = rows.next().await.context("reading project row")? {
+        projects.push(Project {
+            id: row.get::<String>(0)?,
+            title: row.get::<String>(1)?,
+            position: row.get::<f64>(2)?,
+        });
+    }
+    Ok(projects)
+}
+
+async fn create_project(conn: &turso::Connection, title: String) -> Result<Project> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err(anyhow!("a project title cannot be empty"));
+    }
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let position = Utc::now().timestamp_millis() as f64;
+    conn.execute(
+        "INSERT INTO projects (id, title, position, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?4)",
+        (id.as_str(), title.as_str(), position, now.as_str()),
+    )
+    .await
+    .context("creating project")?;
+    Ok(Project {
+        id,
+        title,
+        position,
+    })
+}
+
+async fn list_task_projects(conn: &turso::Connection) -> Result<Vec<TaskProject>> {
+    let mut rows = conn
+        .query(
+            "SELECT task_id, project_id FROM task_projects ORDER BY task_id",
+            (),
+        )
+        .await
+        .context("listing task projects")?;
+    let mut assignments = Vec::new();
+    while let Some(row) = rows.next().await.context("reading task project row")? {
+        assignments.push(TaskProject {
+            task_id: row.get::<String>(0)?,
+            project_id: row.get::<String>(1)?,
+        });
+    }
+    Ok(assignments)
+}
+
+async fn set_task_project(
+    conn: &turso::Connection,
+    task_id: String,
+    project_id: Option<String>,
+) -> Result<Option<TaskProject>> {
+    let mut task_rows = conn
+        .query(
+            "SELECT id FROM tasks WHERE id = ?1 AND deleted_at IS NULL LIMIT 1",
+            (task_id.as_str(),),
+        )
+        .await
+        .context("checking project task")?;
+    if task_rows
+        .next()
+        .await
+        .context("reading project task")?
+        .is_none()
+    {
+        return Err(anyhow!("task not found: {task_id}"));
+    }
+    drop(task_rows);
+
+    let Some(project_id) = project_id else {
+        conn.execute(
+            "DELETE FROM task_projects WHERE task_id = ?1",
+            (task_id.as_str(),),
+        )
+        .await
+        .context("clearing task project")?;
+        return Ok(None);
+    };
+
+    let mut project_rows = conn
+        .query(
+            "SELECT id FROM projects WHERE id = ?1 LIMIT 1",
+            (project_id.as_str(),),
+        )
+        .await
+        .context("checking project")?;
+    if project_rows
+        .next()
+        .await
+        .context("reading project")?
+        .is_none()
+    {
+        return Err(anyhow!("project not found: {project_id}"));
+    }
+    drop(project_rows);
+
+    conn.execute(
+        "INSERT INTO task_projects (task_id, project_id) VALUES (?1, ?2) \
+         ON CONFLICT(task_id) DO UPDATE SET project_id = excluded.project_id",
+        (task_id.as_str(), project_id.as_str()),
+    )
+    .await
+    .context("assigning task project")?;
+    Ok(Some(TaskProject {
+        task_id,
+        project_id,
+    }))
+}
+
+async fn list_areas(conn: &turso::Connection) -> Result<Vec<Area>> {
+    let mut rows = conn
+        .query(
+            "SELECT id, title, position FROM areas ORDER BY position, title COLLATE NOCASE",
+            (),
+        )
+        .await
+        .context("listing areas")?;
+    let mut areas = Vec::new();
+    while let Some(row) = rows.next().await.context("reading area row")? {
+        areas.push(Area {
+            id: row.get::<String>(0)?,
+            title: row.get::<String>(1)?,
+            position: row.get::<f64>(2)?,
+        });
+    }
+    Ok(areas)
+}
+
+async fn create_area(conn: &turso::Connection, title: String) -> Result<Area> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err(anyhow!("an area title cannot be empty"));
+    }
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let position = Utc::now().timestamp_millis() as f64;
+    conn.execute(
+        "INSERT INTO areas (id, title, position, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?4)",
+        (id.as_str(), title.as_str(), position, now.as_str()),
+    )
+    .await
+    .context("creating area")?;
+    Ok(Area {
+        id,
+        title,
+        position,
+    })
+}
+
+async fn list_project_areas(conn: &turso::Connection) -> Result<Vec<ProjectArea>> {
+    let mut rows = conn
+        .query(
+            "SELECT project_id, area_id FROM project_areas ORDER BY project_id",
+            (),
+        )
+        .await
+        .context("listing project areas")?;
+    let mut assignments = Vec::new();
+    while let Some(row) = rows.next().await.context("reading project area row")? {
+        assignments.push(ProjectArea {
+            project_id: row.get::<String>(0)?,
+            area_id: row.get::<String>(1)?,
+        });
+    }
+    Ok(assignments)
+}
+
+async fn set_project_area(
+    conn: &turso::Connection,
+    project_id: String,
+    area_id: Option<String>,
+) -> Result<Option<ProjectArea>> {
+    let mut project_rows = conn
+        .query(
+            "SELECT id FROM projects WHERE id = ?1 LIMIT 1",
+            (project_id.as_str(),),
+        )
+        .await
+        .context("checking area project")?;
+    if project_rows
+        .next()
+        .await
+        .context("reading area project")?
+        .is_none()
+    {
+        return Err(anyhow!("project not found: {project_id}"));
+    }
+    drop(project_rows);
+
+    let Some(area_id) = area_id else {
+        conn.execute(
+            "DELETE FROM project_areas WHERE project_id = ?1",
+            (project_id.as_str(),),
+        )
+        .await
+        .context("clearing project area")?;
+        return Ok(None);
+    };
+
+    let mut area_rows = conn
+        .query(
+            "SELECT id FROM areas WHERE id = ?1 LIMIT 1",
+            (area_id.as_str(),),
+        )
+        .await
+        .context("checking area")?;
+    if area_rows.next().await.context("reading area")?.is_none() {
+        return Err(anyhow!("area not found: {area_id}"));
+    }
+    drop(area_rows);
+
+    conn.execute(
+        "INSERT INTO project_areas (project_id, area_id) VALUES (?1, ?2) \
+         ON CONFLICT(project_id) DO UPDATE SET area_id = excluded.area_id",
+        (project_id.as_str(), area_id.as_str()),
+    )
+    .await
+    .context("assigning project area")?;
+    Ok(Some(ProjectArea {
+        project_id,
+        area_id,
+    }))
+}
+
 async fn set_title(conn: &turso::Connection, id: String, title: String) -> Result<()> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
@@ -903,7 +1586,9 @@ async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
     // fix, just narrowed to a rarer failure window (two same-connection
     // UPDATEs back to back, not a whole created-task validation). Found
     // via a self-review of that exact fix, not a new report.
-    conn.execute("BEGIN", ()).await.context("beginning delete transaction")?;
+    conn.execute("BEGIN", ())
+        .await
+        .context("beginning delete transaction")?;
     let result = async {
         conn.execute(
             "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
@@ -931,7 +1616,9 @@ async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
     .await;
     match result {
         Ok(_) => {
-            conn.execute("COMMIT", ()).await.context("committing delete transaction")?;
+            conn.execute("COMMIT", ())
+                .await
+                .context("committing delete transaction")?;
             Ok(())
         }
         Err(error) => {
@@ -944,7 +1631,9 @@ async fn delete_task(conn: &turso::Connection, id: String) -> Result<()> {
 async fn restore_task(conn: &turso::Connection, id: String) -> Result<()> {
     let now = Utc::now().to_rfc3339();
     // Same transaction-wrapping reasoning as delete_task's own cascade.
-    conn.execute("BEGIN", ()).await.context("beginning restore transaction")?;
+    conn.execute("BEGIN", ())
+        .await
+        .context("beginning restore transaction")?;
     let result = async {
         conn.execute(
             "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE id = ?2",
@@ -975,7 +1664,9 @@ async fn restore_task(conn: &turso::Connection, id: String) -> Result<()> {
     .await;
     match result {
         Ok(_) => {
-            conn.execute("COMMIT", ()).await.context("committing restore transaction")?;
+            conn.execute("COMMIT", ())
+                .await
+                .context("committing restore transaction")?;
             Ok(())
         }
         Err(error) => {
@@ -985,7 +1676,11 @@ async fn restore_task(conn: &turso::Connection, id: String) -> Result<()> {
     }
 }
 
-async fn create_subtask(conn: &turso::Connection, parent_id: String, title: String) -> Result<Task> {
+async fn create_subtask(
+    conn: &turso::Connection,
+    parent_id: String,
+    title: String,
+) -> Result<Task> {
     // PRD §8: "A deleted or completed parent cannot accept a new open
     // subtask" — both halves enforced here, not just the deleted one.
     let mut parent_rows = conn
@@ -1158,7 +1853,11 @@ mod tests {
             .expect("schedule");
         assert_eq!(db.list_view(View::Anytime).expect("list").len(), 1);
         assert_eq!(db.list_view(View::Upcoming).expect("list").len(), 0);
-        assert!(db.list_view(View::Anytime).expect("list")[0].scheduled_date.is_none());
+        assert!(
+            db.list_view(View::Anytime).expect("list")[0]
+                .scheduled_date
+                .is_none()
+        );
     }
 
     #[test]
@@ -1193,7 +1892,10 @@ mod tests {
         assert!(result.is_err(), "the whole operation should fail");
 
         let after = db.list_view(View::Inbox).expect("list").len();
-        assert_eq!(before, after, "a failed schedule should not leave an orphaned task behind");
+        assert_eq!(
+            before, after,
+            "a failed schedule should not leave an orphaned task behind"
+        );
     }
 
     #[test]
@@ -1267,7 +1969,8 @@ mod tests {
         let db = open_test_db();
         let task = db.create_task("Wrte notes").expect("create");
 
-        db.set_title(&task.id, "Write notes").expect("set_title should succeed");
+        db.set_title(&task.id, "Write notes")
+            .expect("set_title should succeed");
         let inbox = db.list_view(View::Inbox).expect("list");
         assert_eq!(inbox[0].title, "Write notes");
     }
@@ -1323,7 +2026,9 @@ mod tests {
         // never open again once the parent's gone.
         let db = open_test_db();
         let parent = db.create_task("Plan trip").expect("create");
-        let child = db.create_subtask(&parent.id, "Book flights").expect("create_subtask");
+        let child = db
+            .create_subtask(&parent.id, "Book flights")
+            .expect("create_subtask");
 
         db.delete_task(&parent.id).expect("delete should succeed");
 
@@ -1338,7 +2043,9 @@ mod tests {
     fn undoing_a_parent_delete_restores_its_subtasks_too() {
         let db = open_test_db();
         let parent = db.create_task("Plan trip").expect("create");
-        let child = db.create_subtask(&parent.id, "Book flights").expect("create_subtask");
+        let child = db
+            .create_subtask(&parent.id, "Book flights")
+            .expect("create_subtask");
 
         db.delete_task(&parent.id).expect("delete should succeed");
         db.restore_task(&parent.id).expect("restore should succeed");
@@ -1418,7 +2125,11 @@ mod tests {
             .expect("complete should succeed");
 
         let subtasks = db.list_subtasks(&parent.id).expect("list_subtasks");
-        assert_eq!(subtasks.len(), 1, "completed subtasks stay visible under the parent");
+        assert_eq!(
+            subtasks.len(),
+            1,
+            "completed subtasks stay visible under the parent"
+        );
         assert!(subtasks[0].completed_at.is_some());
     }
 
@@ -1427,9 +2138,13 @@ mod tests {
         let db = open_test_db();
         let with_subtasks = db.create_task("Plan trip").expect("create");
         let bare = db.create_task("Water the plants").expect("create");
-        let done = db.create_subtask(&with_subtasks.id, "Book flights").expect("create_subtask");
-        db.create_subtask(&with_subtasks.id, "Pack bags").expect("create_subtask");
-        db.set_completed(&done.id, true).expect("complete should succeed");
+        let done = db
+            .create_subtask(&with_subtasks.id, "Book flights")
+            .expect("create_subtask");
+        db.create_subtask(&with_subtasks.id, "Pack bags")
+            .expect("create_subtask");
+        db.set_completed(&done.id, true)
+            .expect("complete should succeed");
 
         let counts = db.subtask_counts().expect("subtask_counts");
         let entry = counts
@@ -1442,5 +2157,127 @@ mod tests {
             counts.iter().all(|count| count.parent_id != bare.id),
             "a task with no subtasks gets no entry at all, not a zero-count one"
         );
+    }
+
+    #[test]
+    fn task_tags_are_normalized_deduplicated_and_replaced() {
+        let db = open_test_db();
+        let task = db.create_task("Pack for the trip").expect("create");
+
+        let assigned = db
+            .set_task_tags(
+                &task.id,
+                vec![
+                    " Errand ".into(),
+                    "important".into(),
+                    "ERRAND".into(),
+                    "".into(),
+                ],
+            )
+            .expect("assign tags");
+        assert_eq!(
+            assigned
+                .iter()
+                .map(|tag| tag.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Errand", "important"]
+        );
+
+        let replaced = db
+            .set_task_tags(&task.id, vec!["Home".into()])
+            .expect("replace tags");
+        assert_eq!(replaced.len(), 1);
+        assert_eq!(replaced[0].name, "Home");
+        assert_eq!(db.list_task_tags().expect("list assignments").len(), 1);
+        assert_eq!(
+            db.list_tags().expect("list tags").len(),
+            3,
+            "unused tags stay available for reuse"
+        );
+    }
+
+    #[test]
+    fn assigning_tags_to_a_missing_task_is_atomic() {
+        let db = open_test_db();
+        let error = db
+            .set_task_tags("missing", vec!["Important".into()])
+            .expect_err("missing task should be rejected");
+        assert!(error.to_string().contains("task not found"));
+        assert!(db.list_tags().expect("list tags").is_empty());
+        assert!(db.list_task_tags().expect("list assignments").is_empty());
+    }
+
+    #[test]
+    fn projects_group_tasks_without_changing_placement() {
+        let db = open_test_db();
+        let project = db.create_project("Launch").expect("create project");
+        let task = db.create_task("Prepare notes").expect("create task");
+
+        let assignment = db
+            .set_task_project(&task.id, Some(&project.id))
+            .expect("assign project")
+            .expect("project assignment");
+        assert_eq!(assignment.task_id, task.id);
+        assert_eq!(assignment.project_id, project.id);
+        assert_eq!(db.list_view(View::Inbox).expect("inbox").len(), 1);
+        assert_eq!(db.list_task_projects().expect("assignments").len(), 1);
+
+        assert!(
+            db.set_task_project(&task.id, None::<String>)
+                .expect("clear project")
+                .is_none()
+        );
+        assert!(db.list_task_projects().expect("assignments").is_empty());
+    }
+
+    #[test]
+    fn an_unknown_project_does_not_replace_the_current_project() {
+        let db = open_test_db();
+        let project = db.create_project("Launch").expect("create project");
+        let task = db.create_task("Prepare notes").expect("create task");
+        db.set_task_project(&task.id, Some(&project.id))
+            .expect("assign project");
+
+        let error = db
+            .set_task_project(&task.id, Some("missing"))
+            .expect_err("missing project should be rejected");
+        assert!(error.to_string().contains("project not found"));
+        let assignments = db.list_task_projects().expect("assignments");
+        assert_eq!(assignments.len(), 1);
+        assert_eq!(assignments[0].project_id, project.id);
+    }
+
+    #[test]
+    fn areas_group_projects_and_can_be_cleared() {
+        let db = open_test_db();
+        let area = db.create_area("Work").expect("create area");
+        let project = db.create_project("Launch").expect("create project");
+
+        let assignment = db
+            .set_project_area(&project.id, Some(&area.id))
+            .expect("assign area")
+            .expect("area assignment");
+        assert_eq!(assignment.project_id, project.id);
+        assert_eq!(assignment.area_id, area.id);
+        assert_eq!(db.list_areas().expect("areas").len(), 1);
+        assert_eq!(db.list_project_areas().expect("assignments").len(), 1);
+
+        assert!(
+            db.set_project_area(&project.id, None::<String>)
+                .expect("clear area")
+                .is_none()
+        );
+        assert!(db.list_project_areas().expect("assignments").is_empty());
+    }
+
+    #[test]
+    fn assigning_a_project_to_a_missing_area_is_rejected() {
+        let db = open_test_db();
+        let project = db.create_project("Launch").expect("create project");
+        let error = db
+            .set_project_area(&project.id, Some("missing"))
+            .expect_err("missing area should be rejected");
+        assert!(error.to_string().contains("area not found"));
+        assert!(db.list_project_areas().expect("assignments").is_empty());
     }
 }

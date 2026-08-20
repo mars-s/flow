@@ -109,14 +109,13 @@ export function AISettingsSection() {
   return (
     <div className="settings-section">
       <div className="settings-row">
-        <div className="settings-row-icon">
+        <div className="settings-row-icon ai-glyph">
           <Sparkles size={16} />
         </div>
         <div className="settings-row-body">
           <div className="settings-row-title">AI features</div>
           <div className="settings-row-note">
-            Off by default. Every feature below is now live — six wired to a real model call, and
-            "Duplicate detection" running as a local check instead, since string similarity doesn't need one.
+            Optional help for planning, writing, and cleanup. Choose when each tool runs.
           </div>
         </div>
         <button

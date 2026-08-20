@@ -6,20 +6,23 @@ import { TaskList } from "./views/TaskList";
 import { UpcomingList } from "./views/UpcomingList";
 import { Settings } from "./views/Settings";
 import { Calendar } from "./views/Calendar";
+import { Logbook } from "./views/Logbook";
 import { UndoToast, type UndoState } from "./components/UndoToast";
 import { BulkActionBar, type BulkTarget } from "./components/BulkActionBar";
 import { CalendarGlance } from "./components/CalendarGlance";
-import { CompletedSection } from "./components/CompletedSection";
 import { StaleTaskNudges } from "./components/StaleTaskNudges";
 import { OverdueReschedule } from "./components/OverdueReschedule";
+import { TaskSearch } from "./components/TaskSearch";
+import { ProjectAreaEditor } from "./components/TaskProjects";
 import { api } from "./lib/api";
 import { todayIso } from "./lib/date";
 import { usePersistedString } from "./lib/persisted";
 import type { ThemeId } from "./lib/theme";
 import { VIEW_FOR } from "./lib/types";
-import type { Bucket, Destination, SubtaskCount, Task, View } from "./lib/types";
+import type { Area, Bucket, Destination, Project, SubtaskCount, Tag, Task, TaskTag, View } from "./lib/types";
 import "./theme.css";
 import "./App.css";
+import "./components/AIVisual.css";
 
 const EMPTY_LABEL: Record<string, string> = {
   inbox: "Nothing to process. Capture the next thing.",
@@ -30,6 +33,13 @@ const EMPTY_LABEL: Record<string, string> = {
 
 const VIEWS = ["Inbox", "Today", "Upcoming", "Anytime", "Someday"] as const;
 const EMPTY_VIEW_TASKS: Record<View, Task[]> = { Inbox: [], Today: [], Upcoming: [], Anytime: [], Someday: [] };
+
+function destinationForTask(task: Task): Destination {
+  if (task.bucket === "Inbox") return "inbox";
+  if (task.bucket === "Someday") return "someday";
+  if (!task.scheduled_date) return "anytime";
+  return task.scheduled_date <= todayIso() ? "today" : "upcoming";
+}
 
 export default function App() {
   // Kept as five separate per-view lists straight from list_view, not one
@@ -48,17 +58,19 @@ export default function App() {
   // alongside the active lists, same "resolve the whole collection up
   // front" reasoning refresh() already uses for those.
   const [completedTasks, setCompletedTasks] = useState<Record<View, Task[]>>(EMPTY_VIEW_TASKS);
-  const [completedOpen, setCompletedOpen] = useState<Record<View, boolean>>({
-    Inbox: false,
-    Today: false,
-    Upcoming: false,
-    Anytime: false,
-    Someday: false,
-  });
   // A collapsed row's own subtask-count badge (direct user request,
   // matching Things 3's row indicators) — keyed by parent id so any row,
   // in any view, can look its own count up without a per-row fetch.
   const [subtaskCounts, setSubtaskCounts] = useState<Record<string, SubtaskCount>>({});
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [taskTags, setTaskTags] = useState<Record<string, TaskTag[]>>({});
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [taskProjects, setTaskProjects] = useState<Record<string, string>>({});
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [projectAreas, setProjectAreas] = useState<Record<string, string>>({});
   const [theme, setTheme] = usePersistedString("flow.theme", "default");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"tasks" | "calendar">("tasks");
@@ -89,6 +101,41 @@ export default function App() {
       .catch((error) => setLoadError(String(error)));
   }, []);
 
+  const refreshTags = useCallback(() => {
+    Promise.all([api.listTags(), api.listTaskTags()])
+      .then(([nextTags, assignments]) => {
+        const byTask: Record<string, TaskTag[]> = {};
+        for (const assignment of assignments) {
+          (byTask[assignment.task_id] ??= []).push(assignment);
+        }
+        setTags(nextTags);
+        setTaskTags(byTask);
+      })
+      .catch((error) => setLoadError(String(error)));
+  }, []);
+
+  const refreshProjects = useCallback(() => {
+    Promise.all([api.listProjects(), api.listTaskProjects()])
+      .then(([nextProjects, assignments]) => {
+        const byTask: Record<string, string> = {};
+        for (const assignment of assignments) byTask[assignment.task_id] = assignment.project_id;
+        setProjects(nextProjects);
+        setTaskProjects(byTask);
+      })
+      .catch((error) => setLoadError(String(error)));
+  }, []);
+
+  const refreshAreas = useCallback(() => {
+    Promise.all([api.listAreas(), api.listProjectAreas()])
+      .then(([nextAreas, assignments]) => {
+        const byProject: Record<string, string> = {};
+        for (const assignment of assignments) byProject[assignment.project_id] = assignment.area_id;
+        setAreas(nextAreas);
+        setProjectAreas(byProject);
+      })
+      .catch((error) => setLoadError(String(error)));
+  }, []);
+
   // Every task view Flow actually has lives under one of these five real
   // View values — fetched together on mount/refresh rather than one at a
   // time per destination, the same "resolve the whole collection up front"
@@ -115,7 +162,10 @@ export default function App() {
       })
       .catch((error) => setLoadError(String(error)));
     refreshSubtaskCounts();
-  }, [refreshSubtaskCounts]);
+    refreshTags();
+    refreshProjects();
+    refreshAreas();
+  }, [refreshSubtaskCounts, refreshTags, refreshProjects, refreshAreas]);
 
   useEffect(() => {
     refresh();
@@ -146,6 +196,11 @@ export default function App() {
   // not just when the shell div itself happens to have focus.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (event.metaKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen((open) => !open);
+        return;
+      }
       if (event.metaKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         setCapturing(true);
@@ -204,15 +259,47 @@ export default function App() {
   // duplicate-detection check, which needs every active task regardless
   // of which view is currently on screen.
   const allTasks = useMemo(() => Object.values(viewTasks).flat(), [viewTasks]);
-  // Falls back to "Inbox" only in the impossible case destination is
-  // Settings/Calendar here — TaskList never renders for those (guarded in
-  // the JSX below), this just satisfies VIEW_FOR's Partial<> type.
-  const currentView: View = VIEW_FOR[destination] ?? "Inbox";
+  const filterTasks = useCallback(
+    (tasks: Task[]) => {
+      if (!activeTag) return tasks;
+      const key = activeTag.toLowerCase();
+      return tasks.filter((task) => taskTags[task.id]?.some((tag) => tag.name.toLowerCase() === key));
+    },
+    [activeTag, taskTags],
+  );
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
   const visibleTasks = useMemo(() => {
+    if (activeProjectId) {
+      return filterTasks(allTasks.filter((task) => taskProjects[task.id] === activeProjectId));
+    }
     const view = VIEW_FOR[destination];
-    return view ? viewTasks[view] : [];
-  }, [viewTasks, destination]);
-  const upcomingTasks = viewTasks.Upcoming;
+    return view ? filterTasks(viewTasks[view]) : [];
+  }, [activeProjectId, allTasks, destination, filterTasks, taskProjects, viewTasks]);
+  const upcomingTasks = useMemo(() => filterTasks(viewTasks.Upcoming), [viewTasks.Upcoming, filterTasks]);
+  const logbookTasks = useMemo(
+    () =>
+      Object.values(completedTasks)
+        .flat()
+        .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? "")),
+    [completedTasks],
+  );
+  const todaySections = useMemo(() => {
+    if (destination !== "today" || activeProject) return undefined;
+    const today = todayIso();
+    const overdue: Task[] = [];
+    const daytime: Task[] = [];
+    const evening: Task[] = [];
+    for (const task of visibleTasks) {
+      if (task.scheduled_date && task.scheduled_date < today) overdue.push(task);
+      else if (task.scheduled_time && task.scheduled_time >= "18:00") evening.push(task);
+      else daytime.push(task);
+    }
+    const sections: { label: string | null; tone?: "danger" | "quiet"; tasks: Task[] }[] = [];
+    if (overdue.length > 0) sections.push({ label: "Overdue", tone: "danger", tasks: overdue });
+    if (daytime.length > 0) sections.push({ label: null, tasks: daytime });
+    if (evening.length > 0) sections.push({ label: "This Evening", tone: "quiet", tasks: evening });
+    return sections;
+  }, [activeProject, destination, visibleTasks]);
 
   // PRD §6.2/§11: "Completing a parent with incomplete children asks:
   // 'Complete parent and all subtasks' or 'Cancel.' It never leaves a
@@ -296,26 +383,23 @@ export default function App() {
     api.setCompleted(id, false).then(refresh).catch((error) => setLoadError(String(error)));
   };
 
-  const toggleCompletedOpen = (view: View) => {
-    setCompletedOpen((prev) => ({ ...prev, [view]: !prev[view] }));
-  };
-
-  // The Completed section's "Clear" button — soft-deletes every completed
-  // task shown there, same loop-per-id pattern as bulkDelete but with no
-  // undo toast, matching the GPUI app's own clear_completed (PRD's undo
-  // guarantee covers deleting an active task, not bulk-clearing ones
-  // already completed).
-  const clearCompleted = (view: View) => {
-    const ids = completedTasks[view].map((task) => task.id);
-    if (ids.length === 0) return;
-    Promise.all(ids.map((id) => api.deleteTask(id)))
-      .then(refresh)
-      .catch((error) => setLoadError(String(error)));
-  };
-
   const capture = (title: string) => {
     setCapturing(false);
     api.captureTask(title).then(refresh).catch((error) => setLoadError(String(error)));
+  };
+
+  const captureAndOpen = (title: string) => {
+    setCapturing(false);
+    api
+      .captureTask(title)
+      .then((task) => {
+        refresh();
+        setActiveProjectId(null);
+        setMode("tasks");
+        setDestination(destinationForTask(task));
+        setExpanded(task.id);
+      })
+      .catch((error) => setLoadError(String(error)));
   };
 
   // Real bug, direct user report: the write succeeded in the database the
@@ -327,6 +411,64 @@ export default function App() {
   // visibly reverted to the old text.
   const changeNote = (id: string, note: string) => {
     api.setNote(id, note).then(refresh).catch((error) => setLoadError(String(error)));
+  };
+
+  const changeTaskTags = (id: string, names: string[]) => {
+    api
+      .setTaskTags(id, names)
+      .then((assignments) => {
+        setTaskTags((current) => ({ ...current, [id]: assignments }));
+        return api.listTags();
+      })
+      .then(setTags)
+      .catch((error) => setLoadError(String(error)));
+  };
+
+  const createProject = (title: string) => {
+    api
+      .createProject(title)
+      .then((project) => {
+        setProjects((current) => [...current, project]);
+        setActiveProjectId(project.id);
+        setMode("tasks");
+        setDestination("anytime");
+      })
+      .catch((error) => setLoadError(String(error)));
+  };
+
+  const changeTaskProject = (id: string, projectId: string | null) => {
+    api
+      .setTaskProject(id, projectId)
+      .then((assignment) => {
+        setTaskProjects((current) => {
+          const next = { ...current };
+          if (assignment) next[id] = assignment.project_id;
+          else delete next[id];
+          return next;
+        });
+      })
+      .catch((error) => setLoadError(String(error)));
+  };
+
+  const createArea = (title: string) => {
+    api
+      .createArea(title)
+      .then((area) => setAreas((current) => [...current, area]))
+      .catch((error) => setLoadError(String(error)));
+  };
+
+  const changeProjectArea = (projectId: string, areaId: string | null) => {
+    api
+      .setProjectArea(projectId, areaId)
+      .then((assignment) => {
+        setProjectAreas((current) => {
+          const next = { ...current };
+          if (assignment) next[projectId] = assignment.area_id;
+          else delete next[projectId];
+          return next;
+        });
+      })
+      .catch((error) => setLoadError(String(error)));
   };
 
   // Renames a task or a subtask — same command either way (set_title
@@ -456,6 +598,14 @@ export default function App() {
       .catch((error) => setLoadError(String(error)));
   };
 
+  const openSearchTask = (task: Task) => {
+    setMode("tasks");
+    setActiveProjectId(null);
+    setDestination(destinationForTask(task));
+    setExpanded(task.id);
+    setSearchOpen(false);
+  };
+
   return (
     <div
       className="app"
@@ -467,17 +617,43 @@ export default function App() {
         if (event.key === "Escape") {
           setExpanded(null);
           setCapturing(false);
+          setSearchOpen(false);
           setSelectedIds(new Set());
         }
       }}
     >
       <Sidebar
         destination={destination}
-        onNavigate={setDestination}
+        onNavigate={(nextDestination) => {
+          setActiveProjectId(null);
+          setDestination(nextDestination);
+        }}
         mode={mode}
-        onModeChange={setMode}
+        onModeChange={(nextMode) => {
+          setActiveProjectId(null);
+          setMode(nextMode);
+        }}
         inboxCount={inboxCount}
         onCapture={() => setCapturing(true)}
+        onSearch={() => setSearchOpen(true)}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onProjectNavigate={(projectId) => {
+          setActiveProjectId(projectId);
+          setDestination("anytime");
+          setMode("tasks");
+        }}
+        onCreateProject={createProject}
+        areas={areas}
+        projectAreas={projectAreas}
+        onCreateArea={createArea}
+      />
+      <TaskSearch
+        open={searchOpen}
+        tasks={allTasks}
+        taskTags={taskTags}
+        onClose={() => setSearchOpen(false)}
+        onOpenTask={openSearchTask}
       />
       {/* No stopPropagation here on purpose — a click anywhere in the main
           pane that isn't absorbed by something more specific (a row's own
@@ -496,22 +672,40 @@ export default function App() {
           )}
         </AnimatePresence>
         {mode === "tasks" && destination !== "settings" && destination !== "calendar" ? (
+          destination === "logbook" ? (
+            <Logbook
+              tasks={logbookTasks}
+              taskTags={taskTags}
+              projects={projects}
+              taskProjects={taskProjects}
+              onReopen={uncomplete}
+            />
+          ) : (
           <div className="task-list-shell">
             <div className="capture-slot">
               <CaptureField
                 open={capturing}
                 onSubmit={capture}
+                onSubmitAndOpen={captureAndOpen}
                 onClose={() => setCapturing(false)}
                 existingTasks={allTasks}
               />
             </div>
-            {destination === "upcoming" ? (
+            {destination === "upcoming" && !activeProject ? (
               <UpcomingList
                 tasks={upcomingTasks}
                 expanded={expanded}
                 completing={completing}
                 subtasks={subtasks}
                 subtaskCounts={subtaskCounts}
+                tags={tags}
+                taskTags={taskTags}
+                activeTag={activeTag}
+                onTagFilterChange={setActiveTag}
+                onTaskTagsChange={changeTaskTags}
+                projects={projects}
+                taskProjects={taskProjects}
+                onTaskProjectChange={changeTaskProject}
                 pendingCompleteConfirm={pendingCompleteConfirm}
                 onConfirmComplete={confirmCompleteWithSubtasks}
                 onCancelCompleteConfirm={cancelCompleteConfirm}
@@ -527,24 +721,35 @@ export default function App() {
                 onDelete={deleteTask}
                 onScheduled={refresh}
                 onToggleSelected={toggleSelected}
-                bottomSlot={
-                  <CompletedSection
-                    tasks={completedTasks.Upcoming}
-                    open={completedOpen.Upcoming}
-                    onToggleOpen={() => toggleCompletedOpen("Upcoming")}
-                    onUncomplete={uncomplete}
-                    onClear={() => clearCompleted("Upcoming")}
-                  />
-                }
               />
             ) : (
               <TaskList
-                title={destination[0].toUpperCase() + destination.slice(1)}
+                key={activeProject?.id ?? destination}
+                showProjectContext={!activeProject}
+                title={activeProject?.title ?? destination[0].toUpperCase() + destination.slice(1)}
+                headerSlot={
+                  activeProject ? (
+                    <ProjectAreaEditor
+                      areas={areas}
+                      areaId={projectAreas[activeProject.id] ?? null}
+                      onChange={(areaId) => changeProjectArea(activeProject.id, areaId)}
+                    />
+                  ) : undefined
+                }
+                sections={todaySections}
                 tasks={visibleTasks}
                 expanded={expanded}
                 completing={completing}
                 subtasks={subtasks}
                 subtaskCounts={subtaskCounts}
+                tags={tags}
+                taskTags={taskTags}
+                activeTag={activeTag}
+                onTagFilterChange={setActiveTag}
+                onTaskTagsChange={changeTaskTags}
+                projects={projects}
+                taskProjects={taskProjects}
+                onTaskProjectChange={changeTaskProject}
                 pendingCompleteConfirm={pendingCompleteConfirm}
                 onConfirmComplete={confirmCompleteWithSubtasks}
                 onCancelCompleteConfirm={cancelCompleteConfirm}
@@ -560,29 +765,23 @@ export default function App() {
                 onDelete={deleteTask}
                 onScheduled={refresh}
                 onToggleSelected={toggleSelected}
-                bottomSlot={
-                  <CompletedSection
-                    tasks={completedTasks[currentView]}
-                    open={completedOpen[currentView]}
-                    onToggleOpen={() => toggleCompletedOpen(currentView)}
-                    onUncomplete={uncomplete}
-                    onClear={() => clearCompleted(currentView)}
-                  />
+                emptyLabel={
+                  activeProject ? "No tasks in this project yet." : EMPTY_LABEL[destination] ?? "Nothing here yet."
                 }
-                emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
                 topSlot={
-                  destination === "today" ? (
+                  !activeProject && destination === "today" ? (
                     <>
                       <CalendarGlance />
                       <OverdueReschedule tasks={visibleTasks} onRescheduleAll={rescheduleMany} />
                     </>
-                  ) : destination === "inbox" || destination === "anytime" ? (
+                  ) : !activeProject && (destination === "inbox" || destination === "anytime") ? (
                     <StaleTaskNudges tasks={visibleTasks} />
                   ) : undefined
                 }
               />
             )}
           </div>
+          )
         ) : destination === "settings" ? (
           <Settings theme={theme as ThemeId} onThemeChange={setTheme} />
         ) : (
