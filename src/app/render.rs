@@ -3,7 +3,7 @@
 
 use gpui::{
     Animation, AnimationExt, AnyElement, Context, IntoElement, ParentElement, Render,
-    SharedString, Styled, Window, div, ease_out_quint, prelude::*,
+    SharedString, Styled, Window, div, ease_out_quint, prelude::*, px,
 };
 
 use super::Flow;
@@ -69,7 +69,17 @@ impl Flow {
                     .with_animation(
                         SharedString::from(format!("pane-fade-{}", destination.index())),
                         Animation::new(motion::REVEAL).with_easing(ease_out_quint()),
-                        |element, delta| element.opacity(delta),
+                        // `docs/DESIGN_DIRECTION.md`'s own Motion section
+                        // calls for this crossfade to carry "a 6 px
+                        // horizontal offset" too — found missing (opacity
+                        // only) while cross-checking that section's other
+                        // lines against their real implementation, and
+                        // unlike the two lines fixed just before this one,
+                        // this one was plainly buildable and just hadn't
+                        // been. Starts 6px right of rest and eases in, the
+                        // same "new content arrives" direction macOS/iOS
+                        // view transitions typically use.
+                        |element, delta| element.opacity(delta).ml(px((1.0 - delta) * 6.0)),
                     ),
             )
             .into_any_element()
