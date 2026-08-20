@@ -133,6 +133,25 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   Tauri has its own bundler and updater plugin; not yet decided whether
   to adopt Tauri's or keep Sparkle wired to a Tauri-built binary.
 
+## Post-archive progress (this ticket's own gap-closing work is done; kept
+open as the running log for continued Tauri-only development)
+
+- **Second real AI block: Checklist expansion** (`b0fe349` in the
+  prototype): same `useAiConfig`/`useAiFeatureState` pattern Today
+  briefing established. Manual mode shows suggestions as a dismissible
+  preview requiring an explicit "Add all"; Auto mode writes them
+  immediately with no preview the first time a task's card is expanded
+  with no subtasks yet — a real, deliberate behavior difference from
+  Today briefing (this is the one block where "auto" actually creates
+  data, per the user's own explicit spec for what "fully auto" means).
+- **Data-integrity verification pass** (behavior actually checked, not
+  just "it builds"): quit the app, queried the dev database directly
+  for orphaned subtasks (parent deleted/missing) and completed parents
+  with open children — zero of either across 33 real tasks (19
+  completed, 27 soft-deleted) from actual testing, confirming the
+  complete-with-open-subtasks confirm and delete-cascade both hold up
+  against real accumulated data, not just the unit tests.
+
 ## GPUI archived (2026-08-20)
 
 Explicit user decision: "Cool if every GPUI thing is done then archive the
