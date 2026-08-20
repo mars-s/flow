@@ -136,6 +136,17 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Cmd+, now toggles Settings closed too, fourth AI block: Duplicate
+  detection** (`a97474e` in the prototype): Cmd+, previously only opened
+  Settings; now tracks the last non-Settings destination and toggles
+  back to it on a second press, matching real macOS Preferences
+  behavior. Duplicate detection is the fourth live backlog item and the
+  first that deliberately isn't a model call — a local Jaccard word-
+  overlap check (`lib/similarity.ts`) against existing task titles is
+  instant, needs no API key, and is exactly as correct here as an LLM
+  round-trip would be. Still respects the feature's own Off/Manual/Auto
+  toggle: Auto checks live while typing in Capture, Manual only checks
+  on an explicit click.
 - **Cmd+, opens Settings, AIFeatureToggle padding widened** (`487fd1c`
   in the prototype): standard macOS preferences shortcut added alongside
   the existing Cmd+N handler; toggle pill padding/height/font bumped up
