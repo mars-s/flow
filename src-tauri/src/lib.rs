@@ -208,6 +208,18 @@ async fn set_note(db: tauri::State<'_, Db>, id: String, note: String) -> Result<
         .map_err(|error| error.to_string())
 }
 
+/// Renames a task (or subtask — `db::set_title` doesn't distinguish, same
+/// as `set_note`). Direct user report: there was no way to rename a task
+/// or subtask at all once created.
+#[tauri::command]
+async fn set_title(db: tauri::State<'_, Db>, id: String, title: String) -> Result<(), String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.set_title(id, title))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
 /// The detail card's Today/Anytime/Someday/Clear quick-picks — a plain
 /// bucket + optional date/time, no parsing involved. `bucket` arrives as
 /// the same tag strings `Bucket`'s own Deserialize produces ("Inbox" for
@@ -359,6 +371,7 @@ pub fn run() {
             preview_capture,
             set_completed,
             set_note,
+            set_title,
             schedule_task,
             schedule_task_from_text,
             list_subtasks,

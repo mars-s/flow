@@ -101,6 +101,21 @@
   min-width: 0;
   font-size: 13px;
   font-weight: 500;
+  cursor: text;
+  border-radius: 4px;
+}
+
+.card-title-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
 }
 
 .card-note {
@@ -151,31 +166,20 @@
   opacity: 0.85;
 }
 
+/* Things 3-style checklist: flat, undecorated rows — no left-border rail,
+   no section header/count label (the "Checklist" pill's own label
+   already carries the count when this is closed). */
 .card-subtasks {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-left: 4px;
-  border-left: 1px solid var(--border);
-  margin-left: 4px;
-}
-
-.subtasks-header {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--text-ghost);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding-left: 8px;
-  margin-bottom: 2px;
+  gap: 3px;
 }
 
 .subtask-row,
 .subtask-add-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-left: 8px;
+  gap: 7px;
 }
 
 .subtask-add-row {
@@ -228,11 +232,25 @@
 .subtask-title {
   font-size: 12px;
   color: var(--text-secondary);
+  cursor: text;
+  border-radius: 3px;
 }
 
 .subtask-title.done {
   color: var(--text-tertiary);
   text-decoration: line-through;
+}
+
+.subtask-title-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
 }
 
 .card-pills {

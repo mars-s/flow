@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { TaskRow } from "../components/TaskRow";
+import { dayLabel } from "../lib/date";
 import type { Task } from "../lib/types";
 import "./TaskList.css";
 import "./UpcomingList.css";
@@ -14,6 +15,7 @@ type Props = {
   selectedIds: Set<string>;
   onToggleExpanded: (id: string) => void;
   onComplete: (id: string) => void;
+  onRename: (id: string, title: string) => void;
   onNoteChange: (id: string, note: string) => void;
   onAddSubtask: (parentId: string, title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
@@ -41,6 +43,7 @@ export function UpcomingList({
   selectedIds,
   onToggleExpanded,
   onComplete,
+  onRename,
   onNoteChange,
   onAddSubtask,
   onToggleSubtask,
@@ -61,7 +64,7 @@ export function UpcomingList({
         <div className="list upcoming-list">
           {groups.map(([date, group]) => (
             <div className="upcoming-group" key={date}>
-              <div className="upcoming-group-label">{date}</div>
+              <div className="upcoming-group-label">{date === "Later" ? date : dayLabel(date)}</div>
               <AnimatePresence initial={false}>
                 {group.map((task) => {
                   const isCompleting = completing.has(task.id);
@@ -84,6 +87,7 @@ export function UpcomingList({
                         selected={selectedIds.has(task.id)}
                         onToggleExpanded={() => onToggleExpanded(task.id)}
                         onComplete={() => onComplete(task.id)}
+                        onRename={onRename}
                         onNoteChange={(note) => onNoteChange(task.id, note)}
                         onAddSubtask={(title) => onAddSubtask(task.id, title)}
                         onToggleSubtask={onToggleSubtask}

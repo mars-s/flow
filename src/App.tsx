@@ -173,6 +173,21 @@ export default function App() {
     api.setNote(id, note).catch((error) => setLoadError(String(error)));
   };
 
+  // Renames a task or a subtask — same command either way (set_title
+  // doesn't distinguish), and this doesn't know which `id` is without
+  // extra bookkeeping, so it just refreshes both: the task-view lists
+  // (in case it renamed the expanded task itself, shown in the row/card
+  // title) and the subtask list (in case it renamed one of those instead).
+  const renameTask = (id: string, title: string) => {
+    api
+      .setTitle(id, title)
+      .then(() => {
+        refresh();
+        if (expanded) refreshSubtasks(expanded);
+      })
+      .catch((error) => setLoadError(String(error)));
+  };
+
   const addSubtask = (parentId: string, title: string) => {
     api
       .createSubtask(parentId, title)
@@ -291,6 +306,7 @@ export default function App() {
                 selectedIds={selectedIds}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
+                onRename={renameTask}
                 onNoteChange={changeNote}
                 onAddSubtask={addSubtask}
                 onToggleSubtask={toggleSubtask}
@@ -308,6 +324,7 @@ export default function App() {
                 selectedIds={selectedIds}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
+                onRename={renameTask}
                 onNoteChange={changeNote}
                 onAddSubtask={addSubtask}
                 onToggleSubtask={toggleSubtask}

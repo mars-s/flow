@@ -15,6 +15,7 @@ export const api = {
   previewCapture: (title: string) => invoke<ParsePreview>("preview_capture", { title }),
   setCompleted: (id: string, completed: boolean) => invoke<void>("set_completed", { id, completed }),
   setNote: (id: string, note: string) => invoke<void>("set_note", { id, note }),
+  setTitle: (id: string, title: string) => invoke<void>("set_title", { id, title }),
   scheduleTask: (id: string, bucket: Bucket, date: string | null, time: string | null) =>
     invoke<void>("schedule_task", { id, bucket, date, time }),
   scheduleTaskFromText: (id: string, text: string) => invoke<void>("schedule_task_from_text", { id, text }),

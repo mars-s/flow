@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Tag, Plus, Trash2, Circle, CheckCircle2 } from "lucide-react";
 import type { Task } from "../lib/types";
 import { linkify } from "../lib/linkify";
+import { formatSchedule } from "../lib/date";
 import { SchedulePicker } from "./SchedulePicker";
 import "./TaskRow.css";
 
@@ -24,6 +25,7 @@ type Props = {
   subtasks: Task[];
   onToggleExpanded: () => void;
   onComplete: () => void;
+  onRename: (id: string, title: string) => void;
   onNoteChange: (note: string) => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
@@ -33,6 +35,69 @@ type Props = {
   onToggleSelected: () => void;
 };
 
+// A subtask row with its own click-to-edit title, same view/edit toggle
+// shape the parent task's note field already uses — direct user report
+// that there was no way to rename a subtask once created.
+function SubtaskRow({
+  subtask,
+  onToggle,
+  onRename,
+}: {
+  subtask: Task;
+  onToggle: () => void;
+  onRename: (title: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="subtask-row">
+      <motion.button type="button" className="subtask-checkbox" whileTap={{ scale: 0.85 }} onClick={onToggle}>
+        {subtask.completed_at ? (
+          <CheckCircle2 size={15} className="subtask-checkbox-icon checked" strokeWidth={2} />
+        ) : (
+          <Circle size={15} className="subtask-checkbox-icon" strokeWidth={1.6} />
+        )}
+      </motion.button>
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="subtask-title-input"
+          defaultValue={subtask.title}
+          autoFocus
+          onFocus={(event) => event.currentTarget.select()}
+          onBlur={(event) => {
+            const value = event.target.value.trim();
+            if (value && value !== subtask.title) onRename(value);
+            setEditing(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            } else if (event.key === "Escape") {
+              event.stopPropagation();
+              event.currentTarget.value = subtask.title;
+              event.currentTarget.blur();
+            }
+          }}
+        />
+      ) : (
+        <span
+          className={subtask.completed_at ? "subtask-title done" : "subtask-title"}
+          tabIndex={0}
+          role="button"
+          onClick={() => setEditing(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") setEditing(true);
+          }}
+        >
+          {subtask.title}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function TaskRow({
   task,
   expanded,
@@ -40,6 +105,7 @@ export function TaskRow({
   subtasks,
   onToggleExpanded,
   onComplete,
+  onRename,
   onNoteChange,
   onAddSubtask,
   onToggleSubtask,
@@ -52,8 +118,10 @@ export function TaskRow({
   const [subtasksOpen, setSubtasksOpen] = useState(false);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
 
   const checkbox = (
     <motion.div
@@ -79,7 +147,6 @@ export function TaskRow({
   );
 
   if (expanded) {
-    const openCount = subtasks.filter((subtask) => !subtask.completed_at).length;
     return (
       <motion.div
         layoutId={`row-${task.id}`}
@@ -92,15 +159,52 @@ export function TaskRow({
       >
         <div
           className="card-header"
-          onClick={onToggleExpanded}
-          tabIndex={0}
-          role="button"
+          onClick={editingTitle ? undefined : onToggleExpanded}
+          tabIndex={editingTitle ? undefined : 0}
+          role={editingTitle ? undefined : "button"}
           onKeyDown={(event) => {
             if (event.key === "Enter") onToggleExpanded();
           }}
         >
           {checkbox}
-          <div className="card-title">{linkify(task.title)}</div>
+          {editingTitle ? (
+            <input
+              ref={titleRef}
+              className="card-title-input"
+              defaultValue={task.title}
+              autoFocus
+              onClick={(event) => event.stopPropagation()}
+              onFocus={(event) => event.currentTarget.select()}
+              onBlur={(event) => {
+                const value = event.target.value.trim();
+                if (value && value !== task.title) onRename(task.id, value);
+                setEditingTitle(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                } else if (event.key === "Escape") {
+                  event.stopPropagation();
+                  event.currentTarget.value = task.title;
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+          ) : (
+            // click-to-edit, same pattern the note field uses — direct
+            // user report that there was no way to rename a task at all.
+            // stopPropagation so entering edit mode doesn't also collapse
+            // the card via card-header's own onToggleExpanded.
+            <div
+              className="card-title"
+              onClick={(event) => {
+                event.stopPropagation();
+                setEditingTitle(true);
+              }}
+            >
+              {linkify(task.title)}
+            </div>
+          )}
         </div>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.05, duration: 0.14 }}>
           {editingNote ? (
@@ -141,31 +245,20 @@ export function TaskRow({
             </div>
           )}
 
+          {/* Things 3-style checklist: no section header/count label (the
+              "+Subtask" pill's own label already carries the count when
+              closed), no left-border rail — just checkbox+text rows sitting
+              directly under the note, as flat and undecorated as the rest
+              of the card. */}
           {subtasksOpen && (
             <div className="card-subtasks">
-              {subtasks.length > 0 && (
-                <div className="subtasks-header">
-                  Subtasks ({subtasks.length - openCount}/{subtasks.length})
-                </div>
-              )}
               {subtasks.map((subtask) => (
-                <div className="subtask-row" key={subtask.id}>
-                  <motion.button
-                    type="button"
-                    className="subtask-checkbox"
-                    whileTap={{ scale: 0.85 }}
-                    onClick={() => onToggleSubtask(subtask.id, !subtask.completed_at)}
-                  >
-                    {subtask.completed_at ? (
-                      <CheckCircle2 size={15} className="subtask-checkbox-icon checked" strokeWidth={2} />
-                    ) : (
-                      <Circle size={15} className="subtask-checkbox-icon" strokeWidth={1.6} />
-                    )}
-                  </motion.button>
-                  <span className={subtask.completed_at ? "subtask-title done" : "subtask-title"}>
-                    {subtask.title}
-                  </span>
-                </div>
+                <SubtaskRow
+                  key={subtask.id}
+                  subtask={subtask}
+                  onToggle={() => onToggleSubtask(subtask.id, !subtask.completed_at)}
+                  onRename={(title) => onRename(subtask.id, title)}
+                />
               ))}
               {/* A real checklist-entry flow, not a single-shot add form:
                   Enter commits the current line as a subtask and clears +
@@ -191,7 +284,7 @@ export function TaskRow({
                 <input
                   ref={subtaskInputRef}
                   className="subtask-add-input"
-                  placeholder="New subtask"
+                  placeholder="New Checklist Item"
                   autoFocus
                   onKeyDown={(event) => {
                     if (event.key === "Escape") {
@@ -220,7 +313,7 @@ export function TaskRow({
                 onClick={() => setSchedulingOpen(true)}
               >
                 <Tag size={11} />
-                {task.scheduled_date ?? "Schedule…"}
+                {task.scheduled_date ? formatSchedule(task.scheduled_date, task.scheduled_time) : "Schedule…"}
               </motion.button>
               <AnimatePresence>
                 {schedulingOpen && (
@@ -243,7 +336,7 @@ export function TaskRow({
               onClick={() => setSubtasksOpen((open) => !open)}
             >
               <Plus size={11} />
-              {subtasks.length > 0 ? `Subtasks (${subtasks.length})` : "Subtask"}
+              {subtasks.length > 0 ? `Checklist (${subtasks.length})` : "Checklist"}
             </motion.button>
             <motion.button
               type="button"
@@ -294,7 +387,9 @@ export function TaskRow({
     >
       {checkbox}
       <div className={`row-title ${completing ? "checked" : ""}`}>{linkify(task.title)}</div>
-      {task.scheduled_date && <div className="row-schedule">{task.scheduled_date}</div>}
+      {task.scheduled_date && (
+        <div className="row-schedule">{formatSchedule(task.scheduled_date, task.scheduled_time)}</div>
+      )}
     </motion.div>
   );
 }
