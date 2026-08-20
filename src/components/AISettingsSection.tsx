@@ -8,11 +8,12 @@ import "./AISettingsSection.css";
 // Every AI feature this app has, grouped by the area of the app they
 // show up in ("shiny blocks around the app," direct user framing) — one
 // row per block, each with its own independent Off/Manual/Auto state.
-// Today briefing, checklist expansion, and stale task nudges are wired to
-// a real model call so far; duplicate detection is live too but runs as
-// a local string-similarity check (see lib/similarity.ts) rather than a
-// model call. The rest are the backlog the user asked to keep visible
-// rather than dropped once brainstormed.
+// Today briefing, checklist expansion, stale task nudges, and overdue
+// batch reschedule are wired to a real model call so far; duplicate
+// detection is live too but runs as a local string-similarity check
+// (see lib/similarity.ts) rather than a model call. The rest are the
+// backlog the user asked to keep visible rather than dropped once
+// brainstormed.
 const FEATURE_GROUPS: { group: string; features: { id: string; name: string; description: string; live: boolean }[] }[] = [
   {
     group: "Calendar",
@@ -56,7 +57,7 @@ const FEATURE_GROUPS: { group: string; features: { id: string; name: string; des
         id: "overdue-reschedule",
         name: "Overdue batch reschedule",
         description: "One suggested new date for a pile of overdue tasks at once.",
-        live: false,
+        live: true,
       },
       {
         id: "draft-from-task",
@@ -116,10 +117,10 @@ export function AISettingsSection() {
         <div className="settings-row-body">
           <div className="settings-row-title">AI features</div>
           <div className="settings-row-note">
-            Off by default. "Today briefing," "Checklist expansion," and "Stale task nudges" are wired to
-            a real model call; "Duplicate detection" runs as a local check instead — no model call needed
-            for string similarity. Everything else below is the backlog, kept visible rather than dropped
-            once brainstormed.
+            Off by default. "Today briefing," "Checklist expansion," "Stale task nudges," and "Overdue batch
+            reschedule" are wired to a real model call; "Duplicate detection" runs as a local check instead —
+            no model call needed for string similarity. Everything else below is the backlog, kept visible
+            rather than dropped once brainstormed.
           </div>
         </div>
         <button

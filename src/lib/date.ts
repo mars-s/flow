@@ -23,6 +23,19 @@ function parseIsoLocal(date: string): Date | null {
   return new Date(Number(y), Number(m) - 1, Number(d));
 }
 
+// Adds `days` local calendar days to today and returns "YYYY-MM-DD" —
+// used by Overdue batch reschedule, which asks the model only for a day
+// offset (an integer judgment call) rather than trusting it to do its
+// own date arithmetic against an unknown "today."
+export function addDaysIso(days: number): string {
+  const base = parseIsoLocal(todayIso())!;
+  const shifted = new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
+  const year = shifted.getFullYear();
+  const month = String(shifted.getMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // Mirrors the GPUI app's own day_label: "Today"/"Tomorrow" for the two
 // nearest days, a bare weekday name for the rest of the week, else a
 // short date ("Aug 23") — direct user report that the raw "2026-08-22"

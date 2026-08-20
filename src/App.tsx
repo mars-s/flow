@@ -11,6 +11,7 @@ import { BulkActionBar, type BulkTarget } from "./components/BulkActionBar";
 import { CalendarGlance } from "./components/CalendarGlance";
 import { CompletedSection } from "./components/CompletedSection";
 import { StaleTaskNudges } from "./components/StaleTaskNudges";
+import { OverdueReschedule } from "./components/OverdueReschedule";
 import { api } from "./lib/api";
 import { todayIso } from "./lib/date";
 import { usePersistedString } from "./lib/persisted";
@@ -351,6 +352,15 @@ export default function App() {
     api.scheduleTask(id, "Active", date, time).then(refresh).catch((error) => setLoadError(String(error)));
   };
 
+  // Overdue batch reschedule's own bulk write — same shape as bulkProcess
+  // below, just driven by the AI block's own suggested date rather than
+  // one of the bulk-action bar's fixed targets.
+  const rescheduleMany = (ids: string[], date: string) => {
+    Promise.all(ids.map((id) => api.scheduleTask(id, "Active", date, null)))
+      .then(refresh)
+      .catch((error) => setLoadError(String(error)));
+  };
+
   const addSubtask = (parentId: string, title: string) => {
     api
       .createSubtask(parentId, title)
@@ -562,7 +572,10 @@ export default function App() {
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
                 topSlot={
                   destination === "today" ? (
-                    <CalendarGlance />
+                    <>
+                      <CalendarGlance />
+                      <OverdueReschedule tasks={visibleTasks} onRescheduleAll={rescheduleMany} />
+                    </>
                   ) : destination === "inbox" || destination === "anytime" ? (
                     <StaleTaskNudges tasks={visibleTasks} />
                   ) : undefined
