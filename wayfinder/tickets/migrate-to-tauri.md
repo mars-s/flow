@@ -135,6 +135,25 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Fixed notes not persisting (visibly) after clicking out, and a
+  related stale-badge bug found while fixing it** (`50735d5`,
+  `6414cdd` in the prototype): direct user report, verified at the
+  data layer before trusting the diagnosis — quit the app, queried the
+  dev SQLite file directly with `sqlite3`, confirmed notes were
+  actually being written correctly the whole time. The real bug:
+  `changeNote` never called `refresh()` afterward, so the note view
+  (reading `task.note` straight off `viewTasks` state) kept showing
+  the stale pre-edit value until an unrelated refresh happened to
+  fire — indistinguishable from data loss from the user's side of the
+  screen. Swept every other mutation in App.tsx for the same missing-
+  refresh shape and found one more: `addSubtask`/`toggleSubtask`/
+  `deleteSubtask` only ever refreshed the expanded card's own subtask
+  list, never the new subtask-count badge's own state, so it would
+  show a stale "N/M" until an unrelated refresh fired. Fixed both by
+  actually calling the write, then independently confirming the
+  read-back reflects it — not by reading the code and assuming a
+  `.then(refresh)` was there.
+
 - **Row indicator icons for notes and subtasks** (`a72fea2` in `flow`,
   `b98d002` in the prototype): direct user request, matching Things
   3's own row indicators — a collapsed row now shows a note icon when
