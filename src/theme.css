@@ -40,6 +40,40 @@
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* "River Cut" — built from the chosen icon concept (icons/icon.png,
+   generated via fal.ai's openai/gpt-image-2). Colors aren't guessed: the
+   accent (#8fa688) and its darker/lighter kin are sampled straight off
+   the actual generated PNG (see the migration ticket's theme-switcher
+   entry for the sampling method), not a hand-picked "sage-ish" green.
+   Applied via `[data-theme="river-cut"]` on <html>, set by ThemeSwitcher
+   (Settings) and persisted the same way every other UI preference here
+   is (lib/persisted.ts). Neutrals shift hue from the default theme's
+   cool blue-gray to a warmer moss-gray so the whole surface reads as one
+   considered palette, not just a different accent color dropped onto
+   the same background — same "a neutral should be chosen, not inherited"
+   reasoning applied to the rest of the app's own design work. */
+[data-theme="river-cut"] {
+  --canvas: #14170f;
+  --raised: #1f261a;
+  --inset: #0f120b;
+  --overlay: rgba(180, 200, 160, 0.05);
+  --overlay-strong: rgba(180, 200, 160, 0.09);
+  --border: rgba(180, 200, 160, 0.07);
+  --border-strong: rgba(180, 200, 160, 0.12);
+  --sidebar-border: rgba(180, 200, 160, 0.07);
+
+  --text: #eef1ea;
+  --text-secondary: #9aa392;
+  --text-tertiary: #767f6f;
+  --text-ghost: #5b6355;
+
+  --accent: #8fa688;
+  --accent-wash: rgba(143, 166, 136, 0.16);
+  --danger: #ff6b6b;
+
+  --sidebar-item-bg: #33422c;
+}
+
 * {
   box-sizing: border-box;
 }

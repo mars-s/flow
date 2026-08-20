@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { AISettingsSection } from "../components/AISettingsSection";
+import { ThemeSwitcher } from "../components/ThemeSwitcher";
 import { api } from "../lib/api";
 import { openCalendarPrivacyPane } from "../lib/system";
+import type { ThemeId } from "../lib/theme";
 import type { CalendarAuth } from "../lib/types";
 import "./Settings.css";
 
@@ -13,7 +15,12 @@ const STATUS_LABEL: Record<CalendarAuth, string> = {
   Unavailable: "Unavailable",
 };
 
-export function Settings() {
+type Props = {
+  theme: ThemeId;
+  onThemeChange: (theme: ThemeId) => void;
+};
+
+export function Settings({ theme, onThemeChange }: Props) {
   const [auth, setAuth] = useState<CalendarAuth | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +76,7 @@ export function Settings() {
         )}
         {error && <div className="settings-row-error">{error}</div>}
       </div>
+      <ThemeSwitcher theme={theme} onChange={onThemeChange} />
       <AISettingsSection />
     </div>
   );

@@ -11,6 +11,8 @@ import { BulkActionBar, type BulkTarget } from "./components/BulkActionBar";
 import { CalendarGlance } from "./components/CalendarGlance";
 import { api } from "./lib/api";
 import { todayIso } from "./lib/date";
+import { usePersistedString } from "./lib/persisted";
+import type { ThemeId } from "./lib/theme";
 import { VIEW_FOR } from "./lib/types";
 import type { Bucket, Destination, Task, View } from "./lib/types";
 import "./theme.css";
@@ -36,6 +38,7 @@ export default function App() {
   // instead of Today. Each view's own query already gets this right, so
   // reusing its result directly is both the fix and the simpler code.
   const [viewTasks, setViewTasks] = useState<Record<View, Task[]>>(EMPTY_VIEW_TASKS);
+  const [theme, setTheme] = usePersistedString("flow.theme", "default");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"tasks" | "calendar">("tasks");
   const [destination, setDestination] = useState<Destination>("inbox");
@@ -67,6 +70,17 @@ export default function App() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // theme.css's [data-theme="river-cut"] block only applies once this
+  // attribute is set on <html> — "default" needs no attribute at all
+  // (the base :root tokens already are the default theme), so it's the
+  // one value this clears rather than sets. Lives here rather than
+  // inside Settings so switching theme applies immediately regardless of
+  // which view is on screen, not just once Settings itself re-renders.
+  useEffect(() => {
+    if (theme === "default") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   // A window-level listener, not the root div's own onKeyDown (used below
   // for Escape) — Cmd+N has to open Capture from anywhere in the app,
@@ -306,7 +320,7 @@ export default function App() {
             )}
           </div>
         ) : destination === "settings" ? (
-          <Settings />
+          <Settings theme={theme as ThemeId} onThemeChange={setTheme} />
         ) : (
           <Calendar />
         )}
