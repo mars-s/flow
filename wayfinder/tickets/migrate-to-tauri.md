@@ -135,6 +135,20 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Fixed Today silently excluding overdue tasks; added the calendar-
+  glance card** (`fef5b8e`): a real bug found by re-checking
+  `sidebar.rs`'s own Today description ("Overdue and today's active
+  tasks") against the actual backend query — `list_view(View::Today)`
+  already selects `scheduled_date <= today` and is correct on the Rust
+  side; the frontend was re-deriving view membership client-side from
+  one merged list using `=== today`, so overdue tasks silently landed
+  in Upcoming instead. Fixed by keeping five separate per-view lists
+  straight from `list_view` instead of merging and re-filtering.
+  Also added the PRD §6.3 calendar-glance card ("A compact
+  calendar-glance card precedes the tasks" in Today), hidden until
+  EventKit is granted per §6.5 — mirrors the GPUI app's own
+  `components::calendar_glance` exactly, including its sort order.
+
 - **Fixed the Denied-calendar dead end** (`186b050`): real gap found
   by re-checking against GPUI's `settings.rs` — PRD §6.5 requires a
   way to reach System Settings → Privacy & Security → Calendars, since
