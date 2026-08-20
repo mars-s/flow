@@ -1050,6 +1050,24 @@ impl Flow {
         self.expanded_task_id = id;
     }
 
+    /// Clicking anywhere that isn't the expanded card itself — blank canvas
+    /// in the main pane, the sidebar, another destination — closes it, the
+    /// same "click away to deselect" convention Things and Mail both use.
+    /// A no-op when nothing is expanded, so this is safe to wire up broadly
+    /// rather than only where a task view happens to be showing.
+    ///
+    /// Rows switch expansion via their own `on_click` (`Flow::
+    /// toggle_expanded`, which calls `cx.stop_propagation()`), so this
+    /// never fires for — and can't undo — an actual row open/switch; it
+    /// only ever reaches genuinely blank space or an unrelated control.
+    pub(super) fn collapse_expanded_task(&mut self, cx: &mut Context<Self>) {
+        if self.expanded_task_id.is_none() {
+            return;
+        }
+        self.set_expanded_task(None, cx);
+        cx.notify();
+    }
+
     /// Settings' "Connect Calendar" button (PRD §6.5). Triggers the system
     /// EventKit permission prompt; a no-op re-prompt if the user already
     /// decided (granted or denied) — EventKit only ever prompts once, same
@@ -1282,6 +1300,12 @@ impl Flow {
             return;
         }
         crate::debug_log!("destination: {:?} -> {destination:?}", self.destination);
+        // Leaving a task view with a card still expanded left
+        // `expanded_task_id` stale in state (nothing rendered it, so it
+        // was invisible, but it'd still be sitting expanded whenever this
+        // exact view was returned to) — collapse it the same as any other
+        // "click outside" the card.
+        self.collapse_expanded_task(cx);
         self.destination = destination;
         window.set_window_title(&window_title(destination));
         if destination == Destination::Today {

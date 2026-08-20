@@ -56,6 +56,11 @@ impl Flow {
             .min_w_0()
             .h_full()
             .overflow_hidden()
+            // Click outside an expanded task's card closes it — see
+            // `Flow::collapse_expanded_task`'s own doc for why rows'
+            // own clicks (open/switch) are safe from this despite
+            // bubbling through it.
+            .on_click(cx.listener(|flow, _, _, cx| flow.collapse_expanded_task(cx)))
             .child(
                 div()
                     .id(SharedString::from(format!("pane-{}", destination.index())))

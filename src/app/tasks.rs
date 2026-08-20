@@ -2042,6 +2042,11 @@ fn render_task_row(
                 flow.selected_task_ids.clear();
                 flow.toggle_expanded(id_for_row_click.clone(), note_for_click.clone(), cx);
             }
+            // Stops here, not at the main pane's own "click outside the
+            // expanded card collapses it" handler — without this, opening
+            // or switching to this row would immediately bubble up and
+            // collapse right back closed on the same click.
+            cx.stop_propagation();
         }))
         .child(
             div()
@@ -2189,7 +2194,14 @@ fn render_detail_card(
         // can return, so it needs the same explicit width.
         .w_full()
         .my(px(1.0))
-        .p(px(12.0))
+        // Horizontal inset matches the compact row's own `px(8.0)` exactly,
+        // not the card's previous `p(px(12.0))` on every side — that 4px
+        // mismatch shifted the checkbox and title sideways the instant a
+        // row expanded, alongside the title's own font-size jump fixed
+        // just below. Neither should move; only the card chrome (rounded
+        // corners, extra sections) should visibly change.
+        .px(px(8.0))
+        .py(px(10.0))
         .rounded(px(10.0))
         .bg(theme.raised)
         .flex()
@@ -2210,6 +2222,10 @@ fn render_detail_card(
                 // already read as "the title" before it became editable.
                 .on_click(cx.listener(move |flow, _, _, cx| {
                     flow.toggle_expanded(id_for_collapse.clone(), note_for_collapse.clone(), cx);
+                    // Same reasoning as the compact row's own click — don't
+                    // let this bubble to the main pane's click-outside
+                    // handler too.
+                    cx.stop_propagation();
                 }))
                 .flex()
                 .items_center()
@@ -2266,7 +2282,11 @@ fn render_detail_card(
                         .flex_1()
                         .min_w_0()
                         .cursor_pointer()
-                        .text_size(px(15.0))
+                        // Matches the compact row's own title size exactly
+                        // (was `px(15.0)`) — the title must read as the
+                        // same text growing a card around it, not as text
+                        // that itself grows the moment you click it.
+                        .text_size(px(13.0))
                         .text_color(theme.text)
                         .focus_visible(|style| style.border_1().border_color(theme.accent))
                         // A dedicated click target for editing, taking
@@ -2478,7 +2498,15 @@ fn render_detail_card(
             // states on an element that never leaves the tree.
             gpui::SharedString::from(format!("task-{}-detail-reveal", task.id)),
             Animation::new(motion::REVEAL).with_easing(ease_out_quint()),
-            |element, delta| element.opacity(delta),
+            // GPUI's `Div` has no scale/transform style to animate — there's
+            // no literal "grow" to drive the way a CSS `transform: scale()`
+            // would. This fakes that read instead, the same technique the
+            // compact row's own collapse animation already uses (animating
+            // `h` directly rather than a transform): the card's top padding
+            // starts a few px past its resting `py(10.0)` and eases back
+            // down to it in step with the opacity fade, so the header reads
+            // as settling into place rather than a flat cross-fade.
+            |element, delta| element.opacity(delta).pt(px(10.0 + (1.0 - delta) * 8.0)),
         )
         .into_any_element()
 }
