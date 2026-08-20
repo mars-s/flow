@@ -319,13 +319,19 @@ where
             window.on_mouse_event({
                 let list = list.clone();
                 let state = state.clone();
-                move |event: &MouseDownEvent, phase, window, _| {
+                move |event: &MouseDownEvent, phase, window, cx| {
                     if phase != gpui::DispatchPhase::Bubble
                         || event.button != MouseButton::Left
                         || !track.contains(&event.position)
                     {
                         return;
                     }
+                    // Otherwise this reaches whatever's behind the bar too —
+                    // concretely, Flow's own "click outside the expanded
+                    // task closes it" — since it's a raw window-level
+                    // listener, not a div with its own hitbox to swallow
+                    // the event automatically.
+                    cx.stop_propagation();
                     if geometry.thumb.contains(&event.position) {
                         state
                             .grab_offset
@@ -366,12 +372,16 @@ where
 
             window.on_mouse_event({
                 let state = state.clone();
-                move |_: &MouseUpEvent, phase, window, _| {
+                move |_: &MouseUpEvent, phase, window, cx| {
                     if phase != gpui::DispatchPhase::Bubble || state.grab_offset.get().is_none() {
                         return;
                     }
                     state.grab_offset.set(None);
                     window.refresh();
+                    // Same reasoning as the mouse-down listener above — a
+                    // drag that started and ended on the bar shouldn't also
+                    // register as a click on whatever's behind it.
+                    cx.stop_propagation();
                 }
             });
         },

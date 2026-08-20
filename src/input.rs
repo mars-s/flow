@@ -1388,6 +1388,16 @@ impl ComposerInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A click that starts inside the field is always this field's own
+        // click (cursor placement, word/line select) — never an ancestor's.
+        // Without this, any ancestor built on `on_click`'s down+up pairing
+        // (Flow's own "click outside the expanded card closes it" being
+        // the concrete case this was found for) sees its own bubble-phase
+        // mouse-down listener still fire here, since `on_click` doesn't
+        // know a click landed inside a text field unless told — and then
+        // fires its handler on release, since the cursor is still inside
+        // that same ancestor's much larger hitbox.
+        cx.stop_propagation();
         self.vertical_navigation = None;
         self.is_selecting = true;
         self.selected_word_range = None;
