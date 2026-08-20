@@ -26,6 +26,12 @@ GPL-3.0 obligations are accepted.
 
 - [Choose Flow's distribution boundary](tickets/choose-distribution-boundary.md)
   - Flow is GPL-3.0 open source and may reuse Waku's GPUI shell in place.
+    **Superseded 2026-08-20**: the user decided to migrate the UI off
+    GPUI onto Tauri (React + Vite + Framer Motion), reversing the "native
+    Rust/GPUI desktop shell" framing this decision and `PRODUCT.md`/
+    `AGENTS.md` both still describe — see
+    [Migrate Flow's UI from GPUI to Tauri](tickets/migrate-to-tauri.md)
+    (open) for the full reasoning and what's still undecided.
 - [Choose Flow's first persistence boundary](tickets/choose-persistence-boundary.md)
   - Ship a local, NLP-first task experience, then replace persistence with
     self-hosted Convex after the interaction model is proven.

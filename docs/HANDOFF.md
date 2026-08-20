@@ -10,10 +10,21 @@ what's still open, not a journal of everything that happened to get here.
 ## What Flow is
 
 A calm, keyboard-first personal task manager: Inbox, Today, Upcoming,
-Anytime, Someday, and a read-only Google Calendar glance. Native Rust/GPUI
-desktop app (macOS + Linux). Not a coding-agent tool, not a project-management
-suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
+Anytime, Someday, and a read-only glance at the user's own macOS Calendar
+via EventKit. Native Rust/GPUI desktop app (macOS + Linux) **today** — see
+the platform note directly below before assuming that stays true. Not a
+coding-agent tool, not a project-management suite. See
+[PRODUCT.md](../PRODUCT.md) for the full north star and
 [docs/PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md) for the PRD.
+
+**Platform migration decided, not yet started (2026-08-20)**: the user
+decided to migrate the UI off GPUI onto Tauri (React + Vite + Framer
+Motion) — see
+[wayfinder/tickets/migrate-to-tauri.md](../wayfinder/tickets/migrate-to-tauri.md)
+for the full reasoning, what's already decided, and what's still open.
+Everything below this note still describes the GPUI app as it actually
+ships today; read it as current reality, not as an assumption the
+migration hasn't started invalidating.
 
 ## Repo / git state
 
