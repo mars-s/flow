@@ -8,10 +8,11 @@ import { Settings } from "./views/Settings";
 import { Calendar } from "./views/Calendar";
 import { UndoToast, type UndoState } from "./components/UndoToast";
 import { BulkActionBar, type BulkTarget } from "./components/BulkActionBar";
+import { CalendarGlance } from "./components/CalendarGlance";
 import { api } from "./lib/api";
 import { todayIso } from "./lib/date";
 import { VIEW_FOR } from "./lib/types";
-import type { Bucket, Destination, Task } from "./lib/types";
+import type { Bucket, Destination, Task, View } from "./lib/types";
 import "./theme.css";
 import "./App.css";
 
@@ -22,8 +23,19 @@ const EMPTY_LABEL: Record<string, string> = {
   someday: "Nothing here yet.",
 };
 
+const VIEWS = ["Inbox", "Today", "Upcoming", "Anytime", "Someday"] as const;
+const EMPTY_VIEW_TASKS: Record<View, Task[]> = { Inbox: [], Today: [], Upcoming: [], Anytime: [], Someday: [] };
+
 export default function App() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // Kept as five separate per-view lists straight from list_view, not one
+  // flat array re-filtered client-side — Today's real definition is
+  // "scheduled_date <= today" (it includes overdue tasks, per the GPUI
+  // app's own sidebar.rs description: "Overdue and today's active tasks"),
+  // not "scheduled_date === today". Re-deriving that split in JS from a
+  // merged list previously got it wrong: overdue tasks landed in Upcoming
+  // instead of Today. Each view's own query already gets this right, so
+  // reusing its result directly is both the fix and the simpler code.
+  const [viewTasks, setViewTasks] = useState<Record<View, Task[]>>(EMPTY_VIEW_TASKS);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"tasks" | "calendar">("tasks");
   const [destination, setDestination] = useState<Destination>("inbox");
@@ -40,13 +52,13 @@ export default function App() {
   // reasoning the GPUI app's own render_task_view comment gives for why it
   // doesn't gate every view behind its own fetch.
   const refresh = useCallback(() => {
-    Promise.all(
-      (["Inbox", "Today", "Upcoming", "Anytime", "Someday"] as const).map((view) => api.listView(view)),
-    )
+    Promise.all(VIEWS.map((view) => api.listView(view)))
       .then((lists) => {
-        const merged = new Map<string, Task>();
-        for (const list of lists) for (const task of list) merged.set(task.id, task);
-        setTasks([...merged.values()]);
+        const next = { ...EMPTY_VIEW_TASKS };
+        VIEWS.forEach((view, i) => {
+          next[view] = lists[i];
+        });
+        setViewTasks(next);
         setLoadError(null);
       })
       .catch((error) => setLoadError(String(error)));
@@ -86,23 +98,12 @@ export default function App() {
     else setSubtasks([]);
   }, [expanded, refreshSubtasks]);
 
-  const inboxCount = useMemo(() => tasks.filter((task) => task.bucket === "Inbox").length, [tasks]);
-
+  const inboxCount = viewTasks.Inbox.length;
   const visibleTasks = useMemo(() => {
     const view = VIEW_FOR[destination];
-    if (!view) return [];
-    const today = todayIso();
-    if (view === "Inbox") return tasks.filter((task) => task.bucket === "Inbox");
-    if (view === "Someday") return tasks.filter((task) => task.bucket === "Someday");
-    if (view === "Today") return tasks.filter((task) => task.bucket === "Active" && task.scheduled_date === today);
-    if (view === "Anytime") return tasks.filter((task) => task.bucket === "Active" && !task.scheduled_date);
-    return [];
-  }, [tasks, destination]);
-
-  const upcomingTasks = useMemo(() => {
-    const today = todayIso();
-    return tasks.filter((task) => task.bucket === "Active" && task.scheduled_date && task.scheduled_date !== today);
-  }, [tasks]);
+    return view ? viewTasks[view] : [];
+  }, [viewTasks, destination]);
+  const upcomingTasks = viewTasks.Upcoming;
 
   const complete = (id: string) => {
     if (completing.has(id)) return;
@@ -155,7 +156,7 @@ export default function App() {
   };
 
   const deleteTask = (id: string) => {
-    const title = tasks.find((task) => task.id === id)?.title ?? "task";
+    const title = Object.values(viewTasks).flat().find((task) => task.id === id)?.title ?? "task";
     setExpanded((current) => (current === id ? null : current));
     api
       .deleteTask(id)
@@ -281,6 +282,7 @@ export default function App() {
                 onScheduled={refresh}
                 onToggleSelected={toggleSelected}
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
+                topSlot={destination === "today" ? <CalendarGlance /> : undefined}
               />
             )}
           </div>

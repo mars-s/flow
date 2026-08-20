@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TaskRow } from "../components/TaskRow";
 import type { Task } from "../lib/types";
@@ -21,6 +22,7 @@ type Props = {
   onScheduled: () => void;
   onToggleSelected: (id: string) => void;
   emptyLabel: string;
+  topSlot?: ReactNode;
 };
 
 export function TaskList({
@@ -39,12 +41,14 @@ export function TaskList({
   onScheduled,
   onToggleSelected,
   emptyLabel,
+  topSlot,
 }: Props) {
   return (
     <div className="task-list-view">
       <div className="view-header">
         <h1>{title}</h1>
       </div>
+      {topSlot}
       {tasks.length === 0 ? (
         <div className="empty-state">{emptyLabel}</div>
       ) : (
