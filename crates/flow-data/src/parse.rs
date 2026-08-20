@@ -69,52 +69,119 @@ static TIME_ONLY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(r"(?i)\b(?P<time>{TIME_GROUP})$")).expect("TIME_ONLY pattern")
 });
 
+// The same four shapes, but leading ("in 8 days take out trash") instead of
+// trailing — tried only when none of the trailing patterns above match (see
+// `parse`), so "take out trash in 8 days" still recognizes the trailing
+// phrase exactly as before; this only adds the reverse phrasing, it doesn't
+// change what already worked. Anchored on `\s+` after the phrase, not just
+// a word boundary — a bare `\b` would let "Friday's report is due" match
+// "Friday" as a date (word boundary sits right before the apostrophe too),
+// silently mangling a title that was never meant as a schedule phrase.
+// Requiring real whitespace after the match means only a phrase that's
+// genuinely its own separate word gets recognized.
+static DATE_THEN_TIME_LEADING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"(?i)^(?P<date>{})\s+(?P<time>{TIME_GROUP})\s+",
+        date_group()
+    ))
+    .expect("DATE_THEN_TIME_LEADING pattern")
+});
+static TIME_THEN_DATE_LEADING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"(?i)^(?P<time>{TIME_GROUP})\s+(?P<date>{})\s+",
+        date_group()
+    ))
+    .expect("TIME_THEN_DATE_LEADING pattern")
+});
+static DATE_ONLY_LEADING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(r"(?i)^(?P<date>{})\s+", date_group())).expect("DATE_ONLY_LEADING pattern")
+});
+static TIME_ONLY_LEADING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(r"(?i)^(?P<time>{TIME_GROUP})\s+")).expect("TIME_ONLY_LEADING pattern")
+});
+
 /// Parses `title` against `today` (the caller's local calendar day).
 /// `today` should come from `chrono::Local::now().date_naive()` in
 /// production and a fixed date in tests, so results are reproducible.
 pub fn parse(title: &str, today: NaiveDate) -> ParsedTitle {
     let trimmed = title.trim_end();
 
+    // Trailing phrases first ("take out trash in 8 days") — this order,
+    // and every pattern in this group, is unchanged from before leading
+    // phrases existed, so anything that already worked still resolves
+    // exactly the same way.
     for (regex, wants_date, wants_time) in [
         (&*DATE_THEN_TIME, true, true),
         (&*TIME_THEN_DATE, true, true),
         (&*DATE_ONLY, true, false),
         (&*TIME_ONLY, false, true),
     ] {
-        let Some(caps) = regex.captures(trimmed) else {
-            continue;
-        };
-        let date = wants_date
-            .then(|| caps.name("date").and_then(|m| parse_date_phrase(m.as_str(), today)))
-            .flatten();
-        let time = wants_time
-            .then(|| caps.name("time").and_then(|m| parse_time_phrase(m.as_str())))
-            .flatten();
-        // A phrase that matched the pattern but failed its own semantic
-        // check (an impossible date, a month/day already past with no
-        // explicit year) is ambiguous, not a partial match — PRD principle
-        // 3 says don't guess, so fall through to unrecognized rather than
-        // salvaging whichever half did parse.
-        if wants_date && date.is_none() {
-            continue;
+        if let Some(parsed) = try_match(trimmed, regex, wants_date, wants_time, today, false) {
+            return parsed;
         }
-        if wants_time && time.is_none() {
-            continue;
+    }
+
+    // Only reached when no trailing phrase matched — leading phrases
+    // ("in 8 days take out trash") are the reverse ordering, tried second
+    // rather than merged into one combined pass, so a title that could
+    // arguably read either way (rare, but not impossible) keeps favoring
+    // the trailing form this parser has always preferred.
+    for (regex, wants_date, wants_time) in [
+        (&*DATE_THEN_TIME_LEADING, true, true),
+        (&*TIME_THEN_DATE_LEADING, true, true),
+        (&*DATE_ONLY_LEADING, true, false),
+        (&*TIME_ONLY_LEADING, false, true),
+    ] {
+        if let Some(parsed) = try_match(trimmed, regex, wants_date, wants_time, today, true) {
+            return parsed;
         }
-        let whole = caps.get(0).expect("group 0 always matches");
-        return ParsedTitle {
-            cleaned_title: trimmed[..whole.start()].trim_end().to_string(),
-            source_phrase: Some(whole.as_str().to_string()),
-            source_range: Some(whole.start()..whole.end()),
-            date,
-            time,
-        };
     }
 
     ParsedTitle {
         cleaned_title: trimmed.to_string(),
         ..Default::default()
     }
+}
+
+fn try_match(
+    trimmed: &str,
+    regex: &Regex,
+    wants_date: bool,
+    wants_time: bool,
+    today: NaiveDate,
+    leading: bool,
+) -> Option<ParsedTitle> {
+    let caps = regex.captures(trimmed)?;
+    let date = wants_date
+        .then(|| caps.name("date").and_then(|m| parse_date_phrase(m.as_str(), today)))
+        .flatten();
+    let time = wants_time
+        .then(|| caps.name("time").and_then(|m| parse_time_phrase(m.as_str())))
+        .flatten();
+    // A phrase that matched the pattern but failed its own semantic check
+    // (an impossible date, a month/day already past with no explicit year)
+    // is ambiguous, not a partial match — PRD principle 3 says don't
+    // guess, so fall through to unrecognized rather than salvaging
+    // whichever half did parse.
+    if wants_date && date.is_none() {
+        return None;
+    }
+    if wants_time && time.is_none() {
+        return None;
+    }
+    let whole = caps.get(0).expect("group 0 always matches");
+    let cleaned_title = if leading {
+        trimmed[whole.end()..].trim_start().to_string()
+    } else {
+        trimmed[..whole.start()].trim_end().to_string()
+    };
+    Some(ParsedTitle {
+        cleaned_title,
+        source_phrase: Some(whole.as_str().trim_end().to_string()),
+        source_range: Some(whole.start()..whole.end()),
+        date,
+        time,
+    })
 }
 
 static RE_TODAY_TOMORROW: LazyLock<Regex> =
@@ -427,6 +494,71 @@ mod tests {
         // the trailing "tomorrow" is.
         let result = parse("today's plan tomorrow", date(2026, 8, 18));
         assert_eq!(result.cleaned_title, "today's plan");
+        assert_eq!(result.date, Some(date(2026, 8, 19)));
+    }
+
+    // Leading-phrase recognition — added for the exact user-reported case:
+    // "in 8 days take out trash" (the date phrase said first, task second)
+    // silently did nothing before this, since the parser only ever checked
+    // the end of the title. PRD §6.4 only documents the trailing form, but
+    // nothing in its own "must not guess silently" principle is about
+    // *where in the sentence* a clear phrase sits — the ambiguity that
+    // principle guards against is unclear dates, not phrase position.
+
+    #[test]
+    fn a_leading_relative_days_phrase_is_recognized() {
+        let result = parse("in 8 days take out trash", date(2026, 8, 18));
+        assert_eq!(result.cleaned_title, "take out trash");
+        assert_eq!(result.date, Some(date(2026, 8, 26)));
+        assert_eq!(result.source_phrase.as_deref(), Some("in 8 days"));
+    }
+
+    #[test]
+    fn a_leading_time_phrase_is_recognized() {
+        let result = parse("8am call the dentist", date(2026, 8, 18));
+        assert_eq!(result.cleaned_title, "call the dentist");
+        assert_eq!(result.time, Some(time(8, 0)));
+    }
+
+    #[test]
+    fn a_leading_date_and_time_together_are_recognized() {
+        let result = parse("8am tomorrow water the plants", date(2026, 8, 18));
+        assert_eq!(result.cleaned_title, "water the plants");
+        assert_eq!(result.date, Some(date(2026, 8, 19)));
+        assert_eq!(result.time, Some(time(8, 0)));
+    }
+
+    #[test]
+    fn a_trailing_phrase_still_wins_over_a_leading_looking_prefix() {
+        // "in 8 days" at the start reads like a leading phrase, but the
+        // trailing "tomorrow" is checked first — same reasoning `parse`'s
+        // own doc gives for trying trailing patterns before leading ones.
+        let result = parse("in 8 days water the plants tomorrow", date(2026, 8, 18));
+        assert_eq!(result.cleaned_title, "in 8 days water the plants");
+        assert_eq!(result.date, Some(date(2026, 8, 19)));
+    }
+
+    #[test]
+    fn a_leading_possessive_is_not_mistaken_for_a_date_phrase() {
+        // "Friday's" has no whitespace after "Friday" — only real
+        // whitespace after the phrase counts as a boundary, not just a
+        // regex word boundary (which sits right before the apostrophe
+        // too), specifically so this doesn't get silently mangled into a
+        // task titled "'s report is due" scheduled for Friday.
+        let result = parse("Friday's report is due", date(2026, 8, 18));
+        assert_eq!(result.cleaned_title, "Friday's report is due");
+        assert_eq!(result.date, None);
+    }
+
+    #[test]
+    fn a_leading_phrase_with_no_task_text_after_it_is_not_matched() {
+        // "tomorrow" alone (nothing follows) is still the *trailing*
+        // pattern's job, not the leading one's — the leading patterns all
+        // require real text after them (parse::DATE_ONLY_LEADING's own
+        // mandatory \s+), so a bare date phrase doesn't fall through to an
+        // empty cleaned_title via the wrong code path.
+        let result = parse("tomorrow", date(2026, 8, 18));
+        assert_eq!(result.cleaned_title, "");
         assert_eq!(result.date, Some(date(2026, 8, 19)));
     }
 }
