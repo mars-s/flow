@@ -217,6 +217,34 @@ pub const TRANSITION: Duration = Duration::from_millis(180);
 /// settled before the pointer arrives anywhere else.
 pub const PANEL_SLIDE: Duration = Duration::from_millis(200);
 
+/// How long the "just completed" checkbox pop takes — short and punchy
+/// rather than a settle, since it's acknowledging one decisive action, not
+/// introducing new content the way [`REVEAL`] does.
+pub const POP: Duration = Duration::from_millis(220);
+
+/// A back-out overshoot curve: 0 at `t=0`, past 1.0 partway through, back to
+/// exactly 1.0 at `t=1`. The standard "easeOutBack" formula — a cheap,
+/// honest stand-in for a real damped spring when only one scalar (a size, a
+/// scale factor) is being driven, not full spring physics.
+///
+/// **Not an easing function** — never pass this to `Animation::
+/// with_easing()`. GPUI's own animation driver `debug_assert!`s that an
+/// easing function's output stays within `0.0..=1.0` (`elements/animation.rs`
+/// checks this on every frame in debug builds, which is exactly what `bun
+/// ./scripts/dev.ts` runs), and this curve deliberately violates that by
+/// design — the overshoot *is* the pop. Call it from inside a
+/// `with_animation` *animator* closure instead, on the delta GPUI already
+/// handed you post-easing (already safely `0.0..=1.0`), to shape a concrete
+/// style value (a `px()` size, a `Transformation::scale()`) — the same
+/// "animate a real box property, not a transform" technique this file
+/// already leans on elsewhere for anything a plain `Div` can't scale.
+pub fn overshoot(delta: f32) -> f32 {
+    const C1: f32 = 1.702;
+    const C3: f32 = C1 + 1.0;
+    let x = delta - 1.0;
+    1.0 + C3 * x * x * x + C1 * x * x
+}
+
 /// A one-shot value slide, evaluated from `render` instead of wrapped around
 /// an element — generic over whatever f32 is being animated (a panel's
 /// width, a segmented control's thumb position, ...).

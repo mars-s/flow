@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use gpui::{
     Animation, AnimationExt, AnyElement, ClickEvent, Context, Entity, FocusHandle, IntoElement,
-    KeyDownEvent, ListAlignment, ListState, ParentElement, SharedString, Styled, Window, div,
-    ease_out_quint, list, prelude::*, px,
+    KeyDownEvent, ListAlignment, ListState, ParentElement, SharedString, Styled, Transformation,
+    Window, div, ease_out_quint, list, prelude::*, px, size,
 };
 
 use super::Flow;
@@ -1416,7 +1416,31 @@ fn task_list(
                             )
                             .child(
                                 list(list_state.clone(), move |ix, _window, cx| {
-                                    let task = tasks[ix].clone();
+                                    // A real, observed crash (`panic_bounds_check`
+                                    // inside this exact closure, via GPUI's own
+                                    // `list::StateInner::layout_items`): the
+                                    // `ListState`'s item count and this
+                                    // closure's captured `tasks` can momentarily
+                                    // disagree — `list()` schedules its own
+                                    // repaint passes independently of when
+                                    // `sync_task_list_state`'s `splice` and this
+                                    // closure's capture actually land in the
+                                    // same frame, and a with_animation anywhere
+                                    // on screen (this row's own checkbox pop,
+                                    // its collapse fade, ...) keeps requesting
+                                    // fresh frames the whole time an item is
+                                    // completing. `tasks[ix]` trusted the two
+                                    // always agreeing; they don't always. A
+                                    // stale render (skip this frame's row,
+                                    // corrected on the very next one — a real
+                                    // fetch always follows) beats a crash.
+                                    let Some(task) = tasks.get(ix).cloned() else {
+                                        crate::debug_log!(
+                                            "task_list: row {ix} requested past tasks.len()={} — rendering empty for this frame",
+                                            tasks.len()
+                                        );
+                                        return div().h(px(40.0)).w_full().into_any_element();
+                                    };
                                     let is_expanded =
                                         list_expanded.as_deref() == Some(task.id.as_str());
                                     let is_selected = selected.contains(&task.id);
@@ -1865,6 +1889,27 @@ fn bulk_action_bar(count: usize, theme: Theme, cx: &mut Context<Flow>) -> AnyEle
         .into_any_element()
 }
 
+/// A checkmark that pops in with a real spring-like overshoot (`ui::motion::
+/// overshoot`) instead of appearing flat — `Svg::with_transformation` gives
+/// icons a genuine scale transform, unlike a plain `Div` (see that
+/// function's own doc for why nothing else in this file gets one). Mounts
+/// fresh each time a row's checkbox becomes checked (it's a `.when(checked,
+/// ...)` child, so it doesn't exist in the tree at all while unchecked),
+/// which is what lets `with_animation` time this from a real 0 rather than
+/// needing a second id to distinguish "just checked" from "already was."
+fn animated_check(task_id: &str, size_px: f32, color: gpui::Hsla) -> AnyElement {
+    crate::ui::icon("icons/check.svg", size_px, color)
+        .with_animation(
+            SharedString::from(format!("task-{task_id}-check-pop")),
+            Animation::new(motion::POP).with_easing(ease_out_quint()),
+            |element, delta| {
+                let scale = motion::overshoot(delta);
+                element.opacity(delta.min(1.0)).with_transformation(Transformation::scale(size(scale, scale)))
+            },
+        )
+        .into_any_element()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_task_row(
     task: Task,
@@ -2080,8 +2125,23 @@ fn render_task_row(
                     cx.stop_propagation();
                 }))
                 .when(checked, |circle| {
-                    circle.child(crate::ui::icon("icons/check.svg", 11.0, theme.accent))
-                }),
+                    circle.child(animated_check(&task.id, 11.0, theme.accent))
+                })
+                .with_animation(
+                    // Keyed on `checked` itself, not just the task id: the
+                    // circle stays mounted either way (only its child icon
+                    // comes and goes), so without this the id wouldn't
+                    // change and `with_animation` would have nothing to
+                    // treat as a fresh mount to time a new pop from — the
+                    // same "distinct id per state" reasoning the row's own
+                    // completing/fade split already uses just below.
+                    SharedString::from(format!("task-{}-check-circle-{checked}", task.id)),
+                    Animation::new(motion::POP).with_easing(ease_out_quint()),
+                    |element, delta| {
+                        let scale = motion::overshoot(delta);
+                        element.w(px(17.0 * scale)).h(px(17.0 * scale))
+                    },
+                ),
         )
         .child(
             div()
