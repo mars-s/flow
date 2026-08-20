@@ -135,6 +135,16 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Bare-space-to-open-Capture** (`5b4364e`): mirrors the GPUI app's
+  own `handle_space_capture_action` — scoped to task views only, and
+  skipped when any input/textarea/contenteditable already has focus
+  (which also covers the schedule picker's own auto-focused input for
+  free). Found via a sweep of `render.rs`'s wired `on_action` handlers
+  against what's Waku-inherited dead code (`OpenSettings`/
+  `ToggleSidebar` menu items have no handler at all in Flow, not a
+  gap) versus real: only `NewTask` (already ported) and
+  `SpaceCapture` turned out to be real, live Flow behavior.
+
 - **Fixed Today silently excluding overdue tasks; added the calendar-
   glance card** (`fef5b8e`): a real bug found by re-checking
   `sidebar.rs`'s own Today description ("Overdue and today's active
