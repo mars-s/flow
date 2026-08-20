@@ -136,6 +136,18 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Two real AI bugs found by re-checking, not just building**
+  (`2c6caa3` in the prototype): (1) "Test connection" required an API
+  key just to try, blocking a local no-auth server (Ollama, LM
+  Studio) — an explicit target use case `ai.rs`'s own doc comment
+  names. Only `baseUrl` required now. (2) Both Auto-mode blocks (Today
+  briefing, Checklist expansion) had no guard against firing with
+  `apiKey`/`model` unset — turning AI on and setting either to Auto
+  with nothing configured meant every Calendar visit / every task
+  expanded fired a doomed API call against the default
+  `api.openai.com`, same failure every time, no way to stop it short
+  of disabling the feature. Both now require `apiKey && model` first.
+
 - **Second real AI block: Checklist expansion** (`b0fe349` in the
   prototype): same `useAiConfig`/`useAiFeatureState` pattern Today
   briefing established. Manual mode shows suggestions as a dismissible
