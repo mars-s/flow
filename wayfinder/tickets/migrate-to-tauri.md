@@ -133,6 +133,40 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   Tauri has its own bundler and updater plugin; not yet decided whether
   to adopt Tauri's or keep Sparkle wired to a Tauri-built binary.
 
+## GPUI archived (2026-08-20)
+
+Explicit user decision: "Cool if every GPUI thing is done then archive the
+GPUI code we don't really need that anymore and then continue building on
+this new code" — the direct confirmation this ticket had been waiting for
+since the "Explicitly deferred" entry below was written. By this point the
+gap that deferral was based on had closed: task CRUD, Calendar (all four
+views, real navigation, per-calendar show/hide), a Things-3-style checklist,
+bulk actions, undo, the Completed section, and PRD-mandated behaviors like
+the complete-parent-with-open-subtasks confirm are all live in the Tauri app.
+
+Scope and mechanics were both confirmed directly rather than assumed (this
+repo turned out to be a monorepo — `apps/web`, `packages/flow-client`, `db/`,
+`website/` alongside the GPUI app — worth checking rather than guessing
+which parts "GPUI code" meant): just `src/`, `resources/`, and the root
+Cargo package, not the rest of the repo. `crates/flow-data`/`crates/flow-
+core` are untouched — `flow-tauri-prototype`'s own `Cargo.toml` has a path
+dependency straight into `../../flow/crates/flow-data`, and moving it would
+break that build (verified with a real `cargo check` from the Tauri repo
+after the change, not assumed safe). Mechanically: tagged the pre-archive
+commit (`gpui-app-archived-2026-08-20`, pushed to origin — a permanent full
+recovery point, `git checkout` restores the exact GPUI app state), then
+removed `src/`/`resources/` from the working tree rather than git-mv-ing
+into an in-repo archive folder. Root `Cargo.toml` rewritten from a combined
+workspace+root-package manifest into a pure virtual workspace; `cargo check
+--workspace` and `cargo test --workspace` both verified clean (46/46) with
+the GPUI package gone. `AGENTS.md`/`CLAUDE.md`, `README.md`, `PRODUCT.md`
+rewritten to point at the archive and at `flow-tauri-prototype` as where
+development actually happens now.
+
+This ticket stays in `flow-tauri-prototype`'s own commit history references
+below, but its home going forward is arguably that repo, not this one — this
+repo no longer builds or ships the app it describes.
+
 ## Progress log (most recent first)
 
 - **Enforced PRD §6.2/§11: can't complete a parent with open subtasks**
