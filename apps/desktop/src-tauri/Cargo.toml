@@ -1,0 +1,41 @@
+[package]
+name = "flow-tauri-prototype"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "flow_tauri_prototype_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Flow's real task store — see /Users/avi/Developer/vibe/flow/wayfinder/
+# tickets/migrate-to-tauri.md for why this is a path dep across two
+# separate repos (deliberate, not a mistake) rather than one workspace:
+# this app and the GPUI app it's migrating away from are meant to keep
+# existing independently for the length of the migration.
+flow-data = { path = "../../flow/crates/flow-data" }
+chrono = "0.4"
+tokio = { version = "1", features = ["rt"] }
+# AI settings' "test connection" model picker and the first real AI
+# block (Today briefing) both talk to a user-configured OpenAI-
+# compatible endpoint. Done from Rust via reqwest, not a plain frontend
+# fetch() — a browser engine (Tauri's webview included) still enforces
+# CORS on cross-origin fetch even with csp: null, and most third-party
+# OpenAI-compatible providers don't set permissive CORS headers for an
+# arbitrary app origin. reqwest has no such restriction.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+

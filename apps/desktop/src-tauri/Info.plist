@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- EventKit calendar connect (PRD §6.5): without these, macOS never
+         shows the permission dialog at all — calendar_request_access's
+         requestFullAccessToEvents call just silently returns denied (or
+         crashes on 13.x) instead of prompting. tauri-build merges this
+         file's entries into the generated Info.plist automatically.
+         Both keys are required — macOS 14+'s full-access API reads the
+         Full key, while EKEventStore falls back to the legacy Write key
+         on 13.x. Same copy the GPUI app's own resources/Info.plist uses. -->
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Flow shows your calendar events alongside your tasks. Access is read-only — Flow never creates, edits, or deletes anything in your calendar.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Flow shows your calendar events alongside your tasks. Access is read-only — Flow never creates, edits, or deletes anything in your calendar.</string>
+</dict>
+</plist>

@@ -1,0 +1,406 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.row:hover {
+  background: var(--overlay);
+}
+
+.row.selected {
+  background: var(--overlay-strong);
+}
+
+.row:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.checkbox {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.checkbox.small {
+  width: 14px;
+  height: 14px;
+}
+
+.checkbox:hover {
+  border-color: var(--accent);
+}
+
+.checkbox.checked {
+  border-color: var(--accent);
+}
+
+.check-icon {
+  width: 9px;
+  height: 9px;
+}
+
+.row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-title.checked {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.row-schedule {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.row-indicators {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-ghost);
+}
+
+.row-indicator {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-indicator-icon {
+  flex: none;
+}
+
+.card {
+  width: 100%;
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  outline: none;
+  border-radius: 4px;
+}
+
+.card-header:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: text;
+  border-radius: 4px;
+}
+
+.card-title-edit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Same dual-layer highlight technique Capture's own field uses: an
+   invisible (color: transparent) input stacked on top of a styled
+   overlay showing the real, visible text with the <mark>-wrapped
+   recognized phrase — the input contributes only its caret and editing,
+   the overlay underneath is what's actually seen. */
+.card-title-input-wrap {
+  position: relative;
+  min-height: 18px;
+}
+
+.card-title-highlight-layer,
+.card-title-input {
+  position: absolute;
+  inset: 0;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  white-space: pre;
+}
+
+.card-title-highlight-layer {
+  color: var(--text);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.card-title-highlight-layer mark {
+  background: var(--accent-wash);
+  color: var(--accent);
+  border-radius: 3px;
+}
+
+.card-title-input {
+  width: 100%;
+  color: transparent;
+  caret-color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+}
+
+.card-title-preview {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.card-note {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  width: 100%;
+  min-height: 20px;
+}
+
+.card-note::placeholder {
+  color: var(--text-ghost);
+}
+
+.card-note-view {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  width: 100%;
+  min-height: 20px;
+  line-height: 1.4;
+  cursor: text;
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.card-note-view.placeholder {
+  color: var(--text-ghost);
+}
+
+.card-note-view:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 4px;
+}
+
+.task-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.task-link:hover {
+  opacity: 0.85;
+}
+
+/* Things 3-style checklist: no section header/count label (the
+   "Checklist" pill's own label carries the count, and disappears
+   entirely once a subtask exists — direct user request). Rows get a
+   thin horizontal divider, not a connector between checkboxes — a real
+   Things 3 screenshot showed these as row borders (the first attempt
+   at this read "lines between the subtasks" as vertical and got it
+   wrong). No divider under the last row/open draft, since there's
+   nothing below it to separate from. */
+.card-subtasks {
+  display: flex;
+  flex-direction: column;
+}
+
+.subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.subtask-row:last-child {
+  border-bottom: none;
+}
+
+.subtask-checkbox {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: var(--raised);
+  cursor: pointer;
+  outline: none;
+}
+
+.subtask-checkbox-icon {
+  color: var(--text-ghost);
+}
+
+.subtask-checkbox-icon.checked {
+  color: var(--accent);
+}
+
+.subtask-checkbox:hover .subtask-checkbox-icon:not(.checked) {
+  color: var(--text-secondary);
+}
+
+.subtask-checkbox-icon.draft-icon {
+  flex: none;
+  opacity: 0.4;
+  background: var(--raised);
+  position: relative;
+}
+
+.subtask-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: text;
+  border-radius: 3px;
+}
+
+.subtask-title.done {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.subtask-title-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+}
+
+.card-complete-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--overlay);
+}
+
+.card-complete-confirm-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.card-complete-confirm-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-complete-confirm-cancel,
+.card-complete-confirm-yes {
+  border: none;
+  background: transparent;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+
+.card-complete-confirm-cancel {
+  color: var(--text-secondary);
+}
+
+.card-complete-confirm-cancel:hover,
+.card-complete-confirm-cancel:focus-visible {
+  background: var(--overlay-strong);
+}
+
+.card-complete-confirm-yes {
+  color: var(--accent);
+}
+
+.card-complete-confirm-yes:hover,
+.card-complete-confirm-yes:focus-visible {
+  background: var(--overlay-strong);
+}
+
+.card-pills {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.pill-anchor {
+  position: relative;
+  display: flex;
+}
+
+.pill {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: none;
+  background: var(--overlay);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  outline: none;
+}
+
+.pill:hover {
+  background: var(--overlay-strong);
+  color: var(--text);
+}
+
+.pill:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.pill.danger {
+  background: rgba(255, 107, 107, 0.14);
+  color: var(--danger);
+}
+
+.pill.danger:hover {
+  background: rgba(255, 107, 107, 0.22);
+}
