@@ -89,6 +89,20 @@ pub struct Task {
     pub updated_at: String,
 }
 
+/// One parent's open/total subtask counts — not a field on `Task` itself
+/// (that would mean threading a correlated subquery through every query
+/// that already returns a `Task`, GPUI's own `list_view`/`list_subtasks`
+/// included, for a UI-only affordance neither app's row rendering needed
+/// until now). A separate one-shot query instead: a collapsed row's
+/// "N/M subtasks" badge (direct user request, matching Things 3's own
+/// row indicators) reads this by `parent_id`, not by widening `Task`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SubtaskCount {
+    pub parent_id: String,
+    pub open: i64,
+    pub total: i64,
+}
+
 impl Task {
     fn from_row(row: &Row) -> Result<Self> {
         Ok(Self {
@@ -193,6 +207,9 @@ enum Command {
     ListSubtasks {
         parent_id: String,
         reply: mpsc::Sender<Result<Vec<Task>>>,
+    },
+    SubtaskCounts {
+        reply: mpsc::Sender<Result<Vec<SubtaskCount>>>,
     },
 }
 
@@ -436,6 +453,19 @@ impl Db {
             .context("database thread is gone")?;
         rx.recv().context("database thread dropped the reply")?
     }
+
+    /// Every parent's open/total subtask counts in one query, not gated
+    /// to a particular view or fetched per-parent — the same "resolve the
+    /// whole collection up front" pattern `list_view` itself follows, for
+    /// a collapsed row's own subtask-count badge across every view at
+    /// once.
+    pub fn subtask_counts(&self) -> Result<Vec<SubtaskCount>> {
+        let (reply, rx) = mpsc::channel();
+        self.commands
+            .send(Command::SubtaskCounts { reply })
+            .context("database thread is gone")?;
+        rx.recv().context("database thread dropped the reply")?
+    }
 }
 
 fn database_path() -> Result<PathBuf> {
@@ -537,6 +567,9 @@ fn run(path: PathBuf, commands: mpsc::Receiver<Command>, ready: mpsc::Sender<Res
             }
             Command::ListSubtasks { parent_id, reply } => {
                 let _ = reply.send(runtime.block_on(list_subtasks(&conn, parent_id)));
+            }
+            Command::SubtaskCounts { reply } => {
+                let _ = reply.send(runtime.block_on(subtask_counts(&conn)));
             }
         }
     }
@@ -1022,6 +1055,25 @@ async fn list_subtasks(conn: &turso::Connection, parent_id: String) -> Result<Ve
     run_task_query(conn, &sql, (parent_id,)).await
 }
 
+async fn subtask_counts(conn: &turso::Connection) -> Result<Vec<SubtaskCount>> {
+    let sql = "SELECT parent_id, \
+               SUM(CASE WHEN completed_at IS NULL THEN 1 ELSE 0 END), \
+               COUNT(*) \
+               FROM tasks \
+               WHERE parent_id IS NOT NULL AND deleted_at IS NULL \
+               GROUP BY parent_id";
+    let mut rows = conn.query(sql, ()).await.context("counting subtasks")?;
+    let mut counts = Vec::new();
+    while let Some(row) = rows.next().await.context("reading a subtask-count row")? {
+        counts.push(SubtaskCount {
+            parent_id: row.get::<String>(0)?,
+            open: row.get::<i64>(1)?,
+            total: row.get::<i64>(2)?,
+        });
+    }
+    Ok(counts)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1368,5 +1420,27 @@ mod tests {
         let subtasks = db.list_subtasks(&parent.id).expect("list_subtasks");
         assert_eq!(subtasks.len(), 1, "completed subtasks stay visible under the parent");
         assert!(subtasks[0].completed_at.is_some());
+    }
+
+    #[test]
+    fn subtask_counts_reports_open_and_total_per_parent() {
+        let db = open_test_db();
+        let with_subtasks = db.create_task("Plan trip").expect("create");
+        let bare = db.create_task("Water the plants").expect("create");
+        let done = db.create_subtask(&with_subtasks.id, "Book flights").expect("create_subtask");
+        db.create_subtask(&with_subtasks.id, "Pack bags").expect("create_subtask");
+        db.set_completed(&done.id, true).expect("complete should succeed");
+
+        let counts = db.subtask_counts().expect("subtask_counts");
+        let entry = counts
+            .iter()
+            .find(|count| count.parent_id == with_subtasks.id)
+            .expect("a count entry for the task with subtasks");
+        assert_eq!(entry.total, 2);
+        assert_eq!(entry.open, 1, "one of the two subtasks was completed");
+        assert!(
+            counts.iter().all(|count| count.parent_id != bare.id),
+            "a task with no subtasks gets no entry at all, not a zero-count one"
+        );
     }
 }
