@@ -135,6 +135,43 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **First real Flow.app shipped to /Applications** (`d653747` in the
+  prototype): explicit user request, not a ticket-driven step —
+  `tauri.release.conf.json` overrides productName/identifier/window
+  title to "Flow"/`com.avi.flow` via `tauri build`'s own `--config`
+  merge (dev build stays "Flow Debug"/`com.avi.flow-tauri-prototype`,
+  unchanged), built and installed to `/Applications/Flow.app`,
+  quarantine cleared, launches and is Spotlight-findable. Explicit
+  user decision on data: the release build keeps its own separate
+  database rather than pointing at GPUI Flow's real `flow.db` —
+  running two independent processes against the same SQLite file was
+  the risk not worth taking. Nothing from GPUI carries over
+  automatically; `com.avi.flow/flow.db` starts clean. This is the
+  actual daily-use app now, distinct from the "Flow Debug" live-
+  reload one this whole ticket's dev loop targets — rebuilding it
+  after further changes is a manual `tauri build --config
+  src-tauri/tauri.release.conf.json` + reinstall, not automatic.
+
+- **Fixed the Connect Calendar prompt never appearing** (`7c27b38`):
+  direct user report. Root cause, two parts: (1) the bundle had
+  neither `NSCalendarsUsageDescription` nor
+  `NSCalendarsFullAccessUsageDescription` in Info.plist — macOS won't
+  show the EventKit permission dialog at all without one, it just
+  silently denies. Added `src-tauri/Info.plist` (tauri-build merges it
+  automatically), same copy the GPUI app's own Info.plist uses. (2)
+  the dev session had been running bare `bun run tauri dev`, which
+  launches the raw unbundled binary with no `.app` wrapper for macOS
+  to read an Info.plist from at all, even with the keys in place —
+  switched to `scripts/dev-app.ts`'s own bundled watcher.
+
+- **Links highlight and open** (`7f72d3e`): direct user report
+  ("links should highlight"), not a GPUI gap — GPUI has no link
+  detection at all. New `lib/linkify.tsx` renders http(s) URLs in task
+  titles/notes as clickable links opening in the real browser via
+  `tauri-plugin-opener`. The note field became a click-to-edit view/
+  edit toggle to make this possible — a native `<textarea>` can't
+  render part of its content as a link.
+
 - **Removed the dead Move/Flag pills** (`fb4eb74`): neither
   corresponds to a real Flow feature — grepped `tasks.rs`/`db.rs` for
   any flag/priority/move concept and found none; the GPUI detail card
