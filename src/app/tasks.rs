@@ -1,7 +1,7 @@
 //! Milestone 1: the five task views (Inbox, Today, Upcoming, Anytime,
 //! Someday), all backed by `crate::db::View` and sharing one row renderer.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -1139,6 +1139,21 @@ impl Flow {
             // back to yet.
             Query::Pending | Query::Missing(_) => self.last_tasks.get(&view).cloned(),
         };
+        // Precomputed here, not lazily via `entity.update` down inside
+        // `render_upcoming_section`/`completed_section` — this whole
+        // render is already running inside this exact entity's own
+        // `Context`, so `entity.update(cx, ...)` on it mid-render double-
+        // leases the entity and panics (`gpui::app::entity_map::
+        // double_lease_panic`, a real crash this pass found and fixed, not
+        // a hypothetical). `self` is available right here, so grab every
+        // row's focus handle up front and hand the map down instead.
+        let row_focuses: HashMap<String, FocusHandle> = tasks
+            .iter()
+            .flat_map(|list| list.iter())
+            .map(|task| (task.id.clone(), self.row_focus(&task.id, cx)))
+            .collect();
+        let completed_focuses: HashMap<String, FocusHandle> =
+            completed.iter().map(|task| (task.id.clone(), self.completed_row_focus(&task.id, cx))).collect();
         // Captured after the prune above, not before it — otherwise this
         // render would still carry an id the fresh fetch just confirmed
         // gone, for one extra frame.
@@ -1181,6 +1196,8 @@ impl Flow {
                 selected,
                 list_state,
                 scrollbar_state,
+                row_focuses,
+                completed_focuses,
                 completed_clear_focus,
                 detail_delete_focus,
                 schedule_pill_focus,
@@ -1238,6 +1255,8 @@ fn task_list(
     selected: HashSet<String>,
     list_state: Option<ListState>,
     scrollbar_state: Option<Rc<crate::ui::scrollbar::ScrollbarState>>,
+    row_focuses: HashMap<String, FocusHandle>,
+    completed_focuses: HashMap<String, FocusHandle>,
     completed_clear_focus: FocusHandle,
     detail_delete_focus: FocusHandle,
     schedule_pill_focus: FocusHandle,
@@ -1302,7 +1321,7 @@ fn task_list(
                                 date,
                                 group,
                                 view,
-                                cx.entity(),
+                                &row_focuses,
                                 &expanded,
                                 &selected,
                                 &completing_ids,
@@ -1471,7 +1490,7 @@ fn task_list(
                     .child(completed_section(
                         view,
                         completed,
-                        cx.entity(),
+                        &completed_focuses,
                         completed_expanded,
                         expanded,
                         schedule_picker_open,
@@ -1525,7 +1544,7 @@ fn render_upcoming_section(
     date: String,
     tasks: Vec<Task>,
     view: View,
-    entity: Entity<Flow>,
+    row_focuses: &HashMap<String, FocusHandle>,
     expanded: &Option<String>,
     selected: &HashSet<String>,
     completing_ids: &HashSet<String>,
@@ -1581,7 +1600,15 @@ fn render_upcoming_section(
             // reuses the same pruned `row_focuses` map the flat views'
             // rows already share, keyed by task id regardless of which
             // view a task is currently visible in.
-            let focus = entity.update(cx, |flow, cx| flow.row_focus(&task.id, cx));
+            //
+            // Looked up from the map `render_task_view` built with its own
+            // `&mut self`, not fetched here via `entity.update(cx, ...)` —
+            // this whole render is already inside that same entity's
+            // `Context`, so re-entering it mid-render double-leases it and
+            // panics. The fallback only matters if a task briefly outruns
+            // the precomputed map (shouldn't happen since both are built
+            // from the same fetch), and costs a fresh handle, not a crash.
+            let focus = row_focuses.get(&task.id).cloned().unwrap_or_else(|| cx.focus_handle());
             render_task_row(
                 task,
                 view,
@@ -1618,7 +1645,7 @@ fn render_upcoming_section(
 fn completed_section(
     view: View,
     completed: Arc<Vec<Task>>,
-    entity: Entity<Flow>,
+    completed_focuses: &HashMap<String, FocusHandle>,
     expanded: bool,
     task_expanded: Option<String>,
     schedule_picker_open: bool,
@@ -1663,8 +1690,12 @@ fn completed_section(
                         // (this section's own max-height scroll, not a
                         // virtualized list), same reasoning for why a
                         // `completed_row_focus` lookup per row here is
-                        // cheap rather than new per-frame I/O.
-                        let focus = entity.update(cx, |flow, cx| flow.completed_row_focus(&task.id, cx));
+                        // cheap rather than new per-frame I/O. Looked up
+                        // from the map `render_task_view` built with its
+                        // own `&mut self` — see `render_upcoming_section`'s
+                        // matching comment for why this can't fetch it via
+                        // `entity.update` mid-render instead.
+                        let focus = completed_focuses.get(&task.id).cloned().unwrap_or_else(|| cx.focus_handle());
                         render_task_row(
                             task,
                             view,
