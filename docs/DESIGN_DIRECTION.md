@@ -160,7 +160,11 @@ left empty. This is a context pane, not an appointment editor.
   eases down in step with the fade, borrowing the "animate a concrete box
   property, not a transform" technique the row's own collapse animation
   already established for height.
-- Sidebar selection: 120 ms background-color transition.
+- Sidebar selection: instant background-color switch, no transition —
+  **revised**, matching native macOS list-selection convention (Mail,
+  Finder) rather than the 120 ms fade this line originally called for.
+  A deliberate call (`docs/HANDOFF.md`'s motion-pass entry), not a gap:
+  `render_nav_row`'s `.when(selected, ...)` has never animated this.
 - No perpetual motion, parallax, magnetic effects, or animated gradients.
 - `prefers-reduced-motion` removes transforms and limits transitions to 100 ms.
 
