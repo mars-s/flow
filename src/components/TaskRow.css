@@ -308,6 +308,60 @@
   padding: 0;
 }
 
+.card-complete-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--overlay);
+}
+
+.card-complete-confirm-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.card-complete-confirm-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-complete-confirm-cancel,
+.card-complete-confirm-yes {
+  border: none;
+  background: transparent;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+
+.card-complete-confirm-cancel {
+  color: var(--text-secondary);
+}
+
+.card-complete-confirm-cancel:hover,
+.card-complete-confirm-cancel:focus-visible {
+  background: var(--overlay-strong);
+}
+
+.card-complete-confirm-yes {
+  color: var(--accent);
+}
+
+.card-complete-confirm-yes:hover,
+.card-complete-confirm-yes:focus-visible {
+  background: var(--overlay-strong);
+}
+
 .card-pills {
   display: flex;
   gap: 6px;

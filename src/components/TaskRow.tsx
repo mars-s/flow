@@ -25,6 +25,9 @@ type Props = {
   completing: boolean;
   subtasks: Task[];
   subtaskCount?: SubtaskCount;
+  pendingCompleteConfirm: boolean;
+  onConfirmComplete: () => void;
+  onCancelCompleteConfirm: () => void;
   onToggleExpanded: () => void;
   onComplete: () => void;
   onRename: (id: string, title: string) => void;
@@ -236,6 +239,9 @@ export function TaskRow({
   completing,
   subtasks,
   subtaskCount,
+  pendingCompleteConfirm,
+  onConfirmComplete,
+  onCancelCompleteConfirm,
   onToggleExpanded,
   onComplete,
   onRename,
@@ -391,6 +397,24 @@ export function TaskRow({
                   onClose={() => setDraftOpen(false)}
                 />
               )}
+            </div>
+          )}
+
+          {/* PRD §6.2/§11: "Completing a parent with incomplete children
+              asks: 'Complete parent and all subtasks' or 'Cancel.' It
+              never leaves a completed parent with open children" — same
+              copy the GPUI app's own confirm banner uses. */}
+          {pendingCompleteConfirm && (
+            <div className="card-complete-confirm">
+              <span className="card-complete-confirm-text">Complete parent and all subtasks?</span>
+              <div className="card-complete-confirm-actions">
+                <button type="button" className="card-complete-confirm-cancel" onClick={onCancelCompleteConfirm}>
+                  Cancel
+                </button>
+                <button type="button" className="card-complete-confirm-yes" onClick={onConfirmComplete}>
+                  Complete all
+                </button>
+              </div>
             </div>
           )}
 

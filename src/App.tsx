@@ -189,6 +189,44 @@ export default function App() {
   }, [viewTasks, destination]);
   const upcomingTasks = viewTasks.Upcoming;
 
+  // PRD §6.2/§11: "Completing a parent with incomplete children asks:
+  // 'Complete parent and all subtasks' or 'Cancel.' It never leaves a
+  // completed parent with open children" — real gap found by re-checking
+  // tasks.rs's own request_complete/confirm_complete_with_subtasks
+  // against Tauri: nothing here checked for open subtasks at all before
+  // completing a parent outright. subtaskCounts already has each task's
+  // open count with no extra fetch (unlike the GPUI app's own
+  // request_complete_from_row, which has to background-fetch subtasks
+  // per click since its compact row never loads them).
+  const [pendingCompleteConfirm, setPendingCompleteConfirm] = useState<string | null>(null);
+
+  const requestComplete = (id: string) => {
+    const openCount = subtaskCounts[id]?.open ?? 0;
+    if (openCount > 0) {
+      // Expands the card (same as the GPUI app's own request_complete_
+      // from_row) so the confirm banner has somewhere to live and its
+      // own subtask list loads for confirmCompleteWithSubtasks to use.
+      setExpanded(id);
+      setPendingCompleteConfirm(id);
+    } else {
+      complete(id);
+    }
+  };
+
+  const cancelCompleteConfirm = () => setPendingCompleteConfirm(null);
+
+  const confirmCompleteWithSubtasks = (id: string) => {
+    setPendingCompleteConfirm(null);
+    const openIds = subtasks.filter((task) => !task.completed_at).map((task) => task.id);
+    Promise.all(openIds.map((subtaskId) => api.setCompleted(subtaskId, true)))
+      .then(() => {
+        refreshSubtasks(id);
+        refreshSubtaskCounts();
+        complete(id);
+      })
+      .catch((error) => setLoadError(String(error)));
+  };
+
   const complete = (id: string) => {
     if (completing.has(id)) return;
     const title = Object.values(viewTasks).flat().find((task) => task.id === id)?.title ?? "task";
@@ -435,9 +473,12 @@ export default function App() {
                 completing={completing}
                 subtasks={subtasks}
                 subtaskCounts={subtaskCounts}
+                pendingCompleteConfirm={pendingCompleteConfirm}
+                onConfirmComplete={confirmCompleteWithSubtasks}
+                onCancelCompleteConfirm={cancelCompleteConfirm}
                 selectedIds={selectedIds}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
-                onComplete={complete}
+                onComplete={requestComplete}
                 onRename={renameTask}
                 onReschedule={rescheduleTask}
                 onNoteChange={changeNote}
@@ -465,9 +506,12 @@ export default function App() {
                 completing={completing}
                 subtasks={subtasks}
                 subtaskCounts={subtaskCounts}
+                pendingCompleteConfirm={pendingCompleteConfirm}
+                onConfirmComplete={confirmCompleteWithSubtasks}
+                onCancelCompleteConfirm={cancelCompleteConfirm}
                 selectedIds={selectedIds}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
-                onComplete={complete}
+                onComplete={requestComplete}
                 onRename={renameTask}
                 onReschedule={rescheduleTask}
                 onNoteChange={changeNote}

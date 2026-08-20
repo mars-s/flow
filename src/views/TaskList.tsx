@@ -13,6 +13,9 @@ type Props = {
   completing: Set<string>;
   subtasks: Task[];
   subtaskCounts: Record<string, SubtaskCount>;
+  pendingCompleteConfirm: string | null;
+  onConfirmComplete: (id: string) => void;
+  onCancelCompleteConfirm: () => void;
   selectedIds: Set<string>;
   onToggleExpanded: (id: string) => void;
   onComplete: (id: string) => void;
@@ -37,6 +40,9 @@ export function TaskList({
   completing,
   subtasks,
   subtaskCounts,
+  pendingCompleteConfirm,
+  onConfirmComplete,
+  onCancelCompleteConfirm,
   selectedIds,
   onToggleExpanded,
   onComplete,
@@ -83,6 +89,9 @@ export function TaskList({
                     completing={isCompleting}
                     subtasks={isExpanded ? subtasks : []}
                     subtaskCount={subtaskCounts[task.id]}
+                    pendingCompleteConfirm={pendingCompleteConfirm === task.id}
+                    onConfirmComplete={() => onConfirmComplete(task.id)}
+                    onCancelCompleteConfirm={onCancelCompleteConfirm}
                     selected={selectedIds.has(task.id)}
                     onToggleExpanded={() => onToggleExpanded(task.id)}
                     onComplete={() => onComplete(task.id)}
