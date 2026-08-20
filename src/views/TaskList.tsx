@@ -17,6 +17,7 @@ type Props = {
   onAddSubtask: (parentId: string, title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
+  onScheduled: () => void;
   emptyLabel: string;
 };
 
@@ -32,6 +33,7 @@ export function TaskList({
   onAddSubtask,
   onToggleSubtask,
   onDelete,
+  onScheduled,
   emptyLabel,
 }: Props) {
   return (
@@ -68,6 +70,7 @@ export function TaskList({
                     onAddSubtask={(title) => onAddSubtask(task.id, title)}
                     onToggleSubtask={onToggleSubtask}
                     onDelete={() => onDelete(task.id)}
+                    onScheduled={onScheduled}
                   />
                 </motion.div>
               );

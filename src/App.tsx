@@ -7,6 +7,7 @@ import { Settings } from "./views/Settings";
 import { Calendar } from "./views/Calendar";
 import { UndoToast, type UndoState } from "./components/UndoToast";
 import { api } from "./lib/api";
+import { todayIso } from "./lib/date";
 import { VIEW_FOR } from "./lib/types";
 import type { Destination, Task } from "./lib/types";
 import "./theme.css";
@@ -87,17 +88,18 @@ export default function App() {
   const visibleTasks = useMemo(() => {
     const view = VIEW_FOR[destination];
     if (!view) return [];
+    const today = todayIso();
     if (view === "Inbox") return tasks.filter((task) => task.bucket === "Inbox");
     if (view === "Someday") return tasks.filter((task) => task.bucket === "Someday");
-    if (view === "Today") return tasks.filter((task) => task.bucket === "Active" && task.scheduled_date === "today");
+    if (view === "Today") return tasks.filter((task) => task.bucket === "Active" && task.scheduled_date === today);
     if (view === "Anytime") return tasks.filter((task) => task.bucket === "Active" && !task.scheduled_date);
     return [];
   }, [tasks, destination]);
 
-  const upcomingTasks = useMemo(
-    () => tasks.filter((task) => task.bucket === "Active" && task.scheduled_date && task.scheduled_date !== "today"),
-    [tasks],
-  );
+  const upcomingTasks = useMemo(() => {
+    const today = todayIso();
+    return tasks.filter((task) => task.bucket === "Active" && task.scheduled_date && task.scheduled_date !== today);
+  }, [tasks]);
 
   const complete = (id: string) => {
     if (completing.has(id)) return;
@@ -203,6 +205,7 @@ export default function App() {
                 onAddSubtask={addSubtask}
                 onToggleSubtask={toggleSubtask}
                 onDelete={deleteTask}
+                onScheduled={refresh}
               />
             ) : (
               <TaskList
@@ -217,6 +220,7 @@ export default function App() {
                 onAddSubtask={addSubtask}
                 onToggleSubtask={toggleSubtask}
                 onDelete={deleteTask}
+                onScheduled={refresh}
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
               />
             )}

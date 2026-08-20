@@ -12,7 +12,7 @@
 //! actually cutting over, not before.
 
 use flow_data::calendar::{self, CalendarAuth, CalendarEvent, CalendarInfo};
-use flow_data::db::{Db, Task, View};
+use flow_data::db::{Bucket, Db, Task, View};
 use flow_data::parse;
 use serde::Serialize;
 use tauri::Manager;
@@ -201,6 +201,52 @@ async fn set_note(db: tauri::State<'_, Db>, id: String, note: String) -> Result<
         .map_err(|error| error.to_string())
 }
 
+/// The detail card's Today/Anytime/Someday/Clear quick-picks — a plain
+/// bucket + optional date/time, no parsing involved. `bucket` arrives as
+/// the same tag strings `Bucket`'s own Deserialize produces ("Inbox" for
+/// Clear, "Active" for Today/Anytime, "Someday").
+#[tauri::command]
+async fn schedule_task(
+    db: tauri::State<'_, Db>,
+    id: String,
+    bucket: Bucket,
+    date: Option<String>,
+    time: Option<String>,
+) -> Result<(), String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || db.schedule(id, bucket, date, time))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+/// The picker's own free-text field ("Schedule…") — parses `text` the same
+/// way Capture does and schedules with whatever it recognized. Mirrors
+/// `capture_task`'s exact rules (a recognized date activates the task into
+/// Active, a bare time with no date defaults to today), the one difference
+/// being this schedules an *existing* task instead of creating one.
+#[tauri::command]
+async fn schedule_task_from_text(db: tauri::State<'_, Db>, id: String, text: String) -> Result<(), String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let today = chrono::Local::now().date_naive();
+        let parsed = parse::parse(&text, today);
+        let date = parsed.date.or_else(|| parsed.time.is_some().then_some(today));
+        if date.is_none() {
+            return Err("couldn't recognize a date or time in that".to_string());
+        }
+        db.schedule(
+            id,
+            Bucket::Active,
+            date.map(|d| d.to_string()),
+            parsed.time.map(|t| t.format("%H:%M").to_string()),
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 async fn list_subtasks(db: tauri::State<'_, Db>, parent_id: String) -> Result<Vec<Task>, String> {
     let db = db.inner().clone();
@@ -306,6 +352,8 @@ pub fn run() {
             preview_capture,
             set_completed,
             set_note,
+            schedule_task,
+            schedule_task_from_text,
             list_subtasks,
             create_subtask,
             delete_task,

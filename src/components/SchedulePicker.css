@@ -1,0 +1,61 @@
+.schedule-picker {
+  position: absolute;
+  z-index: 30;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 180px;
+}
+
+.schedule-picker-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid var(--accent);
+  background: var(--overlay);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.schedule-picker-error {
+  font-size: 10.5px;
+  color: var(--danger);
+}
+
+.schedule-picker-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.schedule-picker-quick button {
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+}
+
+.schedule-picker-quick button:hover,
+.schedule-picker-quick button:focus-visible {
+  background: var(--overlay);
+  color: var(--text);
+}
+
+.schedule-picker-clear {
+  color: var(--text-ghost) !important;
+  border-top: 1px solid var(--sidebar-border);
+  margin-top: 2px;
+  padding-top: 7px !important;
+}

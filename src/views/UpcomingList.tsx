@@ -17,6 +17,7 @@ type Props = {
   onAddSubtask: (parentId: string, title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
+  onScheduled: () => void;
 };
 
 function groupByDate(tasks: Task[]): [string, Task[]][] {
@@ -41,6 +42,7 @@ export function UpcomingList({
   onAddSubtask,
   onToggleSubtask,
   onDelete,
+  onScheduled,
 }: Props) {
   const groups = groupByDate(tasks);
 
@@ -81,6 +83,7 @@ export function UpcomingList({
                         onAddSubtask={(title) => onAddSubtask(task.id, title)}
                         onToggleSubtask={onToggleSubtask}
                         onDelete={() => onDelete(task.id)}
+                        onScheduled={onScheduled}
                       />
                     </motion.div>
                   );

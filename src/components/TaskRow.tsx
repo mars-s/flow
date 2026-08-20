@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Tag, ListTree, Flag, Plus, Trash2 } from "lucide-react";
 import type { Task } from "../lib/types";
+import { SchedulePicker } from "./SchedulePicker";
 import "./TaskRow.css";
 
 const spring = { type: "spring" as const, stiffness: 520, damping: 34, mass: 0.7 };
@@ -26,6 +27,7 @@ type Props = {
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
   onDelete: () => void;
+  onScheduled: () => void;
 };
 
 export function TaskRow({
@@ -39,9 +41,11 @@ export function TaskRow({
   onAddSubtask,
   onToggleSubtask,
   onDelete,
+  onScheduled,
 }: Props) {
   const [pressed, setPressed] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [schedulingOpen, setSchedulingOpen] = useState(false);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
 
   const checkbox = (
@@ -159,10 +163,30 @@ export function TaskRow({
             {/* Real <button>s, not styled <div>s — free keyboard operability
                 (native tabIndex, Enter/Space activation) instead of
                 hand-rolling onKeyDown on each one. */}
-            <motion.button type="button" className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
-              <Tag size={11} />
-              {task.scheduled_date ?? "Schedule…"}
-            </motion.button>
+            <div className="pill-anchor">
+              <motion.button
+                type="button"
+                className="pill"
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => setSchedulingOpen(true)}
+              >
+                <Tag size={11} />
+                {task.scheduled_date ?? "Schedule…"}
+              </motion.button>
+              <AnimatePresence>
+                {schedulingOpen && (
+                  <SchedulePicker
+                    taskId={task.id}
+                    onScheduled={() => {
+                      setSchedulingOpen(false);
+                      onScheduled();
+                    }}
+                    onClose={() => setSchedulingOpen(false)}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
             <motion.button
               type="button"
               className="pill"
