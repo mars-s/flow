@@ -57,10 +57,30 @@ re-derive:**
 ## What exists so far
 
 `/Users/avi/Developer/vibe/flow-tauri-prototype` — Tauri v2, React 19,
-TypeScript, Vite, Framer Motion. Currently just the original comparison
-demo (six hardcoded tasks, no real data, no backend). Not yet the actual
-migration target — treat it as the seed to build the real thing in, not
-as finished work to preserve exactly as-is.
+TypeScript, Vite, Framer Motion, now with its own git history
+(`7d69076`, `4899219`). Past the original single-screen comparison demo:
+a real app shell now exists —
+
+- `Sidebar` (wordmark, Capture row, Tasks/Calendar mode switch with a
+  `layoutId`-driven sliding highlight, Inbox/Today/Upcoming/Anytime/
+  Someday nav with the same shared-layout active-row technique, Settings
+  pinned to the bottom, an Inbox badge) — mirrors `src/app/sidebar.rs`'s
+  actual structure, not a generic nav.
+- `TaskRow` — the row↔card `layoutId` morph, checkbox press/complete
+  spring feedback, subtasks, pills. The actual answer to "why did the
+  prototype feel better than GPUI": a real shared-layout transform GPUI
+  has no equivalent primitive for.
+- `TaskList` (Inbox/Today/Anytime/Someday) and `UpcomingList` (real
+  date-grouping across every bucket, matching PRD §6.3's actual
+  semantics rather than filtering one bucket).
+- `Settings`, a first scaffold — calendar connection row, the read-only
+  disclosure copy lifted from PRD §6.5's own language.
+- `theme.css` — tokens ported from `src/theme.rs`'s `dark()` as a
+  starting point for the redesign, not a spec to match exactly.
+
+Still **entirely mock data** (`src/lib/mockData.ts`) — no Tauri command
+reaches real Rust logic yet, and Calendar mode has no view at all yet
+(shows a bare placeholder). Both are open work, not decided against.
 
 ## Open engineering questions for whoever picks this up next
 
