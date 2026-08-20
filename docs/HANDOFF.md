@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `a4ba853` — check `git status` before
+- Working tree is clean as of commit `4bf2137` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -934,6 +934,76 @@ reset just hadn't followed it. Fixed by removing the premature clear —
 `flush_title` clears the flag itself once it actually runs. Since
 `handle_cancel_turn_action` now delegates to `collapse_expanded_task`,
 one fix covers both Escape and click-outside.
+
+**Fixed (`bec91eb`, 2026-08-20): the main-pane view switch was missing
+`DESIGN_DIRECTION.md`'s own documented 6px horizontal slide.** Unlike the
+two doc-drift fixes just before it (a design line calling for something
+GPUI genuinely can't do, and one recording an already-made deliberate
+choice), this gap was plainly buildable and just hadn't been — a margin
+interpolated in the same `with_animation` closure the crossfade already
+used, easing in from 6px right of rest.
+
+**A real crash, found and fixed (`4bf2137`, 2026-08-20) after the user
+reported the app "keeps crashing," not a hypothetical:** a genuine
+`.ips` crash report captured `panic_bounds_check` inside `task_list`'s
+own `list()` row-builder closure — `tasks[ix]` trusted GPUI's own
+`ListState` item count and this closure's captured `tasks` `Arc` to
+always agree, and they don't always. `list()` schedules its own repaint
+passes independently of exactly when `sync_task_list_state`'s `splice`
+and this closure's capture land in the same frame, and any
+`with_animation` active on screen — a row's own collapse fade, now also
+its checkbox pop (below) — keeps requesting fresh frames the whole time
+something is completing, widening the window for the two to disagree.
+Fixed with `tasks.get(ix)` and a graceful empty-row fallback (plus a
+`debug_log!` breadcrumb) instead of a raw index: a stale frame
+self-corrects on the very next real fetch, so this costs nothing visible
+in the case that actually happens, and stops the crash outright in the
+case that doesn't. Root cause not fully chased to ground (a precise
+reproduction needs interactive timing this environment can't drive), but
+the fix is the same defensive-bounds-check discipline any virtualized
+list's row builder should have regardless.
+
+**Checkbox completion now has a real spring pop (`4bf2137`, same
+commit), not a flat cut** — `ui::motion::overshoot`, a back-out overshoot
+curve, applied to the checkbox circle's size and, via GPUI's
+`Svg::with_transformation`, a genuine scale on the checkmark icon.
+**Context for why this happened tonight**: the user felt Flow "feels
+very prototype-y... not really animated and satisfying" and asked
+whether switching from GPUI to Tauri/Electron would fix that. A real
+side-by-side was built to test it honestly rather than guess —
+`flow-tauri-prototype` (`/Users/avi/Developer/vibe/flow-tauri-prototype`,
+a **separate sibling repo, not part of Flow, not committed here**):
+Tauri v2 + React + TypeScript + Vite + Framer Motion, one comparable
+task-list screen with real spring/shared-layout motion. The user's own
+reaction ("looks amazing and feels amazing") confirmed the *feel* is
+achievable and asked to mirror it back into GPUI — validating the
+recommendation given at the time: the gap was Flow's own thin motion
+vocabulary (opacity fades and box-property tweens only, discovered
+while building the task-detail-card reveal a few entries above), not a
+GPUI ceiling — GPUI is the same engine Zed runs on. `Svg::with_
+transformation` (`Transformation::scale`) turned out to already exist
+and be fully public API, just never reached for. A plain `Div` still has
+no scale/transform of its own — that constraint from the task-detail
+entry above still stands — so this pop landed on the checkbox (a small
+element where "grow the box" and "scale it" look visually identical) and
+the checkmark icon (which genuinely does scale, being an `Svg`), not as
+a general-purpose primitive yet.
+**Not done, explicitly discussed rather than assumed**: a full migration
+to Tauri. Recommendation given: don't — Electron would regress the exact
+performance principle already in `AGENTS.md`, Tauri means rendering
+through a webview instead of a native GPU-composited scene (a real,
+legitimate choice for many apps, but a rewrite of everything shipped so
+far here), and the felt gap traced back to an under-built motion layer,
+not the platform. The user asked to pursue both a deeper GPUI motion
+investment *and* keep the Tauri side-by-side going, and separately
+raised a large next round of feature requests (collapsible sidebar with
+inbox/upcoming sections embedded in it, calendar drag-and-drop task
+scheduling that creates real events in a new Flow-managed calendar,
+scrollable Month/Year grids) — **not started**, both because of their
+size and because the calendar-write request is a direct reversal of
+PRD §6.5's explicit "no event creation/editing — read-only, always"
+principle that needs its own explicit confirmation, not silent
+building. Capture these as their own ticket(s) before any of it starts.
 
 ## Where to find things
 
