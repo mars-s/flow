@@ -70,6 +70,36 @@
   gap: 14px;
 }
 
+.calendar-sidebar.collapsed {
+  width: 36px;
+  padding: 12px 8px;
+  align-items: center;
+  overflow: visible;
+}
+
+.calendar-sidebar-collapse-toggle {
+  flex: none;
+  align-self: flex-start;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-ghost);
+  cursor: pointer;
+  outline: none;
+  margin-bottom: 2px;
+}
+
+.calendar-sidebar-collapse-toggle:hover,
+.calendar-sidebar-collapse-toggle:focus-visible {
+  background: var(--overlay);
+  color: var(--text-secondary);
+}
+
 .calendar-sidebar-group {
   display: flex;
   flex-direction: column;
@@ -77,10 +107,35 @@
 }
 
 .calendar-sidebar-group-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
   font-size: 10.5px;
   font-weight: 500;
   color: var(--text-ghost);
-  padding: 0 4px 2px;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.calendar-sidebar-group-label:hover,
+.calendar-sidebar-group-label:focus-visible {
+  background: var(--overlay);
+  color: var(--text-secondary);
+}
+
+.calendar-sidebar-fold-icon {
+  flex: none;
+  transition: transform 0.12s ease;
+}
+
+.calendar-sidebar-fold-icon.folded {
+  transform: rotate(-90deg);
 }
 
 .calendar-sidebar-row {

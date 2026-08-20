@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { CalendarDays } from "lucide-react";
+import { AISettingsSection } from "../components/AISettingsSection";
 import { api } from "../lib/api";
 import { openCalendarPrivacyPane } from "../lib/system";
 import type { CalendarAuth } from "../lib/types";
@@ -68,6 +69,7 @@ export function Settings() {
         )}
         {error && <div className="settings-row-error">{error}</div>}
       </div>
+      <AISettingsSection />
     </div>
   );
 }

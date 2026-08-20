@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { api } from "../lib/api";
+import { usePersistedBoolean, usePersistedSet } from "../lib/persisted";
 import { openCalendarPrivacyPane } from "../lib/system";
 import type { CalendarAuth, CalendarEvent, CalendarInfo } from "../lib/types";
 import "./Calendar.css";
@@ -379,14 +380,32 @@ function YearGrid({
 // relying on contrast sensitivity — CLAUDE.md: "never encode meaning in
 // color alone"). The calendar's own color stays the dot's border either
 // way, so which calendar this is never disappears with it.
+//
+// Extended past the GPUI app on direct user request: real accounts can
+// carry a dozen-plus calendars each (a real screenshot showed a sidebar
+// scrolling for several screens), so each account group gets its own
+// disclosure triangle to fold/unfold — same convention Apple Calendar's
+// own sidebar uses — and the whole sidebar collapses to a slim strip.
+// Both, plus which individual calendars are hidden, persist to
+// localStorage (`usePersistedSet`/`usePersistedBoolean` in the caller) so
+// a fold or a hide survives closing and reopening the app, not just the
+// current session.
 function CalendarSidebar({
   calendars,
   hiddenIds,
   onToggle,
+  foldedGroups,
+  onToggleFold,
+  collapsed,
+  onToggleCollapsed,
 }: {
   calendars: CalendarInfo[];
   hiddenIds: Set<string>;
   onToggle: (id: string) => void;
+  foldedGroups: Set<string>;
+  onToggleFold: (source: string) => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
   const groups = useMemo(() => {
     const map = new Map<string, CalendarInfo[]>();
@@ -399,32 +418,57 @@ function CalendarSidebar({
     return [...map.entries()];
   }, [calendars]);
 
+  if (collapsed) {
+    return (
+      <div className="calendar-sidebar collapsed">
+        <button type="button" className="calendar-sidebar-collapse-toggle" onClick={onToggleCollapsed} aria-label="Show calendar list">
+          <PanelLeftOpen size={15} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="calendar-sidebar">
-      {groups.map(([source, group]) => (
-        <div className="calendar-sidebar-group" key={source}>
-          <div className="calendar-sidebar-group-label">{source}</div>
-          {group.map((calendar) => {
-            const hidden = hiddenIds.has(calendar.id);
-            return (
-              <button
-                type="button"
-                key={calendar.id}
-                className="calendar-sidebar-row"
-                onClick={() => onToggle(calendar.id)}
-              >
-                <span
-                  className={`calendar-sidebar-dot ${hidden ? "" : "filled"}`}
-                  style={{ borderColor: colorCss(calendar.color), background: hidden ? "transparent" : colorCss(calendar.color) }}
-                />
-                <span className={hidden ? "calendar-sidebar-title hidden" : "calendar-sidebar-title"}>
-                  {calendar.title}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ))}
+      <button type="button" className="calendar-sidebar-collapse-toggle" onClick={onToggleCollapsed} aria-label="Hide calendar list">
+        <PanelLeftClose size={15} />
+      </button>
+      {groups.map(([source, group]) => {
+        const folded = foldedGroups.has(source);
+        return (
+          <div className="calendar-sidebar-group" key={source}>
+            <button
+              type="button"
+              className="calendar-sidebar-group-label"
+              onClick={() => onToggleFold(source)}
+              aria-expanded={!folded}
+            >
+              <ChevronDown size={11} className={folded ? "calendar-sidebar-fold-icon folded" : "calendar-sidebar-fold-icon"} />
+              {source}
+            </button>
+            {!folded &&
+              group.map((calendar) => {
+                const hidden = hiddenIds.has(calendar.id);
+                return (
+                  <button
+                    type="button"
+                    key={calendar.id}
+                    className="calendar-sidebar-row"
+                    onClick={() => onToggle(calendar.id)}
+                  >
+                    <span
+                      className={`calendar-sidebar-dot ${hidden ? "" : "filled"}`}
+                      style={{ borderColor: colorCss(calendar.color), background: hidden ? "transparent" : colorCss(calendar.color) }}
+                    />
+                    <span className={hidden ? "calendar-sidebar-title hidden" : "calendar-sidebar-title"}>
+                      {calendar.title}
+                    </span>
+                  </button>
+                );
+              })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -434,7 +478,9 @@ export function Calendar() {
   const [connecting, setConnecting] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [calendars, setCalendars] = useState<CalendarInfo[]>([]);
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [hiddenIds, toggleHidden] = usePersistedSet("flow.calendar.hiddenIds");
+  const [foldedGroups, toggleFold] = usePersistedSet("flow.calendar.foldedGroups");
+  const [sidebarCollapsed, setSidebarCollapsed] = usePersistedBoolean("flow.calendar.sidebarCollapsed");
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("week");
   const [cursor, setCursor] = useState(() => new Date());
@@ -474,14 +520,6 @@ export function Calendar() {
       .then(setCalendars)
       .catch((err) => setError(String(err)));
   }, [auth]);
-
-  const toggleCalendar = (id: string) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  };
 
   const connect = () => {
     setConnecting(true);
@@ -533,7 +571,15 @@ export function Calendar() {
 
   return (
     <div className="calendar-shell">
-      <CalendarSidebar calendars={calendars} hiddenIds={hiddenIds} onToggle={toggleCalendar} />
+      <CalendarSidebar
+        calendars={calendars}
+        hiddenIds={hiddenIds}
+        onToggle={toggleHidden}
+        foldedGroups={foldedGroups}
+        onToggleFold={toggleFold}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
       <div className="calendar-view">
         <div className="view-header calendar-header">
           <h1>{headerLabel(mode, cursor)}</h1>
