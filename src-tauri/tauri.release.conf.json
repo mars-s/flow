@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Flow",
+  "identifier": "com.avi.flow",
+  "app": {
+    "windows": [
+      {
+        "title": "Flow"
+      }
+    ]
+  }
+}

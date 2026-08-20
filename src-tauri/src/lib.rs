@@ -3,13 +3,19 @@
 //! /Users/avi/Developer/vibe/flow/wayfinder/tickets/migrate-to-tauri.md),
 //! not mock data, for whichever screens have been ported so far.
 //!
-//! **Deliberately a separate database file from the real app**
-//! (`flow-tauri-dev.db`, not `flow.db`) — `Db::open()` resolves to Flow's
-//! actual production data path, and running both the GPUI dev app and this
-//! prototype at once against the *same* SQLite file, from two independent
-//! OS processes, is a real risk this repo doesn't need to take just to
-//! develop the UI. Point this at the real path once the migration is
-//! actually cutting over, not before.
+//! **Deliberately a separate database file from GPUI Flow's own** —
+//! `Db::open()` resolves to Flow's actual production data path, and
+//! running both the GPUI dev app and a Tauri build at once against the
+//! *same* SQLite file, from two independent OS processes, is a real risk
+//! neither needs to take (explicit user decision, 2026-08-20: keep the
+//! databases separate rather than unify on GPUI's own). Isolation comes
+//! from `tauri.conf.json`'s own `identifier` (a distinct `app_data_dir`
+//! per bundle identifier), not just the filename — the debug build
+//! (`Flow Debug`, `com.avi.flow-tauri-prototype`) and the release build
+//! (`Flow`, `com.avi.flow`, via `tauri.release.conf.json`) already get
+//! separate directories on that basis alone; the filename split below is
+//! for a human reading the two directories side by side, not a safety
+//! requirement in itself.
 
 use flow_data::calendar::{self, CalendarAuth, CalendarEvent, CalendarInfo};
 use flow_data::db::{Bucket, Db, Task, View};
@@ -121,10 +127,11 @@ mod tests {
     }
 }
 
-fn dev_database_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+fn database_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let filename = if cfg!(debug_assertions) { "flow-tauri-dev.db" } else { "flow.db" };
     app.path()
         .app_data_dir()
-        .map(|dir| dir.join("flow-tauri-dev.db"))
+        .map(|dir| dir.join(filename))
         .map_err(|error| error.to_string())
 }
 
@@ -339,7 +346,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let path = dev_database_path(&app.handle())?;
+            let path = database_path(&app.handle())?;
             let db = Db::open_at(path)?;
             app.manage(db);
             Ok(())
