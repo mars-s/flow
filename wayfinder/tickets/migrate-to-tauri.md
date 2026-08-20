@@ -464,40 +464,50 @@ access — used throughout this session's own verification. A true
 in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
 `debug_snapshot`) is still open.
 
+## Current state (rewritten 2026-08-20, superseding the stale version of
+this section below the fold in earlier history)
+
+The Tauri app's task-manager loop and Calendar are at genuine functional
+parity with GPUI's own: task CRUD (Capture with real NLP parsing,
+list/complete/note/delete, rename with the same live NLP highlight/
+reschedule-on-commit Capture has), a Things-3-style checklist (rename,
+Enter-to-chain-add, backspace-to-delete), scheduling from the UI picker,
+bulk actions, a Completed section per view with undo-on-complete, and
+Calendar (connect flow, per-calendar show/hide, all four Day/Week/Month/
+Year views with real navigation, Week as a true time-grid). Plus real
+additions GPUI doesn't have: link highlighting, a theme switcher, AI
+settings scaffolding (inert, off by default).
+
+Reached by repeatedly sweeping GPUI source files
+(`render.rs`/`sidebar.rs`/`tasks.rs`/`calendar.rs`/`settings.rs`) against
+what's actually wired in the Tauri app rather than trusting this
+ticket's own summary — every pass so far has turned up at least one
+real, previously-silent gap (the calendar sidebar, the Denied-calendar
+dead end, Today excluding overdue tasks, the calendar-glance card,
+bare-space-to-capture, the Completed section, undo-on-complete). Worth
+repeating the same way over any file not yet swept before calling a
+section fully done — a spot-check of `input.rs`'s `ComposerInput`
+keybindings against Tauri turned up nothing (they're generic text-field
+editing GPUI had to hand-build that native `<input>`/`<textarea>`
+elements already give Tauri for free — not a gap).
+
 ## Not started
 
-Arrow-key navigation between rows specifically (Tab order is the only way
-to move focus between tasks right now, matching the GPUI app's own
-disclosed gap there — not a real parity gap since the GPUI app itself
-doesn't have it either), and release/distribution tooling (blocked on
-credentials this agent doesn't have — signing identity, notarization —
-not a code gap; revisit once parity is otherwise done and a real ship
-decision is imminent). A `render.rs`/`sidebar.rs`/`tasks.rs`/
-`calendar.rs`/`settings.rs` sweep against the actual GPUI source (not
-just this ticket's own summary) turned up and closed several real,
-previously-silent gaps: the calendar sidebar, the Denied-calendar dead
-end, Today silently excluding overdue tasks, the calendar-glance card,
-and bare-space-to-capture — worth repeating over any file not yet swept
-this way before calling a section done. Task CRUD (create via Capture
-with real parsing, list/complete/note/delete, subtasks, delete+undo),
-scheduling from the UI picker, bulk actions (multi-select + bulk-action
-bar), keyboard operation of every row/card/pill, and Calendar (connect
-flow, all four Day/Week/Month/Year views with real navigation, Week as a
-true time-grid, per-calendar show/hide) are the actual state of things
-now — the core task-manager loop, including Calendar, is genuinely
-complete and keyboard-operable,
-and Calendar is real but partial.
+Arrow-key navigation between rows specifically (Tab order is the only
+way to move focus between tasks right now) — not a real parity gap,
+GPUI's own tasks.rs explicitly says arrow-key row navigation was
+"deliberately not attempted" there either. Release/distribution tooling
+is blocked on credentials this agent doesn't have (signing identity,
+notarization) — not a code gap; revisit once a real ship decision is
+imminent.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
-the user asked to delete the GPUI code now that the Tauri app is
-wired to real data — "this is the main one now." Not done, and
-flagged rather than silently actioned, because the list directly above
-is the actual gap: GPUI still has calendar, NLP capture, subtasks,
-undo, bulk actions, and full keyboard operation; Tauri has task
-create/complete/note/delete only. Deleting the GPUI source now would
-be a real functional regression for the app the user actually uses
-today, not a cleanup — and cuts against this ticket's own "multi-
-session, not one sweep" premise that the user stated themselves at
-the start. The GPUI app keeps shipping as-is until the Tauri app
-reaches real parity against the list above; re-raise deletion once it
-does, not before.
+the user asked to delete the GPUI code now that the Tauri app is wired
+to real data — "this is the main one now." Not done, and flagged rather
+than silently actioned: at the time this was asked, Tauri had task
+create/complete/note/delete only, a real functional gap against GPUI.
+That gap has substantially closed since (see "Current state" above),
+but the decision to actually delete GPUI's source and cut over is still
+the user's to make explicitly, not something to infer from "the gap
+list got shorter." Re-raise it as a direct question once the user
+signals they're ready to make Tauri the sole shipping app, not before.
