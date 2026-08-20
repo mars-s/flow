@@ -135,6 +135,15 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Bulk actions landed** (`f0693ce`): Cmd+click a compact row to
+  toggle it into a multi-select set instead of opening it (same
+  `toggle_selected` interaction as the GPUI app), a floating bulk-
+  action bar with Today/Anytime/Someday/Delete once anything's
+  selected, bulk delete gets the same combined Undo-toast affordance a
+  single row's delete has. No new Tauri commands — bulk actions just
+  run the existing single-task `schedule_task`/`delete_task` commands
+  over the selected set from the frontend.
+
 - **Scheduling picker wired to the "Schedule…" pill** (`30de752`):
   new `SchedulePicker` popover with Today/Anytime/Someday/Clear
   quick-picks plus a free-text field that reuses the real NLP parser
@@ -248,15 +257,15 @@ in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
 ## Not started
 
 Calendar's Month/Year views and a true Week time-grid (the agenda-per-day
-Kanban view is the only one ported so far), bulk actions, full
-accessibility (arrow-key navigation between rows specifically — Tab order
-is the only way to move focus between tasks right now, matching the GPUI
-app's own disclosed gap there), and release/distribution tooling. Task
-CRUD (create via Capture with real parsing, list/complete/note/delete,
-subtasks, delete+undo), scheduling from the UI picker, keyboard operation
-of every row/card/pill, and Calendar's connect flow and a real agenda
-view, are the actual state of things now — the core task-manager loop is
-genuinely complete and keyboard-operable,
+Kanban view is the only one ported so far), arrow-key navigation between
+rows specifically (Tab order is the only way to move focus between tasks
+right now, matching the GPUI app's own disclosed gap there), and
+release/distribution tooling. Task CRUD (create via Capture with real
+parsing, list/complete/note/delete, subtasks, delete+undo), scheduling
+from the UI picker, bulk actions (multi-select + bulk-action bar),
+keyboard operation of every row/card/pill, and Calendar's connect flow and
+a real agenda view, are the actual state of things now — the core
+task-manager loop is genuinely complete and keyboard-operable,
 and Calendar is real but partial.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
