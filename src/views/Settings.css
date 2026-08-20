@@ -1,0 +1,66 @@
+.settings-view {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 24px 24px;
+  max-width: 560px;
+}
+
+.settings-section {
+  border-top: 1px solid var(--sidebar-border);
+  padding-top: 4px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 4px;
+}
+
+.settings-row-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.settings-row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-row-note {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.settings-connect-button {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--overlay-strong);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-connect-button:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}

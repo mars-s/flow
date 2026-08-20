@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { CaptureField } from "./components/CaptureField";
 import { TaskList } from "./views/TaskList";
+import { UpcomingList } from "./views/UpcomingList";
+import { Settings } from "./views/Settings";
 import { initialTasks } from "./lib/mockData";
 import type { Bucket, Destination, Task } from "./lib/types";
 import "./theme.css";
@@ -36,6 +38,14 @@ export default function App() {
     if (!bucket) return [];
     return tasks.filter((task) => task.bucket === bucket && !task.completed);
   }, [tasks, destination]);
+
+  // Upcoming groups by scheduled date across every bucket, not one bucket's
+  // own tasks — matches Flow's real PRD §6.3 semantics ("groups active
+  // tasks by local date from tomorrow onward"), not a per-bucket filter.
+  const upcomingTasks = useMemo(
+    () => tasks.filter((task) => !task.completed && task.scheduledDate),
+    [tasks],
+  );
 
   const complete = (id: string) => {
     if (completing.has(id)) return;
@@ -81,22 +91,37 @@ export default function App() {
             <div className="capture-slot">
               <CaptureField open={capturing} onSubmit={capture} onClose={() => setCapturing(false)} />
             </div>
-            <TaskList
-              title={destination[0].toUpperCase() + destination.slice(1)}
-              tasks={visibleTasks}
-              expanded={expanded}
-              completing={completing}
-              onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
-              onComplete={complete}
-              onNoteChange={(id, note) =>
-                setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, note } : task)))
-              }
-              emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
-            />
+            {destination === "upcoming" ? (
+              <UpcomingList
+                tasks={upcomingTasks}
+                expanded={expanded}
+                completing={completing}
+                onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
+                onComplete={complete}
+                onNoteChange={(id, note) =>
+                  setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, note } : task)))
+                }
+              />
+            ) : (
+              <TaskList
+                title={destination[0].toUpperCase() + destination.slice(1)}
+                tasks={visibleTasks}
+                expanded={expanded}
+                completing={completing}
+                onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
+                onComplete={complete}
+                onNoteChange={(id, note) =>
+                  setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, note } : task)))
+                }
+                emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
+              />
+            )}
           </div>
+        ) : destination === "settings" ? (
+          <Settings />
         ) : (
           <div className="placeholder-pane">
-            {destination === "settings" ? "Settings" : mode === "calendar" ? "Calendar" : destination}
+            Calendar
             <span className="placeholder-note">Not built in this prototype yet.</span>
           </div>
         )}
