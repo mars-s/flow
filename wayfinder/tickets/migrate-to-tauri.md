@@ -135,6 +135,16 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Calendar sidebar: per-calendar show/hide** (`bece23f`): a real gap
+  found by re-checking the migration ticket against GPUI's actual
+  `calendar.rs`, not from a user report — the GPUI app has a whole
+  sidebar (grouped by account, a toggle row per calendar) that the
+  prototype never had; `calendarList()` was wired into `api.ts` back
+  when Calendar first landed but never actually called from the UI.
+  Same on/off treatment: filled dot = shown, hollow = hidden (a shape
+  change, not just dimmer color). Hidden calendars' events are
+  filtered out of all four views via one `visibleEvents` derivation.
+
 - **A real time-grid Week view** (`9c283d1`): mirrors the GPUI app's
   own `render_calendar_week_grid` — fixed hour gutter, one column per
   day, an all-day strip above the grid, timed events absolutely
