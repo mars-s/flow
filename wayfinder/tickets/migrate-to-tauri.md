@@ -94,11 +94,25 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   186 tests plus a real watcher rebuild confirmed nothing broke.
   `eventkit.rs`, `platform.rs`'s calendar-specific functions, and
   `parse.rs` are equally `gpui`-free (same grep check run against all
-  three) and equally movable the same way — not moved yet. What's
-  **still** fully open: actually wiring a `src-tauri` backend crate to
-  depend on `flow-data` and expose `#[tauri::command]`s the React
-  frontend can call — nothing in `flow-tauri-prototype` reaches this
-  crate yet, it's still 100% mock data.
+  three) and equally movable the same way — not moved yet.
+
+  **Update, same day: the wiring itself is done for the task side.**
+  `flow-tauri-prototype/src-tauri/src/lib.rs` depends on `flow-data`
+  directly (a cross-repo path dependency, deliberate — see that file's
+  own doc comment) and exposes `list_view`/`list_completed`/
+  `create_task`/`set_completed`/`set_note`/`delete_task` as real Tauri
+  commands, each running the underlying blocking `Db` call via
+  `tokio::task::spawn_blocking`. The frontend (`src/lib/api.ts`,
+  `App.tsx`) fetches real data on load and after every mutation — no
+  mock state left anywhere in the app. Verified past "it compiles": the
+  dev database file was confirmed created on disk after a real run.
+  Points at its own dev database file, not Flow's real `flow.db` — see
+  the "coexistence" question below, still open. Calendar
+  (`eventkit.rs`) and NLP capture (`parse.rs`) are not wired — Capture
+  in the prototype only creates a bare-title task, no date/time
+  parsing yet. Subtasks (`list_subtasks`) also not wired — `Task` has
+  no embedded subtasks field, so the card's subtasks section was
+  removed rather than faked with stale data.
 - **What happens to the GPUI app during the migration?** Kept running
   and released as-is until the Tauri app reaches parity, per "multi-
   session, not one sweep" — no plan yet for how parity is judged screen
@@ -121,5 +135,25 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Not started
 
-Everything. This ticket exists to carry the decision and its reasoning
-across sessions, not to claim progress that hasn't happened.
+`eventkit.rs`/calendar wiring, `parse.rs`/NLP capture wiring, subtasks,
+the Calendar view itself, Settings' real "Connect Calendar" flow, undo,
+bulk actions, keyboard-first operation (PRD §7's own acceptance
+criterion for the GPUI app), accessibility, and release/distribution
+tooling. Task CRUD (create/list/complete/note/delete) across all five
+task views is the one slice actually done, and even that's missing
+schedule editing, subtask creation, and delete/undo from the UI itself
+(the `delete_task` command exists; nothing calls it yet).
+
+**Explicitly deferred, asked for directly and not done (2026-08-20):**
+the user asked to delete the GPUI code now that the Tauri app is
+wired to real data — "this is the main one now." Not done, and
+flagged rather than silently actioned, because the list directly above
+is the actual gap: GPUI still has calendar, NLP capture, subtasks,
+undo, bulk actions, and full keyboard operation; Tauri has task
+create/complete/note/delete only. Deleting the GPUI source now would
+be a real functional regression for the app the user actually uses
+today, not a cleanup — and cuts against this ticket's own "multi-
+session, not one sweep" premise that the user stated themselves at
+the start. The GPUI app keeps shipping as-is until the Tauri app
+reaches real parity against the list above; re-raise deletion once it
+does, not before.
