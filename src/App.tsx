@@ -1,20 +1,14 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { CaptureField } from "./components/CaptureField";
 import { TaskList } from "./views/TaskList";
 import { UpcomingList } from "./views/UpcomingList";
 import { Settings } from "./views/Settings";
-import { initialTasks } from "./lib/mockData";
-import type { Bucket, Destination, Task } from "./lib/types";
+import { api } from "./lib/api";
+import { VIEW_FOR } from "./lib/types";
+import type { Destination, Task } from "./lib/types";
 import "./theme.css";
 import "./App.css";
-
-const BUCKET_FOR: Partial<Record<Destination, Bucket>> = {
-  inbox: "inbox",
-  today: "today",
-  anytime: "anytime",
-  someday: "someday",
-};
 
 const EMPTY_LABEL: Record<string, string> = {
   inbox: "Nothing to process. Capture the next thing.",
@@ -24,26 +18,50 @@ const EMPTY_LABEL: Record<string, string> = {
 };
 
 export default function App() {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"tasks" | "calendar">("tasks");
   const [destination, setDestination] = useState<Destination>("inbox");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [completing, setCompleting] = useState<Set<string>>(new Set());
   const [capturing, setCapturing] = useState(false);
 
-  const inboxCount = useMemo(() => tasks.filter((task) => task.bucket === "inbox" && !task.completed).length, [tasks]);
+  // Every task view Flow actually has lives under one of these five real
+  // View values — fetched together on mount/refresh rather than one at a
+  // time per destination, the same "resolve the whole collection up front"
+  // reasoning the GPUI app's own render_task_view comment gives for why it
+  // doesn't gate every view behind its own fetch.
+  const refresh = useCallback(() => {
+    Promise.all(
+      (["Inbox", "Today", "Upcoming", "Anytime", "Someday"] as const).map((view) => api.listView(view)),
+    )
+      .then((lists) => {
+        const merged = new Map<string, Task>();
+        for (const list of lists) for (const task of list) merged.set(task.id, task);
+        setTasks([...merged.values()]);
+        setLoadError(null);
+      })
+      .catch((error) => setLoadError(String(error)));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const inboxCount = useMemo(() => tasks.filter((task) => task.bucket === "Inbox").length, [tasks]);
 
   const visibleTasks = useMemo(() => {
-    const bucket = BUCKET_FOR[destination];
-    if (!bucket) return [];
-    return tasks.filter((task) => task.bucket === bucket && !task.completed);
+    const view = VIEW_FOR[destination];
+    if (!view) return [];
+    if (view === "Inbox") return tasks.filter((task) => task.bucket === "Inbox");
+    if (view === "Someday") return tasks.filter((task) => task.bucket === "Someday");
+    if (view === "Today") return tasks.filter((task) => task.bucket === "Active" && task.scheduled_date === "today");
+    if (view === "Anytime") return tasks.filter((task) => task.bucket === "Active" && !task.scheduled_date);
+    return [];
   }, [tasks, destination]);
 
-  // Upcoming groups by scheduled date across every bucket, not one bucket's
-  // own tasks — matches Flow's real PRD §6.3 semantics ("groups active
-  // tasks by local date from tomorrow onward"), not a per-bucket filter.
   const upcomingTasks = useMemo(
-    () => tasks.filter((task) => !task.completed && task.scheduledDate),
+    () => tasks.filter((task) => task.bucket === "Active" && task.scheduled_date && task.scheduled_date !== "today"),
     [tasks],
   );
 
@@ -51,19 +69,35 @@ export default function App() {
     if (completing.has(id)) return;
     setCompleting((prev) => new Set(prev).add(id));
     setExpanded((current) => (current === id ? null : current));
-    setTimeout(() => {
-      setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, completed: true } : task)));
-      setCompleting((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
+    api
+      .setCompleted(id, true)
+      .then(() => {
+        setTimeout(() => {
+          setCompleting((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          refresh();
+        }, 260);
+      })
+      .catch((error) => {
+        setLoadError(String(error));
+        setCompleting((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       });
-    }, 260);
   };
 
   const capture = (title: string) => {
-    setTasks((prev) => [{ id: crypto.randomUUID(), title, note: "", bucket: "inbox", completed: false, subtasks: [] }, ...prev]);
     setCapturing(false);
+    api.createTask(title).then(refresh).catch((error) => setLoadError(String(error)));
+  };
+
+  const changeNote = (id: string, note: string) => {
+    api.setNote(id, note).catch((error) => setLoadError(String(error)));
   };
 
   return (
@@ -86,6 +120,7 @@ export default function App() {
         onCapture={() => setCapturing(true)}
       />
       <div className="main-pane" onClick={(event) => event.stopPropagation()}>
+        {loadError && <div className="load-error">Couldn't reach the local task store: {loadError}</div>}
         {mode === "tasks" && destination !== "settings" && destination !== "calendar" ? (
           <div className="task-list-shell">
             <div className="capture-slot">
@@ -98,9 +133,7 @@ export default function App() {
                 completing={completing}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
-                onNoteChange={(id, note) =>
-                  setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, note } : task)))
-                }
+                onNoteChange={changeNote}
               />
             ) : (
               <TaskList
@@ -110,9 +143,7 @@ export default function App() {
                 completing={completing}
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
-                onNoteChange={(id, note) =>
-                  setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, note } : task)))
-                }
+                onNoteChange={changeNote}
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
               />
             )}

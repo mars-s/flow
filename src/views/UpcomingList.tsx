@@ -18,7 +18,7 @@ type Props = {
 function groupByDate(tasks: Task[]): [string, Task[]][] {
   const groups = new Map<string, Task[]>();
   for (const task of tasks) {
-    const key = task.scheduledDate ?? "Later";
+    const key = task.scheduled_date ?? "Later";
     const bucket = groups.get(key) ?? [];
     bucket.push(task);
     groups.set(key, bucket);

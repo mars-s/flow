@@ -5,6 +5,7 @@
 }
 
 .main-pane {
+  position: relative;
   flex: 1;
   min-width: 0;
   height: 100%;
@@ -36,6 +37,18 @@
   font-size: 15px;
   text-transform: capitalize;
   -webkit-app-region: drag;
+}
+
+.load-error {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 11px;
+  color: var(--danger);
+  background: var(--overlay-strong);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  z-index: 10;
 }
 
 .placeholder-note {

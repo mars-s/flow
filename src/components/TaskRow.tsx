@@ -70,25 +70,18 @@ export function TaskRow({ task, expanded, completing, onToggleExpanded, onComple
             className="card-note"
             placeholder="Notes"
             rows={1}
-            value={task.note}
-            onChange={(event) => onNoteChange(event.target.value)}
+            defaultValue={task.note ?? ""}
+            onBlur={(event) => onNoteChange(event.target.value)}
           />
-          {task.subtasks.length > 0 && (
-            <div className="card-subtasks">
-              {task.subtasks.map((subtask) => (
-                <div className="subtask-row" key={subtask.id}>
-                  <div className={`checkbox small ${subtask.completed ? "checked" : ""}`}>
-                    {subtask.completed && <Check />}
-                  </div>
-                  <span className={subtask.completed ? "subtask-title done" : "subtask-title"}>{subtask.title}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Subtasks aren't wired yet — flow-data's Task has no embedded
+              subtasks field (they're a separate list_subtasks call per
+              parent, matching the real GPUI app's own architecture), and
+              this prototype doesn't call it yet. Open work, not a design
+              decision to drop them. */}
           <div className="card-pills">
             <motion.div className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
               <Tag size={11} />
-              {task.scheduledDate ?? "Schedule…"}
+              {task.scheduled_date ?? "Schedule…"}
             </motion.div>
             <motion.div className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
               <ListTree size={11} />
@@ -108,12 +101,7 @@ export function TaskRow({ task, expanded, completing, onToggleExpanded, onComple
     <motion.div layoutId={`row-${task.id}`} className="row" onClick={onToggleExpanded} whileHover={{ x: 1 }} transition={softSpring}>
       {checkbox}
       <div className={`row-title ${completing ? "checked" : ""}`}>{task.title}</div>
-      {task.subtasks.length > 0 && (
-        <div className="row-subtask-count">
-          {task.subtasks.filter((subtask) => subtask.completed).length}/{task.subtasks.length}
-        </div>
-      )}
-      {task.scheduledDate && <div className="row-schedule">{task.scheduledDate}</div>}
+      {task.scheduled_date && <div className="row-schedule">{task.scheduled_date}</div>}
     </motion.div>
   );
 }
