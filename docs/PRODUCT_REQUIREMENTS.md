@@ -523,7 +523,12 @@ hide-until-connected gate, and a real Calendar tab — Day/Week/Month/Year
 views reading live EventKit data, modeled on Apple Calendar's own layout
 (user-provided reference: a left calendar-list sidebar with per-calendar
 color toggles, a top Day/Week/Month/Year switch, and a time-gridded main
-view for Day/Week).
+view). **Revised again 2026-08-20**: Week got that time grid; Day
+deliberately did not — the user preferred Day's original per-day agenda
+list (its "Kanban board" look, in their words) and asked to keep it
+rather than replace it, so it's kept on purpose, not an unfinished half
+of this milestone. See `render_calendar_body` (Day) vs.
+`render_calendar_week_grid` (Week) in `src/app/calendar.rs`.
 
 Exit: Calendar acceptance criteria pass against the developer's real Apple
 Calendar data (no test-calendar fixture needed — EventKit has no sandboxed
