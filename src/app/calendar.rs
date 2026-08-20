@@ -550,6 +550,19 @@ fn render_calendar_event_card(event: &CalendarEvent, theme: Theme) -> AnyElement
 const HOUR_HEIGHT: f32 = 48.0;
 const GRID_GUTTER_WIDTH: f32 = 44.0;
 
+/// The week grid fills each event block with the calendar's own color
+/// (matching Apple Calendar's own look), unlike the agenda/month/year
+/// views' dot indicators — so unlike those, a fixed white label isn't
+/// safe here: some real calendar colors (pale yellow, light green) are
+/// too light for white text to clear CLAUDE.md's "keep text legible
+/// against their surface" bar. Picking white or black off the color's own
+/// `Hsla` lightness is cheap and correct for the common case, without
+/// pulling in real WCAG contrast math for a text/background pair that's
+/// always exactly this one accent color underneath.
+fn readable_text_on(color: Hsla) -> Hsla {
+    if color.l > 0.6 { gpui::black() } else { gpui::white() }
+}
+
 fn hour_label(hour: u32) -> String {
     match hour {
         0 => "12 AM".to_string(),
@@ -661,7 +674,7 @@ fn render_calendar_week_grid(
                                     .bg(color)
                                     .text_size(px(10.5))
                                     .font_weight(gpui::FontWeight::MEDIUM)
-                                    .text_color(gpui::white())
+                                    .text_color(readable_text_on(color))
                                     .truncate()
                                     .child(event.title.clone())
                             }))
@@ -733,6 +746,7 @@ fn render_calendar_grid_day_column(day: chrono::NaiveDate, visible: &[&CalendarE
             let height = (duration_minutes / 60.0 * HOUR_HEIGHT).max(18.0);
             let (r, g, b, a) = event.color;
             let color: Hsla = Rgba { r, g, b, a }.into();
+            let text_color = readable_text_on(color);
 
             div()
                 .id(gpui::SharedString::from(format!("calendar-grid-event-{}", event.id)))
@@ -755,7 +769,7 @@ fn render_calendar_grid_day_column(day: chrono::NaiveDate, visible: &[&CalendarE
                             div()
                                 .text_size(px(10.5))
                                 .font_weight(gpui::FontWeight::MEDIUM)
-                                .text_color(gpui::white())
+                                .text_color(text_color)
                                 .truncate()
                                 .child(event.title.clone()),
                         )
@@ -763,7 +777,7 @@ fn render_calendar_grid_day_column(day: chrono::NaiveDate, visible: &[&CalendarE
                             card.child(
                                 div()
                                     .text_size(px(9.5))
-                                    .text_color(gpui::white())
+                                    .text_color(text_color)
                                     .opacity(0.85)
                                     .child(event.start.format("%-I:%M %p").to_string()),
                             )
