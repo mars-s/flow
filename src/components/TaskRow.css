@@ -182,3 +182,12 @@
   background: var(--overlay-strong);
   color: var(--text);
 }
+
+.pill.danger {
+  background: rgba(255, 107, 107, 0.14);
+  color: var(--danger);
+}
+
+.pill.danger:hover {
+  background: rgba(255, 107, 107, 0.22);
+}

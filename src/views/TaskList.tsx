@@ -16,6 +16,7 @@ type Props = {
   onNoteChange: (id: string, note: string) => void;
   onAddSubtask: (parentId: string, title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
+  onDelete: (id: string) => void;
   emptyLabel: string;
 };
 
@@ -30,6 +31,7 @@ export function TaskList({
   onNoteChange,
   onAddSubtask,
   onToggleSubtask,
+  onDelete,
   emptyLabel,
 }: Props) {
   return (
@@ -65,6 +67,7 @@ export function TaskList({
                     onNoteChange={(note) => onNoteChange(task.id, note)}
                     onAddSubtask={(title) => onAddSubtask(task.id, title)}
                     onToggleSubtask={onToggleSubtask}
+                    onDelete={() => onDelete(task.id)}
                   />
                 </motion.div>
               );

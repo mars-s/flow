@@ -131,6 +131,11 @@ export default function App() {
       .catch((error) => setLoadError(String(error)));
   };
 
+  const deleteTask = (id: string) => {
+    setExpanded((current) => (current === id ? null : current));
+    api.deleteTask(id).then(refresh).catch((error) => setLoadError(String(error)));
+  };
+
   return (
     <div
       className="app"
@@ -168,6 +173,7 @@ export default function App() {
                 onNoteChange={changeNote}
                 onAddSubtask={addSubtask}
                 onToggleSubtask={toggleSubtask}
+                onDelete={deleteTask}
               />
             ) : (
               <TaskList
@@ -181,6 +187,7 @@ export default function App() {
                 onNoteChange={changeNote}
                 onAddSubtask={addSubtask}
                 onToggleSubtask={toggleSubtask}
+                onDelete={deleteTask}
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
               />
             )}

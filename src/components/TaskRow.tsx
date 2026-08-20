@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Tag, ListTree, Flag, Plus } from "lucide-react";
+import { Tag, ListTree, Flag, Plus, Trash2 } from "lucide-react";
 import type { Task } from "../lib/types";
 import "./TaskRow.css";
 
@@ -25,6 +25,7 @@ type Props = {
   onNoteChange: (note: string) => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
+  onDelete: () => void;
 };
 
 export function TaskRow({
@@ -37,10 +38,21 @@ export function TaskRow({
   onNoteChange,
   onAddSubtask,
   onToggleSubtask,
+  onDelete,
 }: Props) {
   const [pressed, setPressed] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
+
+  // A second click within 3s actually deletes — no Undo toast built yet
+  // (a real gap, tracked in migrate-to-tauri.md), so a one-click delete
+  // with no recovery path isn't safe to ship in its place.
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    const timeout = setTimeout(() => setConfirmingDelete(false), 3000);
+    return () => clearTimeout(timeout);
+  }, [confirmingDelete]);
 
   const checkbox = (
     <motion.div
@@ -159,6 +171,15 @@ export function TaskRow({
             <motion.div className="pill" whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }}>
               <Flag size={11} />
               Flag
+            </motion.div>
+            <motion.div
+              className={confirmingDelete ? "pill danger" : "pill"}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
+            >
+              <Trash2 size={11} />
+              {confirmingDelete ? "Click to confirm" : "Delete"}
             </motion.div>
           </div>
         </motion.div>
