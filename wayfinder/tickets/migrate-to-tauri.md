@@ -135,6 +135,24 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Task/subtask rename, Things 3-style checklist, friendly dates,
+  icon border fix** (`77628b2`, `db828f5` in the prototype): direct
+  user reports on all four. (1) Neither a task nor a subtask could be
+  renamed at all — new `set_title` command (the `flow_data::db`
+  method already existed, just unwired), click-to-edit on both, one
+  shared `onRename(id, title)` callback since the command doesn't
+  distinguish task from subtask. (2) Checklist redesigned to match
+  Things 3: dropped the "SUBTASKS (x/y)" header and left-border rail
+  (Things 3 shows neither), tighter row spacing. (3) Every raw
+  "2026-08-22" string in the UI now renders through new
+  `dayLabel`/`formatSchedule` helpers mirroring the GPUI app's own
+  `day_label`/`format_schedule` exactly ("Today"/"Tomorrow"/weekday/
+  short date). (4) The River Cut icon had its own rounded-square shape
+  and black margin baked into the artwork on top of macOS's own system
+  mask, visible as a nested double-square — fixed by detecting and
+  cropping past the artwork's own baked-in border before regenerating
+  the icon set, verified by sampling corner pixels, not eyeballing.
+
 - **App icon + theme switcher, built from user-picked AI concepts**
   (`a640783`, `e5507db` in the prototype): a throwaway Artifact gallery
   of 10 fal.ai (`openai/gpt-image-2`) icon concepts was generated and
