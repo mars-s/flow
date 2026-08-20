@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TaskRow } from "../components/TaskRow";
 import { dayLabel } from "../lib/date";
@@ -22,6 +23,7 @@ type Props = {
   onDelete: (id: string) => void;
   onScheduled: () => void;
   onToggleSelected: (id: string) => void;
+  bottomSlot?: ReactNode;
 };
 
 function groupByDate(tasks: Task[]): [string, Task[]][] {
@@ -50,6 +52,7 @@ export function UpcomingList({
   onDelete,
   onScheduled,
   onToggleSelected,
+  bottomSlot,
 }: Props) {
   const groups = groupByDate(tasks);
 
@@ -103,6 +106,7 @@ export function UpcomingList({
           ))}
         </div>
       )}
+      {bottomSlot}
     </div>
   );
 }

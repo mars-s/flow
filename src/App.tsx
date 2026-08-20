@@ -9,6 +9,7 @@ import { Calendar } from "./views/Calendar";
 import { UndoToast, type UndoState } from "./components/UndoToast";
 import { BulkActionBar, type BulkTarget } from "./components/BulkActionBar";
 import { CalendarGlance } from "./components/CalendarGlance";
+import { CompletedSection } from "./components/CompletedSection";
 import { api } from "./lib/api";
 import { todayIso } from "./lib/date";
 import { usePersistedString } from "./lib/persisted";
@@ -38,6 +39,20 @@ export default function App() {
   // instead of Today. Each view's own query already gets this right, so
   // reusing its result directly is both the fix and the simpler code.
   const [viewTasks, setViewTasks] = useState<Record<View, Task[]>>(EMPTY_VIEW_TASKS);
+  // Real gap found by re-checking tasks.rs's own completed_section against
+  // the Tauri app: list_completed was already wired into api.ts back when
+  // Capture/CRUD first landed but never actually called — a completed
+  // task simply vanished from view with no way to see it again. Fetched
+  // alongside the active lists, same "resolve the whole collection up
+  // front" reasoning refresh() already uses for those.
+  const [completedTasks, setCompletedTasks] = useState<Record<View, Task[]>>(EMPTY_VIEW_TASKS);
+  const [completedOpen, setCompletedOpen] = useState<Record<View, boolean>>({
+    Inbox: false,
+    Today: false,
+    Upcoming: false,
+    Anytime: false,
+    Someday: false,
+  });
   const [theme, setTheme] = usePersistedString("flow.theme", "default");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"tasks" | "calendar">("tasks");
@@ -63,6 +78,15 @@ export default function App() {
         });
         setViewTasks(next);
         setLoadError(null);
+      })
+      .catch((error) => setLoadError(String(error)));
+    Promise.all(VIEWS.map((view) => api.listCompleted(view)))
+      .then((lists) => {
+        const next = { ...EMPTY_VIEW_TASKS };
+        VIEWS.forEach((view, i) => {
+          next[view] = lists[i];
+        });
+        setCompletedTasks(next);
       })
       .catch((error) => setLoadError(String(error)));
   }, []);
@@ -132,6 +156,10 @@ export default function App() {
   }, [expanded, refreshSubtasks]);
 
   const inboxCount = viewTasks.Inbox.length;
+  // Falls back to "Inbox" only in the impossible case destination is
+  // Settings/Calendar here — TaskList never renders for those (guarded in
+  // the JSX below), this just satisfies VIEW_FOR's Partial<> type.
+  const currentView: View = VIEW_FOR[destination] ?? "Inbox";
   const visibleTasks = useMemo(() => {
     const view = VIEW_FOR[destination];
     return view ? viewTasks[view] : [];
@@ -140,6 +168,7 @@ export default function App() {
 
   const complete = (id: string) => {
     if (completing.has(id)) return;
+    const title = Object.values(viewTasks).flat().find((task) => task.id === id)?.title ?? "task";
     setCompleting((prev) => new Set(prev).add(id));
     setExpanded((current) => (current === id ? null : current));
     api
@@ -152,6 +181,15 @@ export default function App() {
             return next;
           });
           refresh();
+          // PRD §6.1's 10s undo window covers completion too, not just
+          // delete — matches the GPUI app's own toggle_completed, which
+          // shows this after the write lands (same reasoning: showing it
+          // before the animation finishes would let a second undo-click
+          // race the row still being on screen).
+          setUndoToast({
+            message: `Completed "${title}"`,
+            onUndo: () => api.setCompleted(id, false).then(refresh).catch((error) => setLoadError(String(error))),
+          });
         }, 260);
       })
       .catch((error) => {
@@ -162,6 +200,31 @@ export default function App() {
           return next;
         });
       });
+  };
+
+  // A completed-section row's checkbox: unlike `complete`, this writes
+  // immediately with no animation delay and no undo toast — same
+  // asymmetry the GPUI app's own toggle_completed has (its `if
+  // !completed` branch returns early, straight to write_completed).
+  const uncomplete = (id: string) => {
+    api.setCompleted(id, false).then(refresh).catch((error) => setLoadError(String(error)));
+  };
+
+  const toggleCompletedOpen = (view: View) => {
+    setCompletedOpen((prev) => ({ ...prev, [view]: !prev[view] }));
+  };
+
+  // The Completed section's "Clear" button — soft-deletes every completed
+  // task shown there, same loop-per-id pattern as bulkDelete but with no
+  // undo toast, matching the GPUI app's own clear_completed (PRD's undo
+  // guarantee covers deleting an active task, not bulk-clearing ones
+  // already completed).
+  const clearCompleted = (view: View) => {
+    const ids = completedTasks[view].map((task) => task.id);
+    if (ids.length === 0) return;
+    Promise.all(ids.map((id) => api.deleteTask(id)))
+      .then(refresh)
+      .catch((error) => setLoadError(String(error)));
   };
 
   const capture = (title: string) => {
@@ -313,6 +376,15 @@ export default function App() {
                 onDelete={deleteTask}
                 onScheduled={refresh}
                 onToggleSelected={toggleSelected}
+                bottomSlot={
+                  <CompletedSection
+                    tasks={completedTasks.Upcoming}
+                    open={completedOpen.Upcoming}
+                    onToggleOpen={() => toggleCompletedOpen("Upcoming")}
+                    onUncomplete={uncomplete}
+                    onClear={() => clearCompleted("Upcoming")}
+                  />
+                }
               />
             ) : (
               <TaskList
@@ -331,6 +403,15 @@ export default function App() {
                 onDelete={deleteTask}
                 onScheduled={refresh}
                 onToggleSelected={toggleSelected}
+                bottomSlot={
+                  <CompletedSection
+                    tasks={completedTasks[currentView]}
+                    open={completedOpen[currentView]}
+                    onToggleOpen={() => toggleCompletedOpen(currentView)}
+                    onUncomplete={uncomplete}
+                    onClear={() => clearCompleted(currentView)}
+                  />
+                }
                 emptyLabel={EMPTY_LABEL[destination] ?? "Nothing here yet."}
                 topSlot={destination === "today" ? <CalendarGlance /> : undefined}
               />

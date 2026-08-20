@@ -24,6 +24,7 @@ type Props = {
   onToggleSelected: (id: string) => void;
   emptyLabel: string;
   topSlot?: ReactNode;
+  bottomSlot?: ReactNode;
 };
 
 export function TaskList({
@@ -44,6 +45,7 @@ export function TaskList({
   onToggleSelected,
   emptyLabel,
   topSlot,
+  bottomSlot,
 }: Props) {
   return (
     <div className="task-list-view">
@@ -91,6 +93,7 @@ export function TaskList({
           </AnimatePresence>
         </div>
       )}
+      {bottomSlot}
     </div>
   );
 }
