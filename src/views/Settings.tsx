@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { api } from "../lib/api";
+import { openCalendarPrivacyPane } from "../lib/system";
 import type { CalendarAuth } from "../lib/types";
 import "./Settings.css";
 
@@ -14,6 +15,7 @@ const STATUS_LABEL: Record<CalendarAuth, string> = {
 export function Settings() {
   const [auth, setAuth] = useState<CalendarAuth | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.calendarAuthStatus().then(setAuth);
@@ -44,12 +46,27 @@ export function Settings() {
               {auth && <> · {STATUS_LABEL[auth]}</>}
             </div>
           </div>
-          {auth !== "Granted" && (
-            <button className="settings-connect-button" onClick={connect} disabled={connecting || auth === "Denied"}>
-              {connecting ? "Requesting…" : "Connect Calendar"}
+          {auth === "Denied" ? (
+            <button
+              className="settings-connect-button"
+              onClick={() => openCalendarPrivacyPane().catch((err) => setError(String(err)))}
+            >
+              Open System Settings
             </button>
+          ) : (
+            auth !== "Granted" && (
+              <button className="settings-connect-button" onClick={connect} disabled={connecting}>
+                {connecting ? "Requesting…" : "Connect Calendar"}
+              </button>
+            )
           )}
         </div>
+        {auth === "Denied" && (
+          <div className="settings-row-error">
+            Calendar access was denied. Flow can't ask again — grant it from System Settings, then relaunch Flow.
+          </div>
+        )}
+        {error && <div className="settings-row-error">{error}</div>}
       </div>
     </div>
   );

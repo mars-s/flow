@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
+import { openCalendarPrivacyPane } from "../lib/system";
 import type { CalendarAuth, CalendarEvent, CalendarInfo } from "../lib/types";
 import "./Calendar.css";
 
@@ -505,7 +506,14 @@ export function Calendar() {
         <div className="calendar-not-connected-note">
           Read-only. Flow never creates, edits, or deletes anything in your calendar.
         </div>
-        {auth !== "Denied" && (
+        {auth === "Denied" ? (
+          <button
+            className="calendar-connect-button"
+            onClick={() => openCalendarPrivacyPane().catch((err) => setError(String(err)))}
+          >
+            Open System Settings
+          </button>
+        ) : (
           <button className="calendar-connect-button" onClick={connect} disabled={connecting}>
             {connecting ? "Requesting…" : "Connect Calendar"}
           </button>
