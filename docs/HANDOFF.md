@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `046124d` — check `git status` before
+- Working tree is clean as of commit `613c107` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
@@ -870,6 +870,22 @@ commit:
    gets from animating `h()` directly (a technique this file already
    established) — the card's top padding eases down to its resting value
    in step with the existing opacity fade, instead of a flat cross-fade.
+
+**Fixed (`613c107`, found by self-reviewing `046124d` above, not a user
+report): the new click-outside handler would have closed the card the
+moment you clicked into its own notes field to type.** `ComposerInput`
+(`src/input.rs`) builds its click handling from raw `on_mouse_down`/
+`on_mouse_up`, not `on_click`, and never called `cx.stop_propagation()` —
+nothing needed it before, since there was no ancestor `on_click` to reach.
+Same root cause, smaller blast radius, in `ui/scrollbar.rs`'s thumb drag
+(registered via raw `window.on_mouse_event`, not a div hitbox): dragging
+it while a task was expanded would have collapsed the card on release.
+Both fixed by stopping propagation where the gesture actually starts —
+correct regardless of this feature, not a special case for it. Worth
+remembering for any *future* `on_click` added near the top of the tree:
+this app has at least two widgets whose own click handling doesn't route
+through `on_click` at all, so a new ancestor-level click handler needs the
+same check run against them.
 
 ## Where to find things
 
