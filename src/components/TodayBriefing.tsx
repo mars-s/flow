@@ -81,11 +81,17 @@ export function TodayBriefing() {
 
   // Auto mode generates itself once per day — a cache hit for today
   // means it already ran, so this only ever fires the first time the
-  // Calendar tab is visited on a given day.
+  // Calendar tab is visited on a given day. Requires apiKey/model to
+  // actually be set, not just baseUrl (which always has a default) —
+  // real bug found by re-checking this against a fresh "AI on, Today
+  // briefing set to Auto, nothing configured yet" state: without this
+  // guard, every single visit to the Calendar tab fired a doomed API
+  // call against api.openai.com with no key, failing the same way
+  // every time with no way to stop it short of turning the feature off.
   useEffect(() => {
-    if (enabled && mode === "auto" && !text && !loading) generate();
+    if (enabled && mode === "auto" && apiKey && model && !text && !loading) generate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, mode, text]);
+  }, [enabled, mode, apiKey, model, text]);
 
   if (!enabled || mode === "off") return null;
 

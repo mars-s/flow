@@ -179,11 +179,17 @@ export function AISettingsSection() {
               />
             </label>
             <div className="ai-settings-test-row">
+              {/* apiKey not required to enable this — a local, no-auth
+                  server (Ollama, LM Studio) is an explicit target for
+                  "custom OpenAI-compatible" (see ai.rs's own doc
+                  comment), and requiring a key blocked testing those
+                  entirely. ai_list_models still sends an empty bearer
+                  token either way; most local servers just ignore it. */}
               <button
                 type="button"
                 className="settings-connect-button"
                 onClick={testConnection}
-                disabled={testState === "testing" || !baseUrl || !apiKey}
+                disabled={testState === "testing" || !baseUrl}
               >
                 {testState === "testing" && <Loader2 size={12} className="ai-spin" />}
                 {testState === "ok" && <Check size={12} />}

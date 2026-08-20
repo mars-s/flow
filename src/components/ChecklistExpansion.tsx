@@ -69,9 +69,12 @@ export function ChecklistExpansion({ taskId, title, note, hasSubtasks, onAddSubt
   // with no subtasks yet — the closest available proxy for "a task was
   // just created" without a separate creation-time hook — and writes
   // the suggestions straight in with no confirmation step, per the
-  // user's own explicit spec for what "fully auto" means.
+  // user's own explicit spec for what "fully auto" means. Requires
+  // apiKey/model actually set — same real bug as Today briefing's own
+  // auto mode: without this, expanding any task with Auto on but
+  // nothing configured fired a doomed API call every time.
   useEffect(() => {
-    if (enabled && mode === "auto" && !hasSubtasks && autoRanFor !== taskId && !loading) {
+    if (enabled && mode === "auto" && apiKey && model && !hasSubtasks && autoRanFor !== taskId && !loading) {
       setAutoRanFor(taskId);
       setLoading(true);
       setError(null);
@@ -87,7 +90,7 @@ export function ChecklistExpansion({ taskId, title, note, hasSubtasks, onAddSubt
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, mode, hasSubtasks, taskId]);
+  }, [enabled, mode, apiKey, model, hasSubtasks, taskId]);
 
   if (!enabled || mode === "off" || hasSubtasks) return null;
   // Auto mode has nothing of its own to show — it already wrote the
