@@ -136,6 +136,20 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Third real AI block: Stale task nudges** (`cb03c10` in the
+  prototype), plus a UI orientation fix: flags Inbox/Anytime tasks whose
+  `created_at` is 14+ days old (creation date is the only "untouched"
+  signal available — no separate last-touched field exists) and asks the
+  model for one calm one-sentence nudge (defer to Someday, delete, or
+  actually schedule). Detection is a plain date comparison; only the
+  nudge sentence is a model call. Cached per day + exact stale-id-set so
+  completing/deleting a stale task invalidates it correctly. Auto mode's
+  trigger effect included the `apiKey && model` guard from the start,
+  applying the lesson from the two bugs below instead of needing a third
+  bug report to catch it. Same turn: the per-feature Off/Manual/Auto
+  toggle (`AIFeatureToggle`) had been built vertical off an initial
+  misread of the request; corrected to horizontal, the user's actual
+  intent all along.
 - **Two real AI bugs found by re-checking, not just building**
   (`2c6caa3` in the prototype): (1) "Test connection" required an API
   key just to try, blocking a local no-auth server (Ollama, LM
