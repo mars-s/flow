@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Tag, Plus, Trash2 } from "lucide-react";
+import { Tag, Plus, Trash2, Circle, CheckCircle2 } from "lucide-react";
 import type { Task } from "../lib/types";
 import { linkify } from "../lib/linkify";
 import { SchedulePicker } from "./SchedulePicker";
@@ -49,7 +49,7 @@ export function TaskRow({
   onToggleSelected,
 }: Props) {
   const [pressed, setPressed] = useState(false);
-  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [subtasksOpen, setSubtasksOpen] = useState(false);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
@@ -141,7 +141,7 @@ export function TaskRow({
             </div>
           )}
 
-          {(subtasks.length > 0 || addingSubtask) && (
+          {subtasksOpen && (
             <div className="card-subtasks">
               {subtasks.length > 0 && (
                 <div className="subtasks-header">
@@ -150,49 +150,60 @@ export function TaskRow({
               )}
               {subtasks.map((subtask) => (
                 <div className="subtask-row" key={subtask.id}>
-                  <motion.div
-                    className={`checkbox small ${subtask.completed_at ? "checked" : ""}`}
-                    whileTap={{ scale: 0.82 }}
+                  <motion.button
+                    type="button"
+                    className="subtask-checkbox"
+                    whileTap={{ scale: 0.85 }}
                     onClick={() => onToggleSubtask(subtask.id, !subtask.completed_at)}
                   >
-                    {subtask.completed_at && <Check />}
-                  </motion.div>
+                    {subtask.completed_at ? (
+                      <CheckCircle2 size={15} className="subtask-checkbox-icon checked" strokeWidth={2} />
+                    ) : (
+                      <Circle size={15} className="subtask-checkbox-icon" strokeWidth={1.6} />
+                    )}
+                  </motion.button>
                   <span className={subtask.completed_at ? "subtask-title done" : "subtask-title"}>
                     {subtask.title}
                   </span>
                 </div>
               ))}
-              {addingSubtask && (
-                <form
-                  className="subtask-add-row"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const value = subtaskInputRef.current?.value.trim();
-                    if (value) onAddSubtask(value);
-                    if (subtaskInputRef.current) subtaskInputRef.current.value = "";
-                    setAddingSubtask(false);
+              {/* A real checklist-entry flow, not a single-shot add form:
+                  Enter commits the current line as a subtask and clears +
+                  refocuses the same input for the next one, so typing a
+                  short checklist is "type, Enter, type, Enter..." without
+                  re-opening anything in between. Escape closes the whole
+                  section instead of just this row — there's no longer a
+                  separate "list" vs "add row" state to fall back to. */}
+              <form
+                className="subtask-add-row"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const input = subtaskInputRef.current;
+                  const value = input?.value.trim();
+                  if (value) onAddSubtask(value);
+                  if (input) {
+                    input.value = "";
+                    input.focus();
+                  }
+                }}
+              >
+                <Circle size={15} className="subtask-checkbox-icon add-row-icon" strokeWidth={1.6} />
+                <input
+                  ref={subtaskInputRef}
+                  className="subtask-add-input"
+                  placeholder="New subtask"
+                  autoFocus
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      // stopPropagation so this doesn't also bubble to the
+                      // app root's own Escape handler (which collapses
+                      // the expanded task entirely).
+                      event.stopPropagation();
+                      setSubtasksOpen(false);
+                    }
                   }}
-                >
-                  <div className="checkbox small" />
-                  <input
-                    ref={subtaskInputRef}
-                    className="subtask-add-input"
-                    placeholder="New subtask"
-                    autoFocus
-                    onBlur={() => setAddingSubtask(false)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        // Cancels just the subtask-add row, not the whole
-                        // card — stopPropagation so this doesn't also
-                        // bubble to the app root's own Escape handler
-                        // (which collapses the expanded task entirely).
-                        event.stopPropagation();
-                        setAddingSubtask(false);
-                      }
-                    }}
-                  />
-                </form>
-              )}
+                />
+              </form>
             </div>
           )}
 
@@ -229,10 +240,10 @@ export function TaskRow({
               className="pill"
               whileHover={{ y: -1 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => setAddingSubtask(true)}
+              onClick={() => setSubtasksOpen((open) => !open)}
             >
               <Plus size={11} />
-              Subtask
+              {subtasks.length > 0 ? `Subtasks (${subtasks.length})` : "Subtask"}
             </motion.button>
             <motion.button
               type="button"
