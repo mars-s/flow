@@ -135,6 +135,22 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Completed section landed** (`64c6e8d` in the prototype): real gap
+  found by re-checking `tasks.rs`'s own `completed_section` —
+  `list_completed` was wired into `api.ts` back when Capture/CRUD
+  first landed but never actually called; completed tasks simply
+  vanished with no way to see them again. A "Completed (N)" disclosure
+  row now sits at the bottom of every task view (all five, Upcoming
+  included), capped-height scroll when open, "Clear" bulk-deletes with
+  no undo (matching `clear_completed`'s own asymmetry), unchecking a
+  completed row writes immediately with no animation/toast (matching
+  `toggle_completed`'s early-return). Also fixed completing a task
+  itself while wiring this: PRD §6.1's undo window covers completion,
+  not just delete — `complete` now shows an undo toast, which had been
+  silently missing since completion first landed. Deliberate scope
+  reduction noted in the commit: a completed row is a simple line, not
+  the full expand-into-detail-card GPUI's own version has.
+
 - **Task/subtask rename, Things 3-style checklist, friendly dates,
   icon border fix** (`77628b2`, `db828f5` in the prototype): direct
   user reports on all four. (1) Neither a task nor a subtask could be
