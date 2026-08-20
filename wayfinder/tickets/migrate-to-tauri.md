@@ -159,6 +159,38 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
   design worth keeping once Undo was real. `restore_task` command, a
   bottom-of-screen `UndoToast`, 10s window matching PRD §6.1.
 
+- **Cmd+N and live NLP feedback fixed** (`de90ea7`), from a direct user
+  report while away from the keyboard. Cmd+N was never wired to
+  anything. "NLP numbers didn't work, nothing highlights" turned out to
+  be a missing-feedback bug, not a parser bug — verified with 6 new
+  Rust tests (including a UTF-16-vs-byte-offset case) that
+  `flow_data::parse::parse` was already correct. Capture now has a real
+  live preview: highlights the recognized phrase in place and shows a
+  formatted date/time line, via a new `preview_capture` command run
+  debounced on every keystroke.
+- **Flow Debug.app** (`062bd0b`): a real, Spotlight-discoverable,
+  auto-rebuilding `.app` bundle (`scripts/dev-app.ts`, the Tauri
+  analogue of Flow's own `scripts/dev.ts`), answering a direct request
+  for "an app like Flow Dev called Flow Debug." Two real bugs found and
+  fixed before trusting it — not shipped blind: `pkill` was matching
+  the bundle's *display* name, which is never the actual running
+  process name for a Tauri bundle, so it silently killed nothing and
+  hung the watcher; and a genuine infinite rebuild loop from watching
+  "src" and "src-tauri/src" as separate recursive watches, letting
+  cargo's own build-output churn under "src-tauri/target/..." leak into
+  the "src" watcher (confirmed by instrumenting the raw fs.watch events,
+  not guessed) — fixed with one recursive watch over the repo root and
+  hand-checked path boundaries instead of trusting the scoping of
+  several independent watches not to collide.
+
+**Partial answer to "a proper agent debug/inspection feature"**: not a
+dedicated feature yet, but `scripts/dev-app.ts`'s own build/runtime log
+(piped to a file every session) already gives a real, usable way to
+verify a change actually built and launched without needing visual
+access — used throughout this session's own verification. A true
+in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
+`debug_snapshot`) is still open.
+
 ## Not started
 
 `eventkit.rs`/calendar wiring, the Calendar view itself, Settings' real
