@@ -1000,16 +1000,10 @@ impl Flow {
 
     fn handle_cancel_turn_action(&mut self, _: &CancelTurn, window: &mut Window, cx: &mut Context<Self>) {
         if self.scheduling || self.expanded_task_id.is_some() {
-            self.scheduling = false;
-            self.schedule_picker_open = false;
-            self.adding_subtask = false;
-            self.editing_title = false;
-            self.pending_complete_confirm = None;
-            self.set_expanded_task(None, cx);
-            self.schedule_input.update(cx, |input, cx| input.clear(cx));
-            self.subtask_input.update(cx, |input, cx| input.clear(cx));
-            self.title_input.update(cx, |input, cx| input.clear(cx));
-            cx.notify();
+            // `collapse_expanded_task` is this same reset now — see its own
+            // doc for why every field here has to be included, not just
+            // `expanded_task_id`.
+            self.collapse_expanded_task(cx);
             return;
         }
         self.close_capture(window, cx);
@@ -1077,7 +1071,24 @@ impl Flow {
         if self.expanded_task_id.is_none() {
             return;
         }
+        // Same full reset `handle_cancel_turn_action` (Escape) already did
+        // for closing the card — not just `expanded_task_id` itself. Found
+        // by re-checking this against that handler after writing it:
+        // `note_input`/`schedule_input`/`subtask_input`/`title_input` are
+        // all single shared instances reused across every task (see each
+        // field's own doc), not per-task state, so leaving the schedule
+        // picker "open," a title mid-edit, or a subtask draft sitting in
+        // them would have them resurface as leftover garbage the next time
+        // *any* task — not necessarily this one — gets expanded.
+        self.scheduling = false;
+        self.schedule_picker_open = false;
+        self.adding_subtask = false;
+        self.editing_title = false;
+        self.pending_complete_confirm = None;
         self.set_expanded_task(None, cx);
+        self.schedule_input.update(cx, |input, cx| input.clear(cx));
+        self.subtask_input.update(cx, |input, cx| input.clear(cx));
+        self.title_input.update(cx, |input, cx| input.clear(cx));
         cx.notify();
     }
 
