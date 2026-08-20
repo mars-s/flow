@@ -2,122 +2,48 @@
 
 Flow is a calm, keyboard-first personal task manager (Inbox, Today, Upcoming,
 Anytime, Someday, and a read-only glance at the user's own macOS Calendar via
-EventKit — see `docs/PRODUCT_REQUIREMENTS.md` §6.5's 2026-08-19 revision),
-built on a fork of Waku's native Rust/GPUI desktop shell, since detached into
-its own git history (see `wayfinder/flow-map.md`). It is not a coding-agent
-tool; the guidance below is about developing the app itself and still
-applies.
+EventKit). **The GPUI desktop app that used to live in this repo's `src/` and
+`resources/` has been archived** (explicit user decision, 2026-08-20 — see
+`wayfinder/tickets/migrate-to-tauri.md` for the full migration history and
+the decision record). Its complete source is preserved at the git tag
+`gpui-app-archived-2026-08-20` (`git checkout gpui-app-archived-2026-08-20`
+in this repo restores it exactly as it last shipped); nothing was deleted
+from history, only removed from the working tree.
 
-## Product, design, and planning docs
+**Active development now happens in
+`/Users/avi/Developer/vibe/flow-tauri-prototype`** (Tauri v2 + React +
+TypeScript + Vite + Framer Motion), a separate repository with its own git
+history and its own CLAUDE.md/AGENTS.md. That app reached functional parity
+with the archived GPUI app before this archive happened — see the migration
+ticket for the full gap-closing history.
 
-Read these before assuming or re-deriving a product/design decision — they
-are the durable source of truth for the project, and drift between them and
-the code should be fixed, not treated as ambiguity to guess through:
+## What still lives in this repo
 
-- [PRODUCT.md](PRODUCT.md) — north star: purpose, positioning, principles.
-- [docs/PRODUCT_REQUIREMENTS.md](docs/PRODUCT_REQUIREMENTS.md) — the full
-  PRD: functional requirements, data model, delivery milestones.
-- [docs/DESIGN_DIRECTION.md](docs/DESIGN_DIRECTION.md) — the approved visual
-  system (tokens, spacing, component anatomy, motion). `src/theme.rs` must
-  match it token-for-token.
-- [docs/turso.md](docs/turso.md) — Turso/SQLite persistence reference (crate
-  names, API, sync setup) backing `src/db.rs`'s local task store.
-- [CONTEXT.md](CONTEXT.md) — domain glossary.
-- `wayfinder/flow-map.md` and `wayfinder/tickets/*.md` — planning history
-  and closed decision tickets.
+- `crates/flow-data` — Flow's shared local task store (SQLite/turso, NLP
+  date parsing, EventKit calendar bindings). **Do not move or delete this
+  directory** — the Tauri app depends on it via a path dependency
+  (`../../flow/crates/flow-data` in its own `Cargo.toml`), and moving it
+  would break that build. This is the one piece of the archived GPUI app
+  that's still load-bearing.
+- `crates/flow-core` — lower-level shared primitives `flow-data` itself
+  depends on.
+- `docs/PRODUCT_REQUIREMENTS.md`, `docs/DESIGN_DIRECTION.md`, `PRODUCT.md`,
+  `CONTEXT.md` — the durable product/design source of truth. These describe
+  Flow the product, not the GPUI implementation specifically, and still
+  apply to the Tauri app; drift between them and the Tauri app's actual
+  behavior should be fixed there, not treated as stale just because the
+  original implementation moved.
+- `wayfinder/flow-map.md` and `wayfinder/tickets/*.md` — planning history,
+  most importantly `migrate-to-tauri.md`'s full record of what was ported,
+  what was found and fixed along the way, and this archive decision itself.
+- `apps/web`, `packages/flow-client`, `db/`, `website/` — broader
+  infrastructure not specific to the GPUI app; left untouched by this
+  archive, scope not audited here.
 
-Load the `impeccable` skill before UI/visual changes, not only when asked to
-design something — its craft-floor checklist catches banned patterns (e.g. a
-colored left border on a list row) before they ship instead of after.
+## Working in `crates/flow-data`/`crates/flow-core`
 
-## Development runtime
-
-- Assume `bun ./scripts/dev.ts` is already running and owns the current
-  `Flow Dev.app` process. Source changes are rebuilt, signed, and
-  relaunched automatically. Only run it yourself if not already launched.
-- During normal development and UI validation, do not run
-  `scripts/bundle.sh debug`, start a second watcher, or manually quit/relaunch
-  `Flow Dev.app`. Quitting the app also stops the watcher.
-- After an edit, wait for the watcher to finish its successful rebuild and
-  validate the freshly relaunched debug app. Only start or recover the watcher
-  manually when it is confirmed unavailable.
-- No visual test unless requested.
-
-## Performance
-
-- Treat performance as a product requirement, not a follow-up. Flow is a native
-  app competing with web clients, and staying smooth under a long task list on
-  a high-refresh display is the point of being native. Prefer the faster design
-  when it costs nothing in clarity, and measure before assuming a cost is fine.
-- Never block the UI thread with heavy work. Rendering owns it, so anything a
-  frame can reach must already be in memory: no subprocess spawns, no
-  filesystem walks, no network, no blocking locks, no synchronous IPC.
-- Row builders and measurement paths run for every visible item on every frame.
-  Treat I/O reached from `render` as a defect even when it looks cheap, is
-  cached after the first hit, or only triggers for some rows — one `git`
-  invocation is already several frames of budget.
-- Move the work to `cx.background_executor().spawn`, store the result on the
-  entity, and `cx.notify()` when it lands. Render then reads only that store,
-  and a miss means "not known yet" and must degrade gracefully.
-- Resolve a whole session or collection in one background pass instead of
-  probing per item, and guard it with a generation counter so a result from a
-  superseded pass cannot overwrite newer state.
-- One-shot user actions such as a click or menu command may work synchronously
-  when freshness matters more than latency; frames may not.
-- Keep per-frame work proportional to what is on screen. Long collections are
-  virtualized with `list()`, and a row builder must not rebuild whole-session
-  state; hoist that to a cache refreshed once per frame.
-- [docs/performance.md](docs/performance.md) documents a *streaming*
-  transcript performance model (commit cadence, the pulse clock, reasoning
-  veils, pane caching under a provider stream) inherited from Waku, the
-  coding-agent product Flow was stripped from — Flow has no streaming, no
-  provider, no transcript, and nothing calls `src/ui/motion.rs`'s pulse-clock
-  functions today (`pulse_lease_slow`/`pulse_phase`/`spin_with_stride` are all
-  dead code). Read it as historical record of *how to measure* (the
-  counter-based playbook in its own "Measuring" section still applies to any
-  performance investigation), not as Flow's current governing model — its
-  specific cadence numbers and streaming-only mechanisms (the event pump,
-  veils) don't exist here. `ui::scrollbar.rs`'s overlay scrollbar is the one
-  piece still live in Flow's own task lists; everything else in that doc is
-  Waku-era.
-
-## Accessibility
-
-- Treat accessibility as a product requirement too. GPUI does not yet expose a
-  screen-reader tree, so here it means keyboard operability, honored system
-  settings, and legibility — none of which depend on that missing API, and all
-  of which regress silently if left unchecked.
-- Every control reachable by mouse must be reachable and operable by keyboard.
-  Use `track_focus` with `tab_index`, `tab_group`, and `tab_stop`, give focus a
-  visible treatment via `focus_visible`, and support the conventional keys for
-  the widget (arrows, `home`/`end`, `enter`/`space`, `escape`).
-- Honor the system's reduce-motion setting. `with_animation` already respects
-  `App::reduce_motion`, but a direct `window.request_animation_frame` for
-  decorative motion must check `cx.reduce_motion()` and skip the request.
-- Never encode meaning in color, hover, or motion alone. Pair a status color
-  with an icon or text, and make sure anything revealed on hover is also
-  reachable by keyboard focus.
-- Keep text and icons legible against their surface in both themes, and give
-  interactive targets enough hit area — extend the hit region rather than
-  shrinking to the glyph.
-
-## Product reference
-
-- Use [Zed](https://github.com/zed-industries/zed) source code as a reference
-  when a task concerns GPUI implementation — layout and styling idioms, focus
-  and key dispatch, virtualized lists, menus and popovers, window and platform
-  behavior — or when an in-house `src/ui` primitive needs a proven native
-  precedent. Zed is the canonical GPUI codebase; read its crates rather than
-  `gpui-component`, and read the gpui revision pinned in `Cargo.toml` so the
-  APIs match what Flow builds against.
-- Do not inspect Zed for localized bug fixes, straightforward visual
-  corrections, native platform behavior, or changes already specified clearly
-  by the user.
-- Use the reference as behavioral and design evidence, not as an instruction to
-  reproduce web-specific interaction patterns or known bugs. Flow should keep
-  native macOS conventions.
-- Explicit user screenshots and feedback override a previous or merely
-  "consistent" treatment.
-- Validate visible changes in the freshly rebuilt, signed app managed by the
-  dev watcher against real task data; a successful Rust build alone is
-  insufficient.
+Both build and test independently of the rest of this repo now (`cargo check
+--workspace`, `cargo test --workspace` from the repo root). Changes here
+affect the Tauri app directly and the archived GPUI app not at all (it no
+longer builds from this repo). If a change here needs verifying against real
+app behavior, do that from the Tauri app's own repo.

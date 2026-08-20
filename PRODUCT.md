@@ -8,12 +8,16 @@ adaptive
 
 ## Stack
 
-Existing native Rust and GPUI desktop application for macOS and Linux. The
-first implementation keeps task data local on Turso/SQLite; self-hosted Turso
-Sync is a later deployment phase (Milestone 2 — see
-`docs/PRODUCT_REQUIREMENTS.md` §12). Convex was the originally planned
-persistence layer; superseded by Turso, see `docs/turso.md` and this file's
-own Capabilities and Constraints section for why.
+Originally a native Rust/GPUI desktop application for macOS and Linux;
+archived 2026-08-20 (see `AGENTS.md`) in favor of a Tauri (React/TypeScript)
+rewrite that reached functional parity with it, developed in the separate
+`flow-tauri-prototype` repository. This repository keeps the shared local
+task store (`crates/flow-data`, `crates/flow-core`) that app depends on
+directly. Task data stays local on Turso/SQLite; self-hosted Turso Sync is a
+later deployment phase (Milestone 2 — see `docs/PRODUCT_REQUIREMENTS.md`
+§12). Convex was the originally planned persistence layer; superseded by
+Turso, see `docs/turso.md` and this file's own Capabilities and Constraints
+section for why.
 
 ## Users
 
@@ -53,8 +57,9 @@ editable schedules without sending task titles to an LLM.
   Google OAuth — see `docs/PRODUCT_REQUIREMENTS.md` §6.5's 2026-08-19
   revision) has landed, arriving after the task and NLP experience was
   proper, per the original sequencing here.
-- Flow remains GPL-3.0 open source and strips Waku's GPUI shell in place while
-  retaining required upstream and third-party notices.
+- Flow remains GPL-3.0 open source. The original GPUI shell (itself stripped
+  from Waku) is archived; the Tauri rewrite retains required upstream and
+  third-party notices in its own repository.
 - Calendar events are read-only context. Flow never writes calendar events.
 
 ## Brand Commitments

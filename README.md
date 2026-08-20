@@ -1,8 +1,7 @@
 # Flow
 
-Flow is a calm, keyboard-first personal task manager. It is built in Rust
-with [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) and
-keeps your tasks on your machine.
+Flow is a calm, keyboard-first personal task manager that keeps your tasks
+on your machine.
 
 Flow gives every open task one clear home — Inbox, Today, Upcoming, Anytime,
 or Someday — and turns natural time language ("take out laundry 8 am
@@ -19,20 +18,19 @@ creates or edits calendar events.
 - A compact, privacy-respecting calendar glance next to your tasks.
 - Store app state locally, with no account required to get started.
 
-## Development
+## This repository today
 
-Development is supported on macOS and Linux and requires
-[Rust 1.96 or newer](https://www.rust-lang.org/tools/install) and
-[Bun](https://bun.sh/). Linux supports both Wayland and X11; install the native
-build prerequisites listed in [CONTRIBUTING.md](CONTRIBUTING.md) first.
+Flow's original implementation was a native Rust/GPUI desktop app, built
+here. That app has since been **archived** (2026-08-20) in favor of a Tauri
+(React/TypeScript) rewrite that reached functional parity with it — see
+`AGENTS.md`/`CLAUDE.md` for the full picture. The archived GPUI source is
+preserved at the git tag `gpui-app-archived-2026-08-20`; nothing is deleted,
+only moved out of the working tree.
 
-```sh
-bun install
-bun run dev
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and checks.
-Release maintainers should also read [RELEASING.md](RELEASING.md).
+**Active app development now happens in the separate `flow-tauri-prototype`
+repository.** This repository still hosts `crates/flow-data` and
+`crates/flow-core`, the shared local task store the Tauri app depends on
+directly, plus the durable product/design docs and planning history.
 
 ## License
 
