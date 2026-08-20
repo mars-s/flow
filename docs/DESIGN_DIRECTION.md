@@ -147,7 +147,19 @@ left empty. This is a context pane, not an appointment editor.
 - Main-view change: 140 ms crossfade with 6 px horizontal offset.
 - Capture field: focus border and soft blue internal highlight over 120 ms.
 - Task completion: 180-220 ms opacity and vertical collapse.
-- Task detail: 160 ms opacity and scale from 0.985 to 1.0.
+- Task detail: 140 ms opacity fade (`ui::motion::REVEAL`, shared with the
+  main-pane cross-fade, both within this section's own 120–160 ms range)
+  plus a settle-in top-padding ease standing in for the scale this line
+  used to call for. **Revised 2026-08-20**: GPUI's `Div` has no
+  scale/transform style to animate — only `Svg` primitives take a
+  `TransformationMatrix` (`ui::motion::spin_with_stride`'s icon spin is the
+  only user, and it's dead code) — so a literal "scale from 0.985 to 1.0"
+  on an arbitrary content subtree isn't achievable with what this codebase
+  builds on. `render_detail_card`'s reveal fakes the same read instead:
+  the card's own top padding starts a few px past its resting value and
+  eases down in step with the fade, borrowing the "animate a concrete box
+  property, not a transform" technique the row's own collapse animation
+  already established for height.
 - Sidebar selection: 120 ms background-color transition.
 - No perpetual motion, parallax, magnetic effects, or animated gradients.
 - `prefers-reduced-motion` removes transforms and limits transitions to 100 ms.
