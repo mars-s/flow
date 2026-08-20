@@ -135,6 +135,13 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Removed the dead Move/Flag pills** (`fb4eb74`): neither
+  corresponds to a real Flow feature — grepped `tasks.rs`/`db.rs` for
+  any flag/priority/move concept and found none; the GPUI detail card
+  only ever had Schedule/Subtask/Delete. Leftover from the original
+  small Tauri demo, no onClick, no backend support. Removed rather
+  than wired up, since there's nothing on the GPUI side to port.
+
 - **Bare-space-to-open-Capture** (`5b4364e`): mirrors the GPUI app's
   own `handle_space_capture_action` — scoped to task views only, and
   skipped when any input/textarea/contenteditable already has focus
@@ -336,14 +343,23 @@ in-app inspector (mirroring the GPUI app's own Cmd+Option+I panel /
 Arrow-key navigation between rows specifically (Tab order is the only way
 to move focus between tasks right now, matching the GPUI app's own
 disclosed gap there — not a real parity gap since the GPUI app itself
-doesn't have it either), and release/distribution tooling. Task CRUD
-(create via Capture with real parsing, list/complete/note/delete,
-subtasks, delete+undo), scheduling from the UI picker, bulk actions
-(multi-select + bulk-action bar), keyboard operation of every row/card/
-pill, and Calendar (connect flow, all four Day/Week/Month/Year views with
-real navigation, Week as a true time-grid matching the GPUI app's own
-split) are the actual state of things now — the core task-manager loop,
-including Calendar, is genuinely complete and keyboard-operable,
+doesn't have it either), and release/distribution tooling (blocked on
+credentials this agent doesn't have — signing identity, notarization —
+not a code gap; revisit once parity is otherwise done and a real ship
+decision is imminent). A `render.rs`/`sidebar.rs`/`tasks.rs`/
+`calendar.rs`/`settings.rs` sweep against the actual GPUI source (not
+just this ticket's own summary) turned up and closed several real,
+previously-silent gaps: the calendar sidebar, the Denied-calendar dead
+end, Today silently excluding overdue tasks, the calendar-glance card,
+and bare-space-to-capture — worth repeating over any file not yet swept
+this way before calling a section done. Task CRUD (create via Capture
+with real parsing, list/complete/note/delete, subtasks, delete+undo),
+scheduling from the UI picker, bulk actions (multi-select + bulk-action
+bar), keyboard operation of every row/card/pill, and Calendar (connect
+flow, all four Day/Week/Month/Year views with real navigation, Week as a
+true time-grid, per-calendar show/hide) are the actual state of things
+now — the core task-manager loop, including Calendar, is genuinely
+complete and keyboard-operable,
 and Calendar is real but partial.
 
 **Explicitly deferred, asked for directly and not done (2026-08-20):**
