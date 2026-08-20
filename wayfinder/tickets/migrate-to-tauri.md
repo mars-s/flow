@@ -135,6 +135,14 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Checklist divider direction fixed** (`515bec1` in the prototype):
+  direct user correction with a real Things 3 screenshot — "the lines
+  are horizontal and are borders of the subtasks checklists." The
+  entry below misread "lines between the subtasks" as a vertical
+  connector threading through the checkboxes; replaced with a thin
+  `border-bottom` under each row instead (none under the last one),
+  matching the screenshot.
+
 - **Checklist v2, schedule picker fixed, NLP-aware rename, unfocus
   bug fixed** (`de0870e` in the prototype): direct user feedback round
   on last turn's own checklist redesign — checkbox icons switched to
