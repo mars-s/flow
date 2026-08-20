@@ -136,6 +136,17 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Fifth real AI block: Overdue batch reschedule** (`648892b` in the
+  prototype): renders inline above Today's own list (overdue tasks
+  already surface there per the PRD, no separate view needed). Asks the
+  model only for a small integer day-offset + a rationale rather than
+  trusting it with real date arithmetic — `addDaysIso()` computes the
+  actual calendar date locally against the app's own "today," so a
+  hallucinated date format can't send a task to the wrong day. Manual
+  previews "Move all to <day>" before writing; Auto reschedules the
+  whole overdue pile the moment it's first seen, matching Checklist
+  expansion's and Stale task nudges' established auto-writes-immediately
+  behavior for data-changing blocks.
 - **Cmd+, now toggles Settings closed too, fourth AI block: Duplicate
   detection** (`a97474e` in the prototype): Cmd+, previously only opened
   Settings; now tracks the last non-Settings destination and toggles
