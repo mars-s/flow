@@ -77,11 +77,30 @@ export default function App() {
       if (event.metaKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         setCapturing(true);
+        return;
+      }
+      // Bare space opens Capture too, scoped to task views only (not
+      // Calendar/Settings) so it doesn't hijack space's native meaning
+      // there — same handle_space_capture_action the GPUI app has. The
+      // GPUI app's own keymap context skips this while a composer has
+      // focus; here that's checking the real focused element, which also
+      // covers the schedule picker's own auto-focused input (its state
+      // lives inside TaskRow, not lifted up here, so there's no flag for
+      // it to check directly).
+      if (event.key === " " && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const tag = document.activeElement?.tagName;
+        const editable = document.activeElement?.getAttribute("contenteditable") === "true";
+        if (tag === "INPUT" || tag === "TEXTAREA" || editable) return;
+        if (capturing || expanded || mode !== "tasks" || destination === "settings" || destination === "calendar") {
+          return;
+        }
+        event.preventDefault();
+        setCapturing(true);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [capturing, expanded, mode, destination]);
 
   // Only the expanded task's card ever needs its subtasks — same reasoning
   // the GPUI app's own subtask_context comment gives for fetching this only
