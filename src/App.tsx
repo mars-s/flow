@@ -93,7 +93,7 @@ export default function App() {
 
   const capture = (title: string) => {
     setCapturing(false);
-    api.createTask(title).then(refresh).catch((error) => setLoadError(String(error)));
+    api.captureTask(title).then(refresh).catch((error) => setLoadError(String(error)));
   };
 
   const changeNote = (id: string, note: string) => {

@@ -12,6 +12,7 @@
 //! actually cutting over, not before.
 
 use flow_data::db::{Db, Task, View};
+use flow_data::parse;
 use tauri::Manager;
 
 fn dev_database_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -46,6 +47,33 @@ async fn create_task(db: tauri::State<'_, Db>, title: String) -> Result<Task, St
         .await
         .map_err(|error| error.to_string())?
         .map_err(|error| error.to_string())
+}
+
+/// Capture's real path — `flow_data::parse::parse` against the raw typed
+/// text, then `create_task_scheduled` with whatever it recognized, not a
+/// bare `create_task`. Mirrors the GPUI app's own `submit_capture`
+/// (`src/app.rs`) exactly, including its one deliberate override of a
+/// literal PRD §14 reading: a recognized date activates the task straight
+/// into Today/Upcoming rather than leaving it sitting in Inbox with a
+/// schedule attached, and a bare recognized time with no date phrase
+/// ("3pm") defaults to today rather than being rejected — `Db::schedule`'s
+/// own guard requires a date whenever a time is present.
+#[tauri::command]
+async fn capture_task(db: tauri::State<'_, Db>, title: String) -> Result<Task, String> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let today = chrono::Local::now().date_naive();
+        let parsed = parse::parse(&title, today);
+        let date = parsed.date.or_else(|| parsed.time.is_some().then_some(today));
+        db.create_task_scheduled(
+            parsed.cleaned_title,
+            date.map(|d| d.to_string()),
+            parsed.time.map(|t| t.format("%H:%M").to_string()),
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -90,6 +118,7 @@ pub fn run() {
             list_view,
             list_completed,
             create_task,
+            capture_task,
             set_completed,
             set_note,
             delete_task,

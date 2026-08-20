@@ -9,6 +9,9 @@ export const api = {
   listView: (view: View) => invoke<Task[]>("list_view", { view }),
   listCompleted: (view: View) => invoke<Task[]>("list_completed", { view }),
   createTask: (title: string) => invoke<Task>("create_task", { title }),
+  // Real date/time parsing (flow_data::parse), not a bare title — see the
+  // Rust command's own doc for the exact GPUI-matching capture rules.
+  captureTask: (title: string) => invoke<Task>("capture_task", { title }),
   setCompleted: (id: string, completed: boolean) => invoke<void>("set_completed", { id, completed }),
   setNote: (id: string, note: string) => invoke<void>("set_note", { id, note }),
   deleteTask: (id: string) => invoke<void>("delete_task", { id }),
