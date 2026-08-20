@@ -8,10 +8,12 @@ license = "GPL-3.0-only"
 [workspace]
 members = [
     "crates/flow-core",
+    "crates/flow-data",
 ]
 default-members = [
     ".",
     "crates/flow-core",
+    "crates/flow-data",
 ]
 resolver = "2"
 
@@ -36,6 +38,7 @@ unicode-segmentation = "1.12"
 url = "2"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 flow-core = { path = "crates/flow-core" }
+flow-data = { path = "crates/flow-data" }
 pulldown-cmark = "0.13"
 regex = "1"
 rust-i18n = "4"

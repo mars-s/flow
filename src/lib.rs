@@ -24,7 +24,11 @@ mod analytics;
 mod app;
 mod assets;
 mod browser;
-mod db;
+// Lives in the `flow-data` crate now, not this one — it never depended on
+// GPUI, so it's reusable by any frontend
+// (`wayfinder/tickets/migrate-to-tauri.md`). This re-export keeps every
+// existing `crate::db::…` reference in the app working unchanged.
+use flow_data::db;
 mod debug_log;
 #[cfg(target_os = "macos")]
 mod eventkit;

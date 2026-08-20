@@ -2260,6 +2260,7 @@ dependencies = [
  "chrono",
  "dirs",
  "flow-core",
+ "flow-data",
  "futures",
  "futures-lite",
  "gpui",
@@ -2300,6 +2301,19 @@ dependencies = [
  "rust-i18n",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "flow-data"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
+ "flow-core",
+ "tokio",
+ "turso",
+ "uuid",
 ]
 
 [[package]]
