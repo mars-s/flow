@@ -85,15 +85,20 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Open engineering questions for whoever picks this up next
 
 - **How does the Tauri frontend reach Flow's real data and logic?**
-  `src/db.rs` (Turso/SQLite), `src/eventkit.rs` (calendar), `src/parse.rs`
-  (NLP scheduling) are all real, tested Rust — the plan should reuse them
-  as a Tauri backend (via `#[tauri::command]`s calling into that logic,
-  most likely by extracting the non-GPUI parts of Flow's `src` into a
-  shared crate both the old GPUI binary and the new Tauri backend can
-  depend on) rather than rewriting task/calendar/parsing logic in
-  TypeScript. Not yet scoped which modules cut cleanly (they were written
-  assuming a GPUI `Context`/`cx.background_executor()` runtime in
-  places) versus which need real separation work first.
+  **Underway, not finished.** `db.rs` turned out to have zero `gpui`
+  dependency at all (verified by grep before moving anything, not
+  assumed), so it moved cleanly (`9a5fb5f`) into a new workspace crate,
+  `crates/flow-data` — the GPUI binary's `src/lib.rs` now just
+  re-exports it (`use flow_data::db;`), so every existing
+  `crate::db::…` call site in the app kept working unchanged, and all
+  186 tests plus a real watcher rebuild confirmed nothing broke.
+  `eventkit.rs`, `platform.rs`'s calendar-specific functions, and
+  `parse.rs` are equally `gpui`-free (same grep check run against all
+  three) and equally movable the same way — not moved yet. What's
+  **still** fully open: actually wiring a `src-tauri` backend crate to
+  depend on `flow-data` and expose `#[tauri::command]`s the React
+  frontend can call — nothing in `flow-tauri-prototype` reaches this
+  crate yet, it's still 100% mock data.
 - **What happens to the GPUI app during the migration?** Kept running
   and released as-is until the Tauri app reaches parity, per "multi-
   session, not one sweep" — no plan yet for how parity is judged screen
