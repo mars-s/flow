@@ -251,6 +251,14 @@ export default function App() {
       .catch((error) => setLoadError(String(error)));
   };
 
+  // Renaming a task with a recognized date/time phrase reschedules it too
+  // — "look out for the nlp input similar to adding a task" (direct user
+  // request). Always bucket Active, same as capture_task's own rule for
+  // a task that gets a date or time attached to it.
+  const rescheduleTask = (id: string, date: string, time: string | null) => {
+    api.scheduleTask(id, "Active", date, time).then(refresh).catch((error) => setLoadError(String(error)));
+  };
+
   const addSubtask = (parentId: string, title: string) => {
     api
       .createSubtask(parentId, title)
@@ -262,6 +270,19 @@ export default function App() {
     if (!expanded) return;
     api
       .setCompleted(id, completed)
+      .then(() => refreshSubtasks(expanded))
+      .catch((error) => setLoadError(String(error)));
+  };
+
+  // Backspace-on-empty in the checklist — direct user request to delete
+  // a subtask that way instead of needing a dedicated delete affordance
+  // per row. No undo toast, matching the "gets rid of unnecessary ui"
+  // spirit of the whole redesign; it's one keystroke to remove, not a
+  // destructive bulk action.
+  const deleteSubtask = (id: string) => {
+    if (!expanded) return;
+    api
+      .deleteTask(id)
       .then(() => refreshSubtasks(expanded))
       .catch((error) => setLoadError(String(error)));
   };
@@ -347,7 +368,15 @@ export default function App() {
         inboxCount={inboxCount}
         onCapture={() => setCapturing(true)}
       />
-      <div className="main-pane" onClick={(event) => event.stopPropagation()}>
+      {/* No stopPropagation here on purpose — a click anywhere in the main
+          pane that isn't absorbed by something more specific (a row's own
+          click-to-expand, the expanded card's own stopPropagation, a
+          pill/input) bubbles up to the root div's own handler and
+          collapses the expanded task, matching the direct user report
+          that clicking elsewhere while a task is expanded didn't unfocus
+          it — main-pane's own blind stopPropagation was swallowing that
+          bubble before it ever reached the root. */}
+      <div className="main-pane">
         {loadError && <div className="load-error">Couldn't reach the local task store: {loadError}</div>}
         <UndoToast toast={undoToast} onDismiss={() => setUndoToast(null)} />
         <AnimatePresence>
@@ -370,9 +399,11 @@ export default function App() {
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
                 onRename={renameTask}
+                onReschedule={rescheduleTask}
                 onNoteChange={changeNote}
                 onAddSubtask={addSubtask}
                 onToggleSubtask={toggleSubtask}
+                onDeleteSubtask={deleteSubtask}
                 onDelete={deleteTask}
                 onScheduled={refresh}
                 onToggleSelected={toggleSelected}
@@ -397,9 +428,11 @@ export default function App() {
                 onToggleExpanded={(id) => setExpanded((current) => (current === id ? null : id))}
                 onComplete={complete}
                 onRename={renameTask}
+                onReschedule={rescheduleTask}
                 onNoteChange={changeNote}
                 onAddSubtask={addSubtask}
                 onToggleSubtask={toggleSubtask}
+                onDeleteSubtask={deleteSubtask}
                 onDelete={deleteTask}
                 onScheduled={refresh}
                 onToggleSelected={toggleSelected}

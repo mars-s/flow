@@ -17,9 +17,11 @@ type Props = {
   onToggleExpanded: (id: string) => void;
   onComplete: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  onReschedule: (id: string, date: string, time: string | null) => void;
   onNoteChange: (id: string, note: string) => void;
   onAddSubtask: (parentId: string, title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
+  onDeleteSubtask: (id: string) => void;
   onDelete: (id: string) => void;
   onScheduled: () => void;
   onToggleSelected: (id: string) => void;
@@ -46,9 +48,11 @@ export function UpcomingList({
   onToggleExpanded,
   onComplete,
   onRename,
+  onReschedule,
   onNoteChange,
   onAddSubtask,
   onToggleSubtask,
+  onDeleteSubtask,
   onDelete,
   onScheduled,
   onToggleSelected,
@@ -91,9 +95,11 @@ export function UpcomingList({
                         onToggleExpanded={() => onToggleExpanded(task.id)}
                         onComplete={() => onComplete(task.id)}
                         onRename={onRename}
+                        onReschedule={onReschedule}
                         onNoteChange={(note) => onNoteChange(task.id, note)}
                         onAddSubtask={(title) => onAddSubtask(task.id, title)}
                         onToggleSubtask={onToggleSubtask}
+                        onDeleteSubtask={onDeleteSubtask}
                         onDelete={() => onDelete(task.id)}
                         onScheduled={onScheduled}
                         onToggleSelected={() => onToggleSelected(task.id)}

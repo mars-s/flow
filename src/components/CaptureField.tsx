@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { splitHighlight, useNlpPreview } from "../lib/nlpPreview";
 import "./CaptureField.css";
 
 type Props = {
@@ -12,55 +12,16 @@ type Props = {
 export function CaptureField({ open, onSubmit, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
-  const [highlight, setHighlight] = useState<{ start: number; end: number } | null>(null);
-  const [preview, setPreview] = useState<{ date: string | null; time: string | null } | null>(null);
+  const { highlight, preview } = useNlpPreview(value);
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
-    else {
-      setValue("");
-      setHighlight(null);
-      setPreview(null);
-    }
+    else setValue("");
   }, [open]);
-
-  // Debounced live parse — flow_data::parse::parse is a pure regex match
-  // against a short string (no I/O), but still not worth round-tripping on
-  // every single keystroke of a fast typist.
-  useEffect(() => {
-    if (!value.trim()) {
-      setHighlight(null);
-      setPreview(null);
-      return;
-    }
-    const timeout = setTimeout(() => {
-      api
-        .previewCapture(value)
-        .then((result) => {
-          setPreview(result.date || result.time ? { date: result.date, time: result.time } : null);
-          setHighlight(
-            result.highlight_start !== null && result.highlight_end !== null
-              ? { start: result.highlight_start, end: result.highlight_end }
-              : null,
-          );
-        })
-        .catch(() => {
-          setPreview(null);
-          setHighlight(null);
-        });
-    }, 120);
-    return () => clearTimeout(timeout);
-  }, [value]);
 
   if (!open) return null;
 
-  // UTF-16 code-unit slicing, matching the Rust side's own offsets
-  // (JS strings are UTF-16 under the hood, so plain slice() already speaks
-  // the same units preview_capture converts to — no further conversion
-  // needed here).
-  const before = highlight ? value.slice(0, highlight.start) : value;
-  const matched = highlight ? value.slice(highlight.start, highlight.end) : "";
-  const after = highlight ? value.slice(highlight.end) : "";
+  const { before, matched, after } = splitHighlight(value, highlight);
 
   return (
     <motion.form

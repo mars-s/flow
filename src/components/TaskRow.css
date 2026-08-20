@@ -105,17 +105,59 @@
   border-radius: 4px;
 }
 
-.card-title-input {
+.card-title-edit {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Same dual-layer highlight technique Capture's own field uses: an
+   invisible (color: transparent) input stacked on top of a styled
+   overlay showing the real, visible text with the <mark>-wrapped
+   recognized phrase — the input contributes only its caret and editing,
+   the overlay underneath is what's actually seen. */
+.card-title-input-wrap {
+  position: relative;
+  min-height: 18px;
+}
+
+.card-title-highlight-layer,
+.card-title-input {
+  position: absolute;
+  inset: 0;
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
+  white-space: pre;
+}
+
+.card-title-highlight-layer {
   color: var(--text);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.card-title-highlight-layer mark {
+  background: var(--accent-wash);
+  color: var(--accent);
+  border-radius: 3px;
+}
+
+.card-title-input {
+  width: 100%;
+  color: transparent;
+  caret-color: var(--text);
   background: transparent;
   border: none;
   outline: none;
   padding: 0;
+}
+
+.card-title-preview {
+  font-size: 11px;
+  color: var(--accent);
 }
 
 .card-note {
@@ -166,49 +208,45 @@
   opacity: 0.85;
 }
 
-/* Things 3-style checklist: flat, undecorated rows — no left-border rail,
-   no section header/count label (the "Checklist" pill's own label
-   already carries the count when this is closed). */
+/* Things 3-style checklist: no section header/count label (the
+   "Checklist" pill's own label carries the count, and disappears
+   entirely once a subtask exists — direct user request). A single
+   continuous connector line threads behind every checkbox rather than a
+   left-border rail, same "one line running through the whole list"
+   look Things 3's own checklist has, not a per-row segment. */
 .card-subtasks {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 8px;
 }
 
-.subtask-row,
-.subtask-add-row {
+.subtask-connector {
+  position: absolute;
+  left: 7.5px;
+  top: 13px;
+  bottom: 13px;
+  width: 1px;
+  background: var(--border-strong);
+  pointer-events: none;
+}
+
+.subtask-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
 }
 
-.subtask-add-row {
-  margin: 0;
-}
-
-.subtask-add-input {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text);
-  font-size: 12px;
-  font-family: inherit;
-}
-
-.subtask-add-input::placeholder {
-  color: var(--text-ghost);
-}
-
 .subtask-checkbox {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   border: none;
-  background: transparent;
+  background: var(--raised);
   cursor: pointer;
   outline: none;
 }
@@ -225,8 +263,11 @@
   color: var(--text-secondary);
 }
 
-.subtask-checkbox-icon.add-row-icon {
+.subtask-checkbox-icon.draft-icon {
+  flex: none;
   opacity: 0.4;
+  background: var(--raised);
+  position: relative;
 }
 
 .subtask-title {

@@ -1,27 +1,103 @@
 .schedule-picker {
   position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
   z-index: 30;
-  margin-top: 4px;
-  padding: 8px;
+  padding: 10px;
   border-radius: var(--radius-md);
   background: var(--raised);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 180px;
+  gap: 8px;
+  width: 220px;
+}
+
+.schedule-picker-quick {
+  display: flex;
+  gap: 4px;
+}
+
+.schedule-picker-quick-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--overlay);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  cursor: pointer;
+  outline: none;
+}
+
+.schedule-picker-quick-btn:hover,
+.schedule-picker-quick-btn:focus-visible {
+  background: var(--overlay-strong);
+  color: var(--text);
+}
+
+.schedule-picker-form {
+  margin: 0;
+}
+
+.schedule-picker-input-wrap {
+  position: relative;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--overlay);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+  overflow: hidden;
+}
+
+/* Same dual-layer highlight technique Capture's own field uses. */
+.schedule-picker-highlight-layer,
+.schedule-picker-input {
+  position: absolute;
+  inset: 0;
+  height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 30px;
+  white-space: pre;
+}
+
+.schedule-picker-highlight-layer {
+  color: var(--text);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.schedule-picker-highlight-layer mark {
+  background: var(--accent-wash);
+  color: var(--accent);
+  border-radius: 3px;
 }
 
 .schedule-picker-input {
   width: 100%;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 5px;
-  border: 1px solid var(--accent);
-  background: var(--overlay);
-  color: var(--text);
-  font-size: 12px;
+  border: none;
   outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+
+.schedule-picker-input::placeholder {
+  color: var(--text-ghost);
+}
+
+.schedule-picker-preview {
+  font-size: 11px;
+  color: var(--accent);
+  padding: 0 2px;
 }
 
 .schedule-picker-error {
@@ -29,33 +105,25 @@
   color: var(--danger);
 }
 
-.schedule-picker-quick {
+.schedule-picker-clear {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.schedule-picker-quick button {
-  text-align: left;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  border-radius: 5px;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  padding: 5px 6px;
-  border-radius: 4px;
+  color: var(--text-ghost);
+  font-size: 11px;
   cursor: pointer;
   outline: none;
-}
-
-.schedule-picker-quick button:hover,
-.schedule-picker-quick button:focus-visible {
-  background: var(--overlay);
-  color: var(--text);
-}
-
-.schedule-picker-clear {
-  color: var(--text-ghost) !important;
   border-top: 1px solid var(--sidebar-border);
   margin-top: 2px;
-  padding-top: 7px !important;
+  padding-top: 8px;
+}
+
+.schedule-picker-clear:hover,
+.schedule-picker-clear:focus-visible {
+  color: var(--danger);
 }

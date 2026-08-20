@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Tag, Plus, Trash2, Circle, CheckCircle2 } from "lucide-react";
+import { Tag, Trash2, Square, SquareCheckBig } from "lucide-react";
 import type { Task } from "../lib/types";
 import { linkify } from "../lib/linkify";
 import { formatSchedule } from "../lib/date";
+import { splitHighlight, stripHighlight, useNlpPreview } from "../lib/nlpPreview";
 import { SchedulePicker } from "./SchedulePicker";
 import "./TaskRow.css";
 
@@ -26,26 +27,36 @@ type Props = {
   onToggleExpanded: () => void;
   onComplete: () => void;
   onRename: (id: string, title: string) => void;
+  onReschedule: (id: string, date: string, time: string | null) => void;
   onNoteChange: (note: string) => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (id: string, completed: boolean) => void;
+  onDeleteSubtask: (id: string) => void;
   onDelete: () => void;
   onScheduled: () => void;
   selected: boolean;
   onToggleSelected: () => void;
 };
 
-// A subtask row with its own click-to-edit title, same view/edit toggle
-// shape the parent task's note field already uses — direct user report
-// that there was no way to rename a subtask once created.
+// A checklist row with its own click-to-edit title. Enter both commits a
+// rename (if the text changed) and tells the parent to open a fresh
+// draft row right after it — chaining "type, Enter, type, Enter..." is
+// the only way to grow the list past the first item (direct user
+// request: no standing "add" affordance once there's already at least
+// one subtask). Backspace on an empty title deletes the row entirely and
+// hands focus back — same as Notion/Things's own block-editor feel.
 function SubtaskRow({
   subtask,
   onToggle,
   onRename,
+  onEnter,
+  onDelete,
 }: {
   subtask: Task;
   onToggle: () => void;
   onRename: (title: string) => void;
+  onEnter: () => void;
+  onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,9 +65,9 @@ function SubtaskRow({
     <div className="subtask-row">
       <motion.button type="button" className="subtask-checkbox" whileTap={{ scale: 0.85 }} onClick={onToggle}>
         {subtask.completed_at ? (
-          <CheckCircle2 size={15} className="subtask-checkbox-icon checked" strokeWidth={2} />
+          <SquareCheckBig size={15} className="subtask-checkbox-icon checked" strokeWidth={2} />
         ) : (
-          <Circle size={15} className="subtask-checkbox-icon" strokeWidth={1.6} />
+          <Square size={15} className="subtask-checkbox-icon" strokeWidth={1.6} />
         )}
       </motion.button>
       {editing ? (
@@ -73,7 +84,13 @@ function SubtaskRow({
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
-              event.currentTarget.blur();
+              const value = event.currentTarget.value.trim();
+              if (value && value !== subtask.title) onRename(value);
+              setEditing(false);
+              onEnter();
+            } else if (event.key === "Backspace" && event.currentTarget.value === "") {
+              event.preventDefault();
+              onDelete();
             } else if (event.key === "Escape") {
               event.stopPropagation();
               event.currentTarget.value = subtask.title;
@@ -98,6 +115,120 @@ function SubtaskRow({
   );
 }
 
+// The trailing draft row — not yet a real subtask. Enter commits it (via
+// onAddSubtask) and clears + refocuses itself for the next one, so the
+// chain keeps going until the user stops typing. Empty Enter/Backspace/
+// blur closes the draft instead of adding a blank item.
+function DraftSubtaskRow({ onAdd, onClose }: { onAdd: (title: string) => void; onClose: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="subtask-row">
+      <Square size={15} className="subtask-checkbox-icon draft-icon" strokeWidth={1.6} />
+      <input
+        ref={inputRef}
+        className="subtask-title-input"
+        placeholder="New checklist item"
+        autoFocus
+        onKeyDown={(event) => {
+          const input = event.currentTarget;
+          if (event.key === "Enter") {
+            const value = input.value.trim();
+            if (value) {
+              onAdd(value);
+              input.value = "";
+              input.focus();
+            } else {
+              onClose();
+            }
+          } else if (event.key === "Backspace" && input.value === "") {
+            event.preventDefault();
+            onClose();
+          } else if (event.key === "Escape") {
+            event.stopPropagation();
+            onClose();
+          }
+        }}
+        onBlur={(event) => {
+          const value = event.target.value.trim();
+          if (value) onAdd(value);
+          onClose();
+        }}
+      />
+    </div>
+  );
+}
+
+// A rename input that "looks out for the nlp input similar to adding a
+// task" (direct user request): the same live highlight + date/time
+// preview Capture's own field has. Committing strips the recognized
+// phrase out of the title (same shape flow_data::parse::parse itself
+// does) and, when a date or time was found, reschedules the task too —
+// renaming "call mom tomorrow" behaves like capturing it fresh, not just
+// a plain text replace.
+function TitleEditInput({
+  title,
+  onCommit,
+  onCancel,
+}: {
+  title: string;
+  onCommit: (title: string, date: string | null, time: string | null) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(title);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { highlight, preview } = useNlpPreview(value);
+  const { before, matched, after } = splitHighlight(value, highlight);
+
+  useEffect(() => {
+    inputRef.current?.select();
+  }, []);
+
+  const commit = () => {
+    const cleaned = stripHighlight(value, highlight);
+    if (cleaned && (cleaned !== title || preview)) {
+      onCommit(cleaned, preview?.date ?? null, preview?.time ?? null);
+    } else {
+      onCancel();
+    }
+  };
+
+  return (
+    <div className="card-title-edit" onClick={(event) => event.stopPropagation()}>
+      <div className="card-title-input-wrap">
+        <div className="card-title-highlight-layer" aria-hidden="true">
+          {before}
+          {matched && <mark>{matched}</mark>}
+          {after}
+          {"​"}
+        </div>
+        <input
+          ref={inputRef}
+          className="card-title-input"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            } else if (event.key === "Escape") {
+              event.stopPropagation();
+              onCancel();
+            }
+          }}
+        />
+      </div>
+      {preview && (
+        <div className="card-title-preview">
+          {preview.date}
+          {preview.date && preview.time ? " · " : ""}
+          {preview.time}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TaskRow({
   task,
   expanded,
@@ -106,22 +237,22 @@ export function TaskRow({
   onToggleExpanded,
   onComplete,
   onRename,
+  onReschedule,
   onNoteChange,
   onAddSubtask,
   onToggleSubtask,
+  onDeleteSubtask,
   onDelete,
   onScheduled,
   selected,
   onToggleSelected,
 }: Props) {
   const [pressed, setPressed] = useState(false);
-  const [subtasksOpen, setSubtasksOpen] = useState(false);
+  const [draftOpen, setDraftOpen] = useState(false);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
-  const subtaskInputRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
-  const titleRef = useRef<HTMLInputElement>(null);
 
   const checkbox = (
     <motion.div
@@ -147,6 +278,7 @@ export function TaskRow({
   );
 
   if (expanded) {
+    const showChecklist = subtasks.length > 0 || draftOpen;
     return (
       <motion.div
         layoutId={`row-${task.id}`}
@@ -168,26 +300,13 @@ export function TaskRow({
         >
           {checkbox}
           {editingTitle ? (
-            <input
-              ref={titleRef}
-              className="card-title-input"
-              defaultValue={task.title}
-              autoFocus
-              onClick={(event) => event.stopPropagation()}
-              onFocus={(event) => event.currentTarget.select()}
-              onBlur={(event) => {
-                const value = event.target.value.trim();
-                if (value && value !== task.title) onRename(task.id, value);
+            <TitleEditInput
+              title={task.title}
+              onCancel={() => setEditingTitle(false)}
+              onCommit={(title, date, time) => {
+                onRename(task.id, title);
+                if (date) onReschedule(task.id, date, time);
                 setEditingTitle(false);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                } else if (event.key === "Escape") {
-                  event.stopPropagation();
-                  event.currentTarget.value = task.title;
-                  event.currentTarget.blur();
-                }
               }}
             />
           ) : (
@@ -245,58 +364,31 @@ export function TaskRow({
             </div>
           )}
 
-          {/* Things 3-style checklist: no section header/count label (the
-              "+Subtask" pill's own label already carries the count when
-              closed), no left-border rail — just checkbox+text rows sitting
-              directly under the note, as flat and undecorated as the rest
-              of the card. */}
-          {subtasksOpen && (
+          {/* Things 3-style checklist: a continuous connector line thrown
+              behind every checkbox (drawn once, not per row) rather than
+              a left-border rail, no section header — the "Checklist"
+              pill itself only exists while the list is empty, gone the
+              moment a subtask exists (direct user request: "gets rid of
+              unnecessary ui"). */}
+          {showChecklist && (
             <div className="card-subtasks">
+              {(subtasks.length > 1 || (subtasks.length === 1 && draftOpen)) && <div className="subtask-connector" />}
               {subtasks.map((subtask) => (
                 <SubtaskRow
                   key={subtask.id}
                   subtask={subtask}
                   onToggle={() => onToggleSubtask(subtask.id, !subtask.completed_at)}
                   onRename={(title) => onRename(subtask.id, title)}
+                  onEnter={() => setDraftOpen(true)}
+                  onDelete={() => onDeleteSubtask(subtask.id)}
                 />
               ))}
-              {/* A real checklist-entry flow, not a single-shot add form:
-                  Enter commits the current line as a subtask and clears +
-                  refocuses the same input for the next one, so typing a
-                  short checklist is "type, Enter, type, Enter..." without
-                  re-opening anything in between. Escape closes the whole
-                  section instead of just this row — there's no longer a
-                  separate "list" vs "add row" state to fall back to. */}
-              <form
-                className="subtask-add-row"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const input = subtaskInputRef.current;
-                  const value = input?.value.trim();
-                  if (value) onAddSubtask(value);
-                  if (input) {
-                    input.value = "";
-                    input.focus();
-                  }
-                }}
-              >
-                <Circle size={15} className="subtask-checkbox-icon add-row-icon" strokeWidth={1.6} />
-                <input
-                  ref={subtaskInputRef}
-                  className="subtask-add-input"
-                  placeholder="New Checklist Item"
-                  autoFocus
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      // stopPropagation so this doesn't also bubble to the
-                      // app root's own Escape handler (which collapses
-                      // the expanded task entirely).
-                      event.stopPropagation();
-                      setSubtasksOpen(false);
-                    }
-                  }}
+              {draftOpen && (
+                <DraftSubtaskRow
+                  onAdd={(title) => onAddSubtask(title)}
+                  onClose={() => setDraftOpen(false)}
                 />
-              </form>
+              )}
             </div>
           )}
 
@@ -328,16 +420,18 @@ export function TaskRow({
                 )}
               </AnimatePresence>
             </div>
-            <motion.button
-              type="button"
-              className="pill"
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={() => setSubtasksOpen((open) => !open)}
-            >
-              <Plus size={11} />
-              {subtasks.length > 0 ? `Checklist (${subtasks.length})` : "Checklist"}
-            </motion.button>
+            {subtasks.length === 0 && !draftOpen && (
+              <motion.button
+                type="button"
+                className="pill"
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => setDraftOpen(true)}
+              >
+                <Square size={11} />
+                Checklist
+              </motion.button>
+            )}
             <motion.button
               type="button"
               className="pill danger"
@@ -359,6 +453,12 @@ export function TaskRow({
       layoutId={`row-${task.id}`}
       className={`row ${selected ? "selected" : ""}`}
       onClick={(event) => {
+        // stopPropagation so this doesn't also bubble to the app root's
+        // own "click elsewhere collapses the expanded task" handler,
+        // which would otherwise immediately undo the expand this click
+        // just triggered (both set the same `expanded` state; without
+        // this the root's handler runs right after and wins).
+        event.stopPropagation();
         // Cmd+click toggles multi-select instead of opening the row — same
         // interaction as the GPUI app's own toggle_selected.
         if (event.metaKey) onToggleSelected();
