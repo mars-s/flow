@@ -136,6 +136,10 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Cmd+, opens Settings, AIFeatureToggle padding widened** (`487fd1c`
+  in the prototype): standard macOS preferences shortcut added alongside
+  the existing Cmd+N handler; toggle pill padding/height/font bumped up
+  after the vertical->horizontal fix left it feeling cramped.
 - **Third real AI block: Stale task nudges** (`cb03c10` in the
   prototype), plus a UI orientation fix: flags Inbox/Anytime tasks whose
   `created_at` is 14+ days old (creation date is the only "untouched"
