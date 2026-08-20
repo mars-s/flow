@@ -1,0 +1,45 @@
+.app {
+  height: 100vh;
+  display: flex;
+  background: var(--canvas);
+}
+
+.main-pane {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+}
+
+.task-list-shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.capture-slot {
+  flex: none;
+  padding: 12px 24px 0;
+}
+
+.placeholder-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 15px;
+  text-transform: capitalize;
+  -webkit-app-region: drag;
+}
+
+.placeholder-note {
+  font-size: 11.5px;
+  color: var(--text-ghost);
+  text-transform: none;
+}

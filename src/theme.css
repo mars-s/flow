@@ -1,0 +1,65 @@
+:root {
+  color-scheme: dark;
+
+  /* Ported from Flow's own src/theme.rs (dark()) as the starting point —
+     this is a redesign, not a port, so these are a baseline to evolve
+     from, not a spec to reproduce exactly. */
+  --canvas: #171a1e;
+  --raised: #242a31;
+  --inset: #14171b;
+  --overlay: rgba(255, 255, 255, 0.045);
+  --overlay-strong: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.055);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+
+  --text: #eef1f5;
+  --text-secondary: #969faa;
+  --text-tertiary: #717a85;
+  --text-ghost: #565d66;
+
+  --accent: #69a9ff;
+  --accent-wash: rgba(105, 169, 255, 0.14);
+  --danger: #ff6b6b;
+
+  --sidebar-item-bg: #234c78;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --sidebar-width: 240px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+
+  /* Spring-shaped easing curves (cubic-bezier approximations) — a real
+     spring (mass/stiffness/damping) is Framer Motion's job per-component
+     via `transition={{ type: "spring", ... }}`; these are for plain CSS
+     transitions on things that don't need React state for. */
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}

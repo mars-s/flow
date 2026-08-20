@@ -1,0 +1,154 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--overlay);
+}
+
+.checkbox {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.checkbox.small {
+  width: 14px;
+  height: 14px;
+}
+
+.checkbox:hover {
+  border-color: var(--accent);
+}
+
+.checkbox.checked {
+  border-color: var(--accent);
+}
+
+.check-icon {
+  width: 9px;
+  height: 9px;
+}
+
+.row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-title.checked {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.row-schedule,
+.row-subtask-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.card {
+  width: 100%;
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.card-note {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  width: 100%;
+  min-height: 20px;
+}
+
+.card-note::placeholder {
+  color: var(--text-ghost);
+}
+
+.card-subtasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 4px;
+  border-left: 1px solid var(--border);
+  margin-left: 4px;
+}
+
+.subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 8px;
+}
+
+.subtask-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.subtask-title.done {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.card-pills {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.pill {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--overlay);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.pill:hover {
+  background: var(--overlay-strong);
+  color: var(--text);
+}
