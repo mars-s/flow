@@ -135,6 +135,24 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **Enforced PRD §6.2/§11: can't complete a parent with open subtasks**
+  (`9c10168` in the prototype): real gap found by re-checking
+  `tasks.rs`'s own `request_complete`/`confirm_complete_with_subtasks`
+  against Tauri — nothing here checked for open subtasks before
+  completing a task at all, silently letting a parent get marked
+  complete while its subtasks stayed open, a documented acceptance
+  criterion (§11) that had simply gone unenforced. `requestComplete`
+  now checks `subtaskCounts[id].open` (already loaded, no extra
+  fetch — an advantage over the GPUI app's own compact row, which has
+  to background-fetch subtasks per click since it never loads them at
+  all) and shows the same "Complete parent and all subtasks?" / Cancel
+  / "Complete all" banner and exact copy GPUI's own confirm has.
+  Confirms every open subtask, then completes the parent through the
+  normal animated+undo path; zero open subtasks completes immediately,
+  unchanged. Full sweep of `flow-data`'s own public API
+  (`db.rs`/`calendar.rs`) against the Tauri command list also done —
+  every method is already wired, no other backend gaps.
+
 - **First real AI feature: Today briefing, model picker, per-feature
   toggle** (`67d7d23` in the prototype): a genuinely new feature, not
   a GPUI parity item — scoped by direct interview rather than guessed
