@@ -135,6 +135,30 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 
 ## Progress log (most recent first)
 
+- **App icon + theme switcher, built from user-picked AI concepts**
+  (`a640783`, `e5507db` in the prototype): a throwaway Artifact gallery
+  of 10 fal.ai (`openai/gpt-image-2`) icon concepts was generated and
+  shown for selection (not committed — pure scratch space); the user
+  picked "River Cut." Regenerated the full macOS/Windows icon set from
+  it via `tauri icon` (iOS/Android output deleted — not a bundle
+  target here). Also built Flow's first real theme-switching
+  mechanism (`theme.css` previously had exactly one hardcoded `:root`
+  palette): a `[data-theme="river-cut"]` override block, applied via
+  a `data-theme` attribute on `<html>` and persisted like every other
+  UI preference. The theme's colors aren't hand-picked — sampled
+  directly off the generated icon PNG (filtered for saturated,
+  non-background pixels, clustered by hue/lightness), and the whole
+  neutral scale reshifts to a warmer moss-gray, not just the accent.
+  New `ThemeSwitcher` in Settings.
+
+  Found and fixed a real incident along the way: `scripts/dev-app.ts`'s
+  `stopApp` used a bare `pkill -x` on the Cargo binary name, which the
+  release build shares with the debug build — it silently killed the
+  just-installed `/Applications/Flow.app` on the very next dev
+  rebuild. Fixed by matching the debug bundle's full executable path
+  via `pkill -f` instead, verified with `pgrep -f` and by running both
+  a debug and release instance side by side through a rebuild cycle.
+
 - **First real Flow.app shipped to /Applications** (`d653747` in the
   prototype): explicit user request, not a ticket-driven step —
   `tauri.release.conf.json` overrides productName/identifier/window
