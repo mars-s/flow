@@ -13,7 +13,112 @@
 
 use flow_data::db::{Db, Task, View};
 use flow_data::parse;
+use serde::Serialize;
 use tauri::Manager;
+
+/// What the Capture field's live preview shows as you type — the read-only
+/// half of `flow_data::parse::parse`, called on every keystroke (it's a
+/// regex match against a short string, not I/O), never writing anything.
+/// `highlight_start`/`highlight_end` are UTF-16 code-unit offsets (not
+/// `ParsedTitle::source_range`'s Rust byte offsets) because that's what a
+/// JS `<input>`'s own selection/slicing API speaks — converted here once,
+/// at the one place that has both the original title and the byte range,
+/// rather than asking the frontend to do UTF-8/UTF-16 arithmetic itself.
+#[derive(Serialize)]
+struct ParsePreview {
+    date: Option<String>,
+    time: Option<String>,
+    highlight_start: Option<usize>,
+    highlight_end: Option<usize>,
+}
+
+#[tauri::command]
+fn preview_capture(title: String) -> ParsePreview {
+    parse_preview(&title, chrono::Local::now().date_naive())
+}
+
+/// The actual logic, factored out of the `#[tauri::command]` wrapper so it
+/// has a plain signature `cargo test -p flow-tauri-prototype` can exercise
+/// directly — a fixed `today` matters here for the same determinism reason
+/// `flow_data::parse::parse` itself takes one instead of reading the clock.
+fn parse_preview(title: &str, today: chrono::NaiveDate) -> ParsePreview {
+    let parsed = parse::parse(title, today);
+    let (highlight_start, highlight_end) = match parsed.source_range {
+        Some(range) => (
+            Some(title[..range.start].encode_utf16().count()),
+            Some(title[..range.end].encode_utf16().count()),
+        ),
+        None => (None, None),
+    };
+    ParsePreview {
+        date: parsed.date.map(|d| d.format("%a, %b %-d").to_string()),
+        time: parsed.time.map(|t| t.format("%-I:%M %p").to_string()),
+        highlight_start,
+        highlight_end,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+
+    fn today() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 8, 20).unwrap() // a Thursday
+    }
+
+    #[test]
+    fn a_bare_numeric_time_is_recognized_and_highlighted() {
+        let preview = parse_preview("call the dentist 8am", today());
+        assert_eq!(preview.time.as_deref(), Some("8:00 AM"));
+        assert_eq!(preview.date.as_deref(), None);
+        // "8am" starts right after "call the dentist " (17 UTF-16 units in).
+        assert_eq!(preview.highlight_start, Some(17));
+        assert_eq!(preview.highlight_end, Some(20));
+    }
+
+    #[test]
+    fn a_relative_date_word_is_recognized() {
+        let preview = parse_preview("take out laundry tomorrow", today());
+        assert_eq!(preview.date.as_deref(), Some("Fri, Aug 21"));
+        assert_eq!(preview.time, None);
+    }
+
+    #[test]
+    fn date_and_time_together_are_both_recognized() {
+        let preview = parse_preview("take out laundry 8am tomorrow", today());
+        assert_eq!(preview.date.as_deref(), Some("Fri, Aug 21"));
+        assert_eq!(preview.time.as_deref(), Some("8:00 AM"));
+    }
+
+    #[test]
+    fn an_explicit_iso_date_is_recognized() {
+        let preview = parse_preview("renew passport 2026-09-01", today());
+        assert_eq!(preview.date.as_deref(), Some("Tue, Sep 1"));
+    }
+
+    #[test]
+    fn plain_text_with_no_recognizable_phrase_highlights_nothing() {
+        let preview = parse_preview("buy milk", today());
+        assert_eq!(preview.date, None);
+        assert_eq!(preview.time, None);
+        assert_eq!(preview.highlight_start, None);
+        assert_eq!(preview.highlight_end, None);
+    }
+
+    #[test]
+    fn highlight_offsets_are_utf16_code_units_not_byte_offsets() {
+        // "café" has a 2-byte 'é' in UTF-8 but is still 4 UTF-16 code units —
+        // this is the one case a naive byte-offset pass-through would get
+        // wrong, so it's the one worth a dedicated test rather than trusting
+        // the ASCII-only cases above to cover it.
+        let preview = parse_preview("café meeting tomorrow", today());
+        assert_eq!(preview.date.as_deref(), Some("Fri, Aug 21"));
+        // "tomorrow" starts after "café meeting " — 4 (café) + 1 (space) +
+        // 7 (meeting) + 1 (space) = 13 UTF-16 units in.
+        assert_eq!(preview.highlight_start, Some(13));
+    }
+}
 
 fn dev_database_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
@@ -146,6 +251,7 @@ pub fn run() {
             list_completed,
             create_task,
             capture_task,
+            preview_capture,
             set_completed,
             set_note,
             list_subtasks,

@@ -51,6 +51,21 @@ export default function App() {
     refresh();
   }, [refresh]);
 
+  // A window-level listener, not the root div's own onKeyDown (used below
+  // for Escape) — Cmd+N has to open Capture from anywhere in the app,
+  // including when focus is inside a task's note field or nowhere at all,
+  // not just when the shell div itself happens to have focus.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.metaKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setCapturing(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   // Only the expanded task's card ever needs its subtasks — same reasoning
   // the GPUI app's own subtask_context comment gives for fetching this only
   // when something is actually expanded, not per row.

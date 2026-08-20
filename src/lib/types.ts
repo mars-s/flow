@@ -24,6 +24,14 @@ export type Task = {
 
 export type Destination = "inbox" | "today" | "upcoming" | "anytime" | "someday" | "calendar" | "settings";
 
+// Mirrors src-tauri's ParsePreview DTO exactly.
+export type ParsePreview = {
+  date: string | null;
+  time: string | null;
+  highlight_start: number | null;
+  highlight_end: number | null;
+};
+
 export const VIEW_FOR: Partial<Record<Destination, View>> = {
   inbox: "Inbox",
   today: "Today",
