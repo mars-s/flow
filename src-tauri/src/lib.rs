@@ -17,6 +17,8 @@
 //! for a human reading the two directories side by side, not a safety
 //! requirement in itself.
 
+mod ai;
+
 use flow_data::calendar::{self, CalendarAuth, CalendarEvent, CalendarInfo};
 use flow_data::db::{Bucket, Db, SubtaskCount, Task, View};
 use flow_data::parse;
@@ -389,6 +391,8 @@ pub fn run() {
             list_subtasks,
             create_subtask,
             subtask_counts,
+            ai::ai_list_models,
+            ai::ai_chat_completion,
             delete_task,
             restore_task,
             calendar_auth_status,

@@ -4,6 +4,7 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, PanelLeftClose, P
 import { api } from "../lib/api";
 import { usePersistedBoolean, usePersistedSet } from "../lib/persisted";
 import { openCalendarPrivacyPane } from "../lib/system";
+import { TodayBriefing } from "../components/TodayBriefing";
 import type { CalendarAuth, CalendarEvent, CalendarInfo } from "../lib/types";
 import "./Calendar.css";
 
@@ -610,6 +611,7 @@ export function Calendar() {
           </div>
         </div>
         {error && <div className="calendar-error">{error}</div>}
+        <TodayBriefing />
         {mode === "year" ? (
           <YearGrid
             year={cursor.getFullYear()}

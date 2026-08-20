@@ -30,4 +30,12 @@ serde_json = "1"
 flow-data = { path = "../../flow/crates/flow-data" }
 chrono = "0.4"
 tokio = { version = "1", features = ["rt"] }
+# AI settings' "test connection" model picker and the first real AI
+# block (Today briefing) both talk to a user-configured OpenAI-
+# compatible endpoint. Done from Rust via reqwest, not a plain frontend
+# fetch() — a browser engine (Tauri's webview included) still enforces
+# CORS on cross-origin fetch even with csp: null, and most third-party
+# OpenAI-compatible providers don't set permissive CORS headers for an
+# arbitrary app origin. reqwest has no such restriction.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
