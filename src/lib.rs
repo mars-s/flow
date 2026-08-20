@@ -34,7 +34,9 @@ mod debug_log;
 mod eventkit;
 mod input;
 mod md;
-mod parse;
+// Same as `db` above — moved to `flow-data`, re-exported so every existing
+// `crate::parse::…` reference keeps working unchanged.
+use flow_data::parse;
 mod platform;
 mod query;
 mod theme;

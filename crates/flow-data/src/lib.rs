@@ -10,3 +10,4 @@
 //! equally GPUI-free and equally movable here, just not moved yet.
 
 pub mod db;
+pub mod parse;

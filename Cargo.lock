@@ -2311,6 +2311,7 @@ dependencies = [
  "chrono",
  "dirs",
  "flow-core",
+ "regex",
  "serde",
  "tokio",
  "turso",
