@@ -26,7 +26,7 @@ suite. See [PRODUCT.md](../PRODUCT.md) for the full north star and
   `archive/waku-upstream` (pre-detachment history) and `milestone-0-strip`
   (the working branch used during the strip) are local-only archival
   branches — never merge either into `main`.
-- Working tree is clean as of commit `182ce17` — check `git status` before
+- Working tree is clean as of commit `95f279e` — check `git status` before
   assuming that's still true.
 - No `/loop` or other background job is currently running.
 
