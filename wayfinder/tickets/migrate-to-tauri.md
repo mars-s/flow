@@ -136,6 +136,15 @@ reaches real Rust logic yet, and Calendar mode has no view at all yet
 ## Post-archive progress (this ticket's own gap-closing work is done; kept
 open as the running log for continued Tauri-only development)
 
+- **Sixth real AI block: Draft from task** (`8e73862` in the
+  prototype): suggests a short message about a task (ask someone to do
+  it, follow up, or report it's done — the model judges intent from
+  title/note), rendered below Checklist expansion in the expanded card.
+  Display-only like Today briefing, unlike the two write-mode blocks:
+  there's no field a drafted message writes into, so Auto just means
+  "generate without being asked," not "write with no confirmation" —
+  nothing is saved, the user copies it out by hand. Only smart
+  scheduling remains unbuilt in the AI backlog.
 - **Fifth real AI block: Overdue batch reschedule** (`648892b` in the
   prototype): renders inline above Today's own list (overdue tasks
   already surface there per the PRD, no separate view needed). Asks the
